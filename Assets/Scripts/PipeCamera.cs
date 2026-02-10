@@ -13,16 +13,16 @@ public class PipeCamera : MonoBehaviour
     public Transform target;
 
     [Header("Follow Settings")]
-    public float followDistance = 4f;
+    public float followDistance = 3f;
     public float lookAhead = 5f;
     public float positionSmooth = 10f;
     public float rotationSmooth = 8f;
 
     [Header("Pipe Awareness")]
     public float pipeRadius = 3.5f;
-    [Tooltip("0 = camera at pipe center, 1 = camera at player. 0.3 is good.")]
+    [Tooltip("0 = camera at pipe center, 1 = camera at player. 0.45 is good.")]
     [Range(0f, 0.8f)]
-    public float playerBias = 0.3f;
+    public float playerBias = 0.45f;
 
     [Header("FOV")]
     public float baseFOV = 68f;

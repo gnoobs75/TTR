@@ -37,6 +37,9 @@ public class ProceduralAudio : MonoBehaviour
     // Stomp sound
     private AudioClip _stomp;
 
+    // Trick sound
+    private AudioClip _trickComplete;
+
     // Hit sounds (per obstacle type)
     private AudioClip _ratPounce;
     private AudioClip _hairWrap;
@@ -224,6 +227,22 @@ public class ProceduralAudio : MonoBehaviour
                 squelch += Mathf.Sin(2f * Mathf.PI * freq * t2) * env * 0.4f;
             }
             return squelch * 0.55f;
+        });
+
+        // Trick complete: triumphant ascending chord stab
+        _trickComplete = GenerateClip("TrickComplete", 0.25f, (t, dur) =>
+        {
+            float prog = t / dur;
+            float f1 = 523f; // C5
+            float f2 = 659f; // E5
+            float f3 = 784f; // G5
+            float f4 = 1047f; // C6
+            float env = Mathf.Sin(Mathf.PI * prog) * (1f - prog * 0.3f);
+            float mix = Mathf.Sin(2f * Mathf.PI * f1 * t) * 0.25f
+                      + Mathf.Sin(2f * Mathf.PI * f2 * t) * 0.25f
+                      + Mathf.Sin(2f * Mathf.PI * f3 * t) * 0.25f
+                      + Mathf.Sin(2f * Mathf.PI * f4 * t) * (prog * 0.3f); // octave fades in
+            return mix * env * 0.45f;
         });
 
         // Hit sounds (per obstacle type)
@@ -428,6 +447,7 @@ public class ProceduralAudio : MonoBehaviour
     public void PlayAITaunt() => PlaySFX(_aiTaunt);
 
     public void PlayStomp() => PlaySFX(_stomp);
+    public void PlayTrickComplete() => PlaySFX(_trickComplete);
 
     // Hit sounds (per obstacle type)
     public void PlayRatPounce() => PlaySFX(_ratPounce);

@@ -6,8 +6,8 @@ using UnityEngine;
 /// </summary>
 public class JumpRamp : MonoBehaviour
 {
-    public float launchForce = 8f;
-    public float arcDuration = 0.8f;
+    public float launchHeight = 3.5f;
+    public float arcDuration = 1.2f;
 
     void OnTriggerEnter(Collider other)
     {
@@ -16,7 +16,7 @@ public class JumpRamp : MonoBehaviour
         TurdController tc = other.GetComponent<TurdController>();
         if (tc != null)
         {
-            tc.LaunchJump(launchForce, arcDuration);
+            tc.LaunchJump(launchHeight, arcDuration);
         }
     }
 }

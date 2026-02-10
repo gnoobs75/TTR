@@ -39,8 +39,14 @@ public class TurdController : MonoBehaviour
     public float flashSpeed = 10f;
 
     [Header("Jump")]
-    public float jumpArcHeight = 1.2f;
-    public float jumpArcDuration = 0.6f;
+    public float jumpArcHeight = 2.5f;
+    public float jumpArcDuration = 0.9f;
+
+    [Header("Tricks")]
+    public float trickRotSpeed = 540f;
+    public int trickScoreBonus = 200;
+    public float trickSpeedBoostMult = 1.2f;
+    public float trickSpeedBoostDur = 2f;
 
     [Header("References")]
     public TurdSlither slither;
@@ -67,6 +73,11 @@ public class TurdController : MonoBehaviour
     private int _stompCombo = 0;
     private float _stompComboTimer = 0f;
     private const float STOMP_COMBO_TIMEOUT = 2f;
+
+    // Trick state
+    private int _trickDirection = 0;   // 1=front flip, -1=backflip, 0=none
+    private float _trickAngle = 0f;    // accumulated rotation degrees
+    private int _tricksCompleted = 0;  // full 360s completed this jump
 
     public float DistanceTraveled => _distanceAlongPath;
     public float CurrentSpeed => _currentSpeed;
@@ -109,6 +120,32 @@ public class TurdController : MonoBehaviour
         }
         // Fast input response - minimal latency on initial press
         _steerInput = Mathf.Lerp(_steerInput, rawInput, Time.deltaTime * 18f);
+
+        // === TRICK INPUT (during jumps only) ===
+        if (_isJumping && _hitState != HitState.Stunned && Keyboard.current != null)
+        {
+            if (_trickDirection == 0)
+            {
+                if (Keyboard.current.upArrowKey.wasPressedThisFrame || Keyboard.current.wKey.wasPressedThisFrame)
+                    _trickDirection = 1;  // front flip
+                else if (Keyboard.current.downArrowKey.wasPressedThisFrame || Keyboard.current.sKey.wasPressedThisFrame)
+                    _trickDirection = -1; // backflip
+            }
+
+            if (_trickDirection != 0)
+            {
+                _trickAngle += trickRotSpeed * Time.deltaTime;
+                if (_trickAngle >= 360f * (_tricksCompleted + 1))
+                {
+                    _tricksCompleted++;
+                    if (ProceduralAudio.Instance != null)
+                        ProceduralAudio.Instance.PlayTrickComplete();
+                    if (PipeCamera.Instance != null)
+                        PipeCamera.Instance.PunchFOV(4f);
+                    HapticManager.MediumTap();
+                }
+            }
+        }
 
         // === FORWARD SPEED ===
         _currentSpeed = Mathf.Min(_currentSpeed + acceleration * Time.deltaTime, maxSpeed);
@@ -197,12 +234,37 @@ public class TurdController : MonoBehaviour
                     _isJumping = false;
                     transform.localScale = Vector3.one;
 
-                    // Landing impact
-                    if (PipeCamera.Instance != null)
-                        PipeCamera.Instance.Shake(0.2f);
+                    // Trick landing rewards
+                    if (_tricksCompleted > 0)
+                    {
+                        int bonus = trickScoreBonus * _tricksCompleted;
+                        if (GameManager.Instance != null)
+                            GameManager.Instance.AddScore(bonus);
+                        ApplySpeedBoost(trickSpeedBoostMult, trickSpeedBoostDur);
+                        if (PipeCamera.Instance != null)
+                        {
+                            PipeCamera.Instance.Shake(0.3f);
+                            PipeCamera.Instance.PunchFOV(5f);
+                        }
+                        if (ComboSystem.Instance != null)
+                            ComboSystem.Instance.RegisterEvent(ComboSystem.EventType.NearMiss);
+                        HapticManager.HeavyTap();
+                    }
+                    else
+                    {
+                        // Normal landing impact
+                        if (PipeCamera.Instance != null)
+                            PipeCamera.Instance.Shake(0.2f);
+                        HapticManager.LightTap();
+                    }
+
                     if (ProceduralAudio.Instance != null)
                         ProceduralAudio.Instance.PlayObstacleHit();
-                    HapticManager.LightTap();
+
+                    // Reset trick state
+                    _trickDirection = 0;
+                    _trickAngle = 0f;
+                    _tricksCompleted = 0;
                 }
             }
 
@@ -213,7 +275,16 @@ public class TurdController : MonoBehaviour
             Quaternion pathRot = Quaternion.LookRotation(forward, up);
             Quaternion surfaceRoll = Quaternion.Euler(0, 0, surfaceAngle);
             Quaternion targetRot = pathRot * surfaceRoll;
-            transform.rotation = Quaternion.Slerp(transform.rotation, targetRot, Time.deltaTime * 8f);
+
+            // Apply trick flip rotation during jumps
+            if (_isJumping && _trickDirection != 0)
+            {
+                Quaternion trickRot = Quaternion.Euler(_trickAngle * _trickDirection, 0, 0);
+                targetRot = targetRot * trickRot;
+            }
+
+            float rotSmooth = (_isJumping && _trickDirection != 0) ? 20f : 8f;
+            transform.rotation = Quaternion.Slerp(transform.rotation, targetRot, Time.deltaTime * rotSmooth);
         }
         else
         {
@@ -352,6 +423,9 @@ public class TurdController : MonoBehaviour
             ComboSystem.Instance.RegisterEvent(ComboSystem.EventType.NearMiss); // reuse near-miss for combo
 
         // Bounce! Relaunch into another jump immediately
+        _trickDirection = 0;
+        _trickAngle = 0f;
+        _tricksCompleted = 0;
         _isJumping = true;
         _jumpTimer = 0f;
         _jumpDuration = jumpArcDuration * 0.8f; // slightly shorter bounces
@@ -371,14 +445,17 @@ public class TurdController : MonoBehaviour
 
     // === JUMP (Mario Kart style) ===
 
-    public void LaunchJump(float force, float duration)
+    public void LaunchJump(float height, float duration)
     {
         if (_isJumping) return;
         _stompCombo = 0; // reset stomp combo on fresh jump
+        _trickDirection = 0;
+        _trickAngle = 0f;
+        _tricksCompleted = 0;
         _isJumping = true;
         _jumpTimer = 0f;
-        _jumpDuration = jumpArcDuration;
-        _jumpHeight = jumpArcHeight;
+        _jumpDuration = duration > 0 ? Mathf.Max(duration, jumpArcDuration) : jumpArcDuration;
+        _jumpHeight = height > 0 ? Mathf.Max(height, jumpArcHeight) : jumpArcHeight;
 
         if (ProceduralAudio.Instance != null)
             ProceduralAudio.Instance.PlayJumpLaunch();
