@@ -208,13 +208,12 @@ public class SceneBootstrapper
 
         PipeCamera pipeCam = camObj.AddComponent<PipeCamera>();
         pipeCam.target = player;
-        pipeCam.followDistance = 4f;         // behind player
-        pipeCam.heightAbovePlayer = 1.2f;    // above player toward pipe center
+        pipeCam.followDistance = 4f;         // behind player on pipe path
         pipeCam.lookAhead = 5f;              // look forward
         pipeCam.pipeRadius = 3.5f;
-        pipeCam.angleLag = 3f;               // camera angle lags so steering is visible
+        pipeCam.playerBias = 0.3f;           // 30% toward player from pipe center
         pipeCam.baseFOV = 68f;               // wide for speed feel
-        pipeCam.speedFOVBoost = 8f;          // more FOV at high speed
+        pipeCam.speedFOVBoost = 8f;          // more at high speed
 
         mainCam.backgroundColor = new Color(0.02f, 0.03f, 0.02f);
         mainCam.clearFlags = CameraClearFlags.SolidColor;

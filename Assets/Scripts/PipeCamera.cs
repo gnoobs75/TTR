@@ -1,10 +1,9 @@
 using UnityEngine;
 
 /// <summary>
-/// Mario Kart-style chase camera for pipe surfing.
-/// Key insight: camera angle LAGS behind player angle so steering
-/// shows the turd visually moving left/right across the screen.
-/// Without lag, camera follows player exactly = turd appears stationary = "spinning in place".
+/// Pipe-center chase camera. Stays at the pipe center looking forward.
+/// The pipe appears stationary. The turd visually moves around the pipe
+/// cross-section when steering. Uses world up so nothing flips.
 /// </summary>
 public class PipeCamera : MonoBehaviour
 {
@@ -15,27 +14,27 @@ public class PipeCamera : MonoBehaviour
 
     [Header("Follow Settings")]
     public float followDistance = 4f;
-    public float heightAbovePlayer = 1.2f;
     public float lookAhead = 5f;
-    public float positionSmooth = 8f;
+    public float positionSmooth = 10f;
     public float rotationSmooth = 8f;
 
     [Header("Pipe Awareness")]
     public float pipeRadius = 3.5f;
-
-    [Header("Angle Tracking")]
-    [Tooltip("How fast camera angle follows player angle (lower = more visible steering)")]
-    public float angleLag = 3f;
+    [Tooltip("0 = camera at pipe center, 1 = camera at player. 0.3 is good.")]
+    [Range(0f, 0.8f)]
+    public float playerBias = 0.3f;
 
     [Header("FOV")]
     public float baseFOV = 68f;
     public float speedFOVBoost = 8f;
 
+    // kept for API compatibility with SceneDiagnostics
+    [HideInInspector] public float heightAbovePlayer = 1.2f;
+
     private PipeGenerator _pipeGen;
     private TurdController _tc;
     private Camera _cam;
     private Vector3 _velocity;
-    private float _smoothAngle = 270f; // starts at bottom
     private bool _initialized = false;
 
     // Juice
@@ -64,42 +63,39 @@ public class PipeCamera : MonoBehaviour
         if (_pipeGen != null)
         {
             float playerDist = _tc.DistanceTraveled;
-            float playerAngle = _tc.CurrentAngle;
 
-            // === CAMERA ANGLE: Lag behind player for visible steering ===
-            // This is the key to "Mario Kart feel" - you see the turd move left/right
-            _smoothAngle = Mathf.LerpAngle(_smoothAngle, playerAngle, Time.deltaTime * angleLag);
-
-            // === CAMERA POSITION: Behind player on the pipe path ===
+            // === CAMERA POSITION: At pipe center, behind player ===
             float camDist = Mathf.Max(0f, playerDist - followDistance);
             Vector3 camCenter, camFwd, camRight, camUp;
             _pipeGen.GetPathFrame(camDist, out camCenter, out camFwd, out camRight, out camUp);
 
-            // Camera sits at the LAGGED angle (not the player's exact angle)
-            float camAngleRad = _smoothAngle * Mathf.Deg2Rad;
-            Vector3 camSurfaceDir = camRight * Mathf.Cos(camAngleRad) + camUp * Mathf.Sin(camAngleRad);
-            float camRadius = pipeRadius - heightAbovePlayer;
-            Vector3 desiredPos = camCenter + camSurfaceDir * camRadius;
+            // Bias camera slightly toward the player so they're prominent in frame
+            // 0 = exact pipe center (pipe perfectly still, player small)
+            // 0.3 = slightly toward player (pipe mostly still, player nicely framed)
+            Vector3 toPlayer = target.position - camCenter;
+            Vector3 desiredPos = camCenter + toPlayer * playerBias;
 
-            // === LOOK TARGET: The player's actual position (ahead on pipe) ===
-            // Look at where the player IS, not where the camera is - creates natural offset
-            Vector3 lookTarget = target.position + camFwd * lookAhead * 0.3f;
+            // === LOOK TARGET: Pipe center ahead, biased toward player ===
+            float lookDist = playerDist + lookAhead;
+            Vector3 lookCenter, lookFwd, lookRight, lookUp;
+            _pipeGen.GetPathFrame(lookDist, out lookCenter, out lookFwd, out lookRight, out lookUp);
 
-            // === OUTWARD DIRECTION for camera "up" ===
-            Vector3 outward = (desiredPos - camCenter).normalized;
-            if (outward.sqrMagnitude < 0.01f) outward = Vector3.up;
+            // Look mostly forward along pipe, with a pull toward where the player is
+            Vector3 lookTarget = Vector3.Lerp(lookCenter, target.position + camFwd * lookAhead, 0.3f);
+
+            // === WORLD UP: Pipe stays visually stable, never flips ===
+            Vector3 upDir = Vector3.up;
+            // Fallback if pipe goes nearly vertical
+            if (Mathf.Abs(Vector3.Dot(camFwd, Vector3.up)) > 0.9f)
+                upDir = -camFwd.z > 0 ? Vector3.forward : Vector3.back;
 
             // === APPLY ===
             if (!_initialized)
             {
-                // First frame: snap instantly (no weird transition from identity)
                 transform.position = desiredPos;
-                _smoothAngle = playerAngle;
-
-                Vector3 initLook = (lookTarget - desiredPos);
-                if (initLook.sqrMagnitude > 0.01f)
-                    transform.rotation = Quaternion.LookRotation(initLook.normalized, outward);
-
+                Vector3 initDir = (lookTarget - desiredPos);
+                if (initDir.sqrMagnitude > 0.01f)
+                    transform.rotation = Quaternion.LookRotation(initDir.normalized, upDir);
                 _velocity = Vector3.zero;
                 _initialized = true;
                 return;
@@ -113,7 +109,7 @@ public class PipeCamera : MonoBehaviour
             Vector3 lookDir = (lookTarget - transform.position);
             if (lookDir.sqrMagnitude > 0.01f)
             {
-                Quaternion targetRot = Quaternion.LookRotation(lookDir.normalized, outward);
+                Quaternion targetRot = Quaternion.LookRotation(lookDir.normalized, upDir);
                 transform.rotation = Quaternion.Slerp(
                     transform.rotation, targetRot, Time.deltaTime * rotationSmooth);
             }
