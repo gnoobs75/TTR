@@ -45,6 +45,11 @@ public class ProceduralAudio : MonoBehaviour
     private AudioClip _mineExplosion;
     private AudioClip _roachScurry;
 
+    // Water sounds
+    private AudioClip _waterGush;
+    private AudioClip _waterfallSplash;
+    private AudioClip _waterDrip;
+
     // Music
     private AudioClip _bgmLoop;
     private bool _musicPlaying;
@@ -154,20 +159,21 @@ public class ProceduralAudio : MonoBehaviour
         });
 
         // Creature sounds
-        // Rat squeak: high-pitched chirp with vibrato
-        _ratSqueak = GenerateClip("RatSqueak", 0.15f, (t, dur) =>
+        // Rat squeak: softer chittery squeak (lower freq, less harsh)
+        _ratSqueak = GenerateClip("RatSqueak", 0.12f, (t, dur) =>
         {
-            float freq = 1800f + Mathf.Sin(t * 80f) * 200f; // vibrato
-            float env = Mathf.Sin(Mathf.PI * t / dur);
-            return Mathf.Sin(2f * Mathf.PI * freq * t) * env * 0.35f;
+            float freq = 900f + Mathf.Sin(t * 50f) * 100f; // gentler vibrato
+            float env = Mathf.Sin(Mathf.PI * t / dur) * Mathf.Exp(-t * 12f);
+            return Mathf.Sin(2f * Mathf.PI * freq * t) * env * 0.2f;
         });
 
-        // Barrel beep: two-tone warning alert
-        _barrelBeep = GenerateClip("BarrelBeep", 0.3f, (t, dur) =>
+        // Barrel beep: low muffled thud-pulse (NOT a harsh two-tone whine)
+        _barrelBeep = GenerateClip("BarrelBeep", 0.2f, (t, dur) =>
         {
-            float freq = t < dur * 0.5f ? 600f : 800f;
-            float env = Mathf.Sin(Mathf.PI * (t % (dur * 0.5f)) / (dur * 0.5f));
-            return Mathf.Sin(2f * Mathf.PI * freq * t) * env * 0.35f;
+            float freq = 140f + Mathf.Sin(t * 15f) * 30f; // low rumble
+            float env = Mathf.Exp(-t * 10f);
+            float noise = Mathf.Sin(t * 2345f) * 0.1f * env;
+            return (Mathf.Sin(2f * Mathf.PI * freq * t) * 0.4f + noise) * env * 0.25f;
         });
 
         // Blob groan: descending wet moan
@@ -181,24 +187,23 @@ public class ProceduralAudio : MonoBehaviour
             return harmonics * env * 0.4f;
         });
 
-        // Roach hiss: filtered noise burst
-        _roachHiss = GenerateClip("RoachHiss", 0.25f, (t, dur) =>
+        // Roach hiss: soft skittery rustle (lower, less harsh)
+        _roachHiss = GenerateClip("RoachHiss", 0.2f, (t, dur) =>
         {
-            float env = Mathf.Exp(-t * 8f);
-            // Deterministic noise from sample index
-            float noise = Mathf.Sin(t * 12345.6f) * Mathf.Cos(t * 54321.0f);
-            float highFilter = Mathf.Sin(2f * Mathf.PI * 4000f * t) * 0.3f;
-            return (noise * 0.6f + highFilter * 0.2f) * env * 0.3f;
+            float env = Mathf.Exp(-t * 10f);
+            float noise = Mathf.Sin(t * 6789f) * Mathf.Cos(t * 3456f);
+            float low = Mathf.Sin(2f * Mathf.PI * 300f * t) * 0.15f;
+            return (noise * 0.3f + low) * env * 0.2f;
         });
 
-        // AI taunt: ascending celebratory chirp
-        _aiTaunt = GenerateClip("AITaunt", 0.35f, (t, dur) =>
+        // AI taunt: soft mocking chuckle (lower, warmer)
+        _aiTaunt = GenerateClip("AITaunt", 0.3f, (t, dur) =>
         {
-            float freq = Mathf.Lerp(400f, 800f, t / dur);
-            float env = Mathf.Sin(Mathf.PI * t / dur);
-            float tone = Mathf.Sin(2f * Mathf.PI * freq * t) * 0.4f
-                       + Mathf.Sin(2f * Mathf.PI * freq * 1.5f * t) * 0.15f;
-            return tone * env * 0.4f;
+            float freq = Mathf.Lerp(200f, 350f, t / dur);
+            float env = Mathf.Sin(Mathf.PI * t / dur) * Mathf.Exp(-t * 4f);
+            float tone = Mathf.Sin(2f * Mathf.PI * freq * t) * 0.3f
+                       + Mathf.Sin(2f * Mathf.PI * freq * 1.5f * t) * 0.1f;
+            return tone * env * 0.3f;
         });
 
         // Stomp: satisfying squelch + spring bounce
@@ -281,6 +286,38 @@ public class ProceduralAudio : MonoBehaviour
             float freq = 2000f + Mathf.Sin(t * 30f) * 500f;
             float env = (1f - t / dur) * click;
             return Mathf.Sin(2f * Mathf.PI * freq * t) * env * 0.35f;
+        });
+
+        // Water sounds
+
+        // Water gush: soft whooshy flow burst (no high freqs)
+        _waterGush = GenerateClip("WaterGush", 0.6f, (t, dur) =>
+        {
+            float env = Mathf.Sin(Mathf.PI * t / dur) * 0.7f;
+            float noise = Mathf.Sin(t * 4321f) * Mathf.Cos(t * 2345f) * 0.25f;
+            float lowFreq = Mathf.Sin(2f * Mathf.PI * 80f * t) * 0.25f;
+            float rumble = Mathf.Sin(2f * Mathf.PI * (50f + Mathf.Sin(t * 2f) * 15f) * t) * 0.2f;
+            return (noise + lowFreq + rumble) * env * 0.35f;
+        });
+
+        // Waterfall splash: wet impact when player walks through
+        _waterfallSplash = GenerateClip("WaterfallSplash", 0.35f, (t, dur) =>
+        {
+            float env = Mathf.Exp(-t * 7f);
+            float noise = (Mathf.Sin(t * 3456f) * Mathf.Cos(t * 7890f)) * 0.5f;
+            float splat = Mathf.Sin(2f * Mathf.PI * 200f * t) * 0.3f;
+            float drip = Mathf.Sin(2f * Mathf.PI * Mathf.Lerp(600f, 200f, t / dur) * t) * 0.2f;
+            return (noise + splat + drip) * env * 0.5f;
+        });
+
+        // Water drip: plip-plop droplet
+        _waterDrip = GenerateClip("WaterDrip", 0.2f, (t, dur) =>
+        {
+            float env = Mathf.Exp(-t * 25f);
+            float freq = Mathf.Lerp(800f, 300f, t / dur);
+            float plop = Mathf.Sin(2f * Mathf.PI * freq * t) * env;
+            float splash = Mathf.Sin(t * 5432f) * env * 0.08f;
+            return (plop * 0.5f + splash) * 0.45f;
         });
 
         // Background music: simple bass-driven loop
@@ -399,6 +436,11 @@ public class ProceduralAudio : MonoBehaviour
     public void PlayBlobSquish() => PlaySFX(_blobSquish);
     public void PlayMineExplosion() => PlaySFX(_mineExplosion);
     public void PlayRoachScurry() => PlaySFX(_roachScurry);
+
+    // Water sounds
+    public void PlayWaterGush() => PlaySFX(_waterGush, 0.6f);
+    public void PlayWaterfallSplash() => PlaySFX(_waterfallSplash, 0.5f);
+    public void PlayWaterDrip() => PlaySFX(_waterDrip, 0.35f);
 
     public void StartMusic()
     {

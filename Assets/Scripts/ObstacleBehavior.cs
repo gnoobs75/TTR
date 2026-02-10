@@ -12,7 +12,7 @@ public abstract class ObstacleBehavior : MonoBehaviour
     [Header("Behavior Settings")]
     public float nearbyRange = 15f;
     public float reactRange = 8f;
-    public float soundCooldown = 3f;
+    public float soundCooldown = 6f;
 
     protected Transform _player;
     protected bool _playerNearby;

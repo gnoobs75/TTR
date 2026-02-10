@@ -56,6 +56,7 @@ public class SceneBootstrapper
         CreateSmoothSnake(pipeGenObj.GetComponent<PipeGenerator>());
         CreateWaterCreatureSpawner(player.transform);
         CreateWaterAnimator(player.transform, pipeGenObj);
+        CreateSewerWaterEffects(player.transform, pipeGenObj);
         CreateBrownStreakTrail(player.transform);
         CreatePooperSnooper(player.GetComponent<TurdController>());
         SaveScene();
@@ -193,15 +194,16 @@ public class SceneBootstrapper
 
         PipeCamera pipeCam = camObj.AddComponent<PipeCamera>();
         pipeCam.target = player;
-        pipeCam.followDistance = 6f;
-        pipeCam.cameraRadius = 0.3f;
+        pipeCam.followDistance = 3.5f;       // close behind player
+        pipeCam.heightAbovePlayer = 0.8f;    // slightly above, looking over tail
+        pipeCam.lookAhead = 4f;              // look forward enough to see ahead
         pipeCam.pipeRadius = 3.5f;
-        pipeCam.baseFOV = 68f;
-        pipeCam.speedFOVBoost = 8f;
+        pipeCam.baseFOV = 65f;               // slightly tighter
+        pipeCam.speedFOVBoost = 6f;          // less extreme at high speed
 
         mainCam.backgroundColor = new Color(0.02f, 0.03f, 0.02f);
         mainCam.clearFlags = CameraClearFlags.SolidColor;
-        mainCam.fieldOfView = 68f;
+        mainCam.fieldOfView = 65f;
         mainCam.nearClipPlane = 0.1f;
         mainCam.farClipPlane = 200f;
 
@@ -362,6 +364,16 @@ public class SceneBootstrapper
         Debug.Log("TTR: Created water wave animator with splash effects!");
     }
 
+    // ===== SEWER WATER EFFECTS =====
+    static void CreateSewerWaterEffects(Transform player, GameObject pipeGenObj)
+    {
+        GameObject obj = new GameObject("SewerWaterEffects");
+        SewerWaterEffects fx = obj.AddComponent<SewerWaterEffects>();
+        fx.player = player;
+        fx.pipeGen = pipeGenObj.GetComponent<PipeGenerator>();
+        Debug.Log("TTR: Created sewer water effects (drain pipes + ceiling waterfalls + debris)!");
+    }
+
     // ===== BROWN STREAK TRAIL =====
     static void CreateBrownStreakTrail(Transform player)
     {
@@ -394,23 +406,36 @@ public class SceneBootstrapper
     // ===== LIGHTING =====
     static void CreateLighting()
     {
-        // Main directional - brighter to see obstacles clearly
+        // Main directional - warm-ish sewer light, soft shadows
         GameObject lightObj = new GameObject("Directional Light");
         Light light = lightObj.AddComponent<Light>();
         light.type = LightType.Directional;
-        light.color = new Color(0.5f, 0.6f, 0.45f);
-        light.intensity = 0.65f;
-        lightObj.transform.rotation = Quaternion.Euler(50, -30, 0);
+        light.color = new Color(0.6f, 0.55f, 0.4f); // warmer, less green
+        light.intensity = 0.8f; // brighter
+        light.shadows = LightShadows.Soft;
+        light.shadowStrength = 0.4f; // soft shadows
+        lightObj.transform.rotation = Quaternion.Euler(45, -30, 0);
 
-        // Ambient - 40% brighter, moody but visible
-        RenderSettings.ambientMode = UnityEngine.Rendering.AmbientMode.Flat;
-        RenderSettings.ambientLight = new Color(0.14f, 0.16f, 0.1f);
+        // Fill light from below - illuminates inside of pipe
+        GameObject fillObj = new GameObject("Fill Light");
+        Light fill = fillObj.AddComponent<Light>();
+        fill.type = LightType.Directional;
+        fill.color = new Color(0.2f, 0.25f, 0.15f); // subtle green fill
+        fill.intensity = 0.3f;
+        fill.shadows = LightShadows.None;
+        fillObj.transform.rotation = Quaternion.Euler(-30, 45, 0);
 
-        // Fog - reduced so you can see further ahead
+        // Ambient - brighter, warmer, less muddy
+        RenderSettings.ambientMode = UnityEngine.Rendering.AmbientMode.Trilight;
+        RenderSettings.ambientSkyColor = new Color(0.18f, 0.2f, 0.14f);
+        RenderSettings.ambientEquatorColor = new Color(0.15f, 0.17f, 0.1f);
+        RenderSettings.ambientGroundColor = new Color(0.1f, 0.12f, 0.06f);
+
+        // Fog - softer, warmer tint, slightly less dense for visibility
         RenderSettings.fog = true;
         RenderSettings.fogMode = FogMode.ExponentialSquared;
-        RenderSettings.fogColor = new Color(0.03f, 0.05f, 0.03f);
-        RenderSettings.fogDensity = 0.008f;
+        RenderSettings.fogColor = new Color(0.05f, 0.06f, 0.03f); // warmer fog
+        RenderSettings.fogDensity = 0.006f; // see further
     }
 
     // ===== POST-PROCESSING =====
@@ -432,27 +457,27 @@ public class SceneBootstrapper
             if (bloomType != null)
             {
                 var bloom = (VolumeComponent)profile.Add(bloomType);
-                // Use reflection to set overrides
-                SetVolumeParam(bloom, "threshold", 0.8f);
-                SetVolumeParam(bloom, "intensity", 1.5f);
-                SetVolumeParam(bloom, "scatter", 0.6f);
+                SetVolumeParam(bloom, "threshold", 0.6f);  // lower = more glow
+                SetVolumeParam(bloom, "intensity", 2.5f);   // stronger bloom for soft look
+                SetVolumeParam(bloom, "scatter", 0.8f);     // wider spread = softer
                 Debug.Log("TTR: Bloom added to post-processing");
             }
 
             if (vignetteType != null)
             {
                 var vignette = (VolumeComponent)profile.Add(vignetteType);
-                SetVolumeParam(vignette, "intensity", 0.35f);
-                SetVolumeParam(vignette, "smoothness", 0.4f);
-                SetVolumeParamColor(vignette, "color", new Color(0.05f, 0.1f, 0.02f));
+                SetVolumeParam(vignette, "intensity", 0.4f);  // stronger edge darkening
+                SetVolumeParam(vignette, "smoothness", 0.5f); // smoother falloff
+                SetVolumeParamColor(vignette, "color", new Color(0.03f, 0.05f, 0.01f));
                 Debug.Log("TTR: Vignette added to post-processing");
             }
 
             if (colorAdjType != null)
             {
                 var colorAdj = (VolumeComponent)profile.Add(colorAdjType);
-                SetVolumeParam(colorAdj, "saturation", 15f);
-                SetVolumeParam(colorAdj, "contrast", 10f);
+                SetVolumeParam(colorAdj, "saturation", 20f);   // richer colors
+                SetVolumeParam(colorAdj, "contrast", 15f);     // more depth
+                SetVolumeParam(colorAdj, "postExposure", 0.2f); // slightly brighter overall
                 Debug.Log("TTR: Color adjustments added to post-processing");
             }
 
