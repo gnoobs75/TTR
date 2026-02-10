@@ -50,21 +50,21 @@ public class PipeGenerator : MonoBehaviour
         Shader urpLit = Shader.Find("Universal Render Pipeline/Lit");
         if (urpLit == null) urpLit = Shader.Find("Standard");
         _defaultMat = new Material(urpLit);
-        // Grimy concrete sewer - slightly brighter, warmer for depth
-        _defaultMat.SetColor("_BaseColor", new Color(0.22f, 0.19f, 0.14f));
-        _defaultMat.SetFloat("_Metallic", 0.08f);
-        _defaultMat.SetFloat("_Smoothness", 0.35f); // rough concrete
-        // Subtle wet emission so pipe walls aren't pure black in shadows
+        // Sewer concrete - brighter, warmer, cartoon-visible
+        _defaultMat.SetColor("_BaseColor", new Color(0.32f, 0.27f, 0.2f));
+        _defaultMat.SetFloat("_Metallic", 0.05f);
+        _defaultMat.SetFloat("_Smoothness", 0.3f);
+        // Subtle self-illumination so pipe walls are never black
         _defaultMat.EnableKeyword("_EMISSION");
-        _defaultMat.SetColor("_EmissionColor", new Color(0.015f, 0.012f, 0.008f));
+        _defaultMat.SetColor("_EmissionColor", new Color(0.04f, 0.035f, 0.025f));
 
-        // Sewage water - thick murky sludge, reflective surface
+        // Sewage water - bright toxic green sludge
         _waterMat = new Material(urpLit);
-        _waterMat.SetColor("_BaseColor", new Color(0.18f, 0.28f, 0.07f));
+        _waterMat.SetColor("_BaseColor", new Color(0.22f, 0.35f, 0.1f));
         _waterMat.SetFloat("_Metallic", 0.5f);
         _waterMat.SetFloat("_Smoothness", 0.92f);
         _waterMat.EnableKeyword("_EMISSION");
-        _waterMat.SetColor("_EmissionColor", new Color(0.06f, 0.1f, 0.03f));
+        _waterMat.SetColor("_EmissionColor", new Color(0.08f, 0.14f, 0.04f));
         _waterMat.SetFloat("_Cull", 0); // Render both faces for visibility
 
         // Seed initial path

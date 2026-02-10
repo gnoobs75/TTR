@@ -44,6 +44,9 @@ public class PipeCamera : MonoBehaviour
     private float _fovPunch;
     private float _currentLean;
 
+    // First-frame initialization (prevents weird angle at start)
+    private bool _initialized = false;
+
     void Awake()
     {
         Instance = this;
@@ -65,47 +68,59 @@ public class PipeCamera : MonoBehaviour
 
         if (_pipeGen != null && _tc != null)
         {
-            // === CAMERA POSITION: Behind and slightly above player ===
-
-            // Get the player's current pipe frame
+            // === GET PLAYER'S PIPE FRAME ===
             float playerDist = _tc.DistanceTraveled;
             Vector3 playerCenter, playerFwd, playerRight, playerUp;
             _pipeGen.GetPathFrame(playerDist, out playerCenter, out playerFwd, out playerRight, out playerUp);
 
-            // Get the camera's pipe frame (behind the player)
+            // Player's angular position on the pipe surface
+            float playerAngle = _tc.CurrentAngle * Mathf.Deg2Rad;
+
+            // === CAMERA POSITION: Behind player on the pipe ===
             float camDist = Mathf.Max(0f, playerDist - followDistance);
             Vector3 camCenter, camFwd, camRight, camUp;
             _pipeGen.GetPathFrame(camDist, out camCenter, out camFwd, out camRight, out camUp);
 
-            // Player's position on the pipe surface
-            float playerAngle = _tc.CurrentAngle * Mathf.Deg2Rad;
-            Vector3 playerSurfaceDir = camRight * Mathf.Cos(playerAngle) + camUp * Mathf.Sin(playerAngle);
+            // Use the cam frame's right/up for angular position (same angle as player)
+            Vector3 camSurfaceDir = camRight * Mathf.Cos(playerAngle) + camUp * Mathf.Sin(playerAngle);
 
-            // Camera sits behind player, at the same angular position but pushed
-            // slightly toward pipe center (above/behind the turd)
+            // Camera sits behind player, slightly closer to pipe center (above the turd)
             float camRadius = pipeRadius - heightAbovePlayer;
-            Vector3 desiredPos = camCenter + playerSurfaceDir * camRadius;
+            Vector3 desiredPos = camCenter + camSurfaceDir * camRadius;
 
-            // === LOOK TARGET: Ahead of the player on the pipe surface ===
+            // === LOOK TARGET: Ahead of the player ===
             float lookDist = playerDist + lookAhead;
             Vector3 lookCenter, lookFwd, lookRight, lookUp;
             _pipeGen.GetPathFrame(lookDist, out lookCenter, out lookFwd, out lookRight, out lookUp);
 
-            // Look at a point on the same angular position but ahead
+            // Look at a point on the pipe surface ahead at the same angular position
             Vector3 lookSurfaceDir = lookRight * Mathf.Cos(playerAngle) + lookUp * Mathf.Sin(playerAngle);
             Vector3 lookTarget = lookCenter + lookSurfaceDir * (pipeRadius * 0.5f);
+
+            // === FIRST FRAME: Snap immediately (no slerp from identity = no weird angle) ===
+            if (!_initialized)
+            {
+                transform.position = desiredPos;
+                Vector3 initLookDir = (lookTarget - desiredPos).normalized;
+                if (initLookDir.sqrMagnitude > 0.001f)
+                {
+                    Vector3 initOutward = (desiredPos - camCenter).normalized;
+                    transform.rotation = Quaternion.LookRotation(initLookDir, initOutward);
+                }
+                _velocity = Vector3.zero;
+                _initialized = true;
+                return;
+            }
 
             // Smooth position
             transform.position = Vector3.SmoothDamp(
                 transform.position, desiredPos, ref _velocity, 1f / positionSmooth);
 
-            // Rotation: look at the target, use the pipe's local "outward" as up
-            // This keeps the pipe visually stable - the turd moves, pipe stays put
+            // Rotation: look at the target with pipe-relative up vector
             Vector3 lookDir = (lookTarget - transform.position).normalized;
             if (lookDir.sqrMagnitude > 0.001f)
             {
-                // Use the direction from pipe center to camera as "up" reference
-                // This means the camera rolls with the player around the pipe
+                // "Up" = direction from pipe center to camera (rolls with player around pipe)
                 Vector3 camOutward = (transform.position - camCenter).normalized;
                 Quaternion targetRot = Quaternion.LookRotation(lookDir, camOutward);
 
@@ -148,7 +163,7 @@ public class PipeCamera : MonoBehaviour
             _shakeIntensity = 0f;
         }
 
-        // FOV punch decay - faster decay so it doesn't linger after jumps
+        // FOV punch decay - fast so it doesn't linger
         if (Mathf.Abs(_fovPunch) > 0.1f)
             _fovPunch = Mathf.Lerp(_fovPunch, 0f, Time.deltaTime * 8f);
         else
