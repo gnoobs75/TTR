@@ -1,0 +1,73 @@
+using UnityEngine;
+
+/// <summary>
+/// Defines all available character skins and their properties.
+/// Skins change Mr. Corny's material colors.
+/// </summary>
+public static class SkinData
+{
+    public struct Skin
+    {
+        public string id;
+        public string name;
+        public int cost; // 0 = free/default
+        public Color baseColor;
+        public Color emissionColor;
+        public float smoothness;
+        public float metallic;
+
+        public Skin(string id, string name, int cost, Color baseColor, Color emissionColor,
+            float smoothness = 0.3f, float metallic = 0f)
+        {
+            this.id = id;
+            this.name = name;
+            this.cost = cost;
+            this.baseColor = baseColor;
+            this.emissionColor = emissionColor;
+            this.smoothness = smoothness;
+            this.metallic = metallic;
+        }
+    }
+
+    public static readonly Skin[] AllSkins = new[]
+    {
+        new Skin("MrCorny", "Mr. Corny", 0,
+            new Color(0.45f, 0.28f, 0.1f),    // classic brown
+            Color.black, 0.25f, 0f),
+
+        new Skin("GoldenCorny", "Golden Corny", 50,
+            new Color(1f, 0.84f, 0f),          // gold
+            new Color(0.5f, 0.4f, 0f), 0.8f, 0.9f),
+
+        new Skin("ToxicCorny", "Toxic Corny", 100,
+            new Color(0.2f, 0.6f, 0.1f),       // toxic green
+            new Color(0f, 1f, 0.3f) * 0.5f, 0.5f, 0.2f),
+
+        new Skin("FrozenCorny", "Frozen Corny", 150,
+            new Color(0.6f, 0.85f, 1f),        // icy blue
+            new Color(0.3f, 0.6f, 1f) * 0.3f, 0.9f, 0.3f),
+
+        new Skin("RoyalCorny", "Royal Corny", 250,
+            new Color(0.4f, 0.1f, 0.6f),       // royal purple
+            new Color(0.6f, 0.2f, 1f) * 0.4f, 0.6f, 0.5f),
+
+        new Skin("LavaCorny", "Lava Corny", 400,
+            new Color(0.15f, 0.02f, 0f),       // dark magma
+            new Color(1f, 0.3f, 0f) * 1.5f, 0.4f, 0.7f),
+
+        new Skin("GhostCorny", "Ghost Corny", 750,
+            new Color(0.9f, 0.95f, 1f, 0.5f),  // translucent white
+            new Color(0.5f, 0.7f, 1f) * 0.3f, 0.1f, 0f),
+
+        new Skin("RainbowCorny", "Rainbow Corny", 1000,
+            Color.white,                        // animated (special case)
+            Color.white * 0.3f, 0.7f, 0.4f),
+    };
+
+    public static Skin GetSkin(string id)
+    {
+        foreach (var skin in AllSkins)
+            if (skin.id == id) return skin;
+        return AllSkins[0]; // default
+    }
+}
