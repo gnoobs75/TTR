@@ -41,7 +41,7 @@ public class SceneDiagnostics
         var cam = Object.FindFirstObjectByType<PipeCamera>();
         sb.AppendLine($"PipeCamera found: {cam != null}");
         if (cam != null)
-            sb.AppendLine($"  Follow dist: {cam.followDistance}, CamRadius: {cam.cameraRadius}, LookAhead: {cam.lookAhead}");
+            sb.AppendLine($"  Follow dist: {cam.followDistance}, HeightAbovePlayer: {cam.heightAbovePlayer}, LookAhead: {cam.lookAhead}");
 
         var obstSpawner = Object.FindFirstObjectByType<ObstacleSpawner>();
         sb.AppendLine($"ObstacleSpawner found: {obstSpawner != null}");
