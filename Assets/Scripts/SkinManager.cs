@@ -53,6 +53,7 @@ public class SkinManager : MonoBehaviour
         {
             float hue = (Time.time * 0.3f) % 1f;
             Color rainbow = Color.HSVToRGB(hue, 0.8f, 1f);
+            Color rainbowShadow = Color.HSVToRGB(hue, 0.9f, 0.35f);
             foreach (var r in _playerRenderers)
             {
                 if (r == null) continue;
@@ -60,6 +61,8 @@ public class SkinManager : MonoBehaviour
                 {
                     m.SetColor("_BaseColor", rainbow);
                     m.SetColor("_EmissionColor", rainbow * 0.3f);
+                    if (m.HasProperty("_ShadowColor"))
+                        m.SetColor("_ShadowColor", rainbowShadow);
                 }
             }
         }
@@ -78,6 +81,14 @@ public class SkinManager : MonoBehaviour
             foreach (var m in r.materials)
             {
                 m.SetColor("_BaseColor", skin.baseColor);
+
+                // Toon shadow color
+                if (m.HasProperty("_ShadowColor"))
+                {
+                    float h, s, v;
+                    Color.RGBToHSV(skin.baseColor, out h, out s, out v);
+                    m.SetColor("_ShadowColor", Color.HSVToRGB(h, Mathf.Min(s * 1.2f, 1f), v * 0.35f));
+                }
 
                 if (skin.emissionColor != Color.black)
                 {

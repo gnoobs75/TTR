@@ -16,6 +16,7 @@ public class SceneBootstrapper
 {
     static Font _font;
     static Shader _urpLit;
+    static Shader _toonLit;
 
     [MenuItem("TTR/Setup Game Scene")]
     public static void SetupGameScene()
@@ -27,9 +28,11 @@ public class SceneBootstrapper
         EditorSceneManager.NewScene(NewSceneSetup.EmptyScene, NewSceneMode.Single);
 
         _font = GetFont();
-        _urpLit = Shader.Find("Universal Render Pipeline/Lit");
+        // Toon shader is primary; URP Lit is fallback
+        _toonLit = Shader.Find("Custom/ToonLit");
+        _urpLit = _toonLit != null ? _toonLit : Shader.Find("Universal Render Pipeline/Lit");
         if (_urpLit == null)
-            _urpLit = Shader.Find("Standard"); // fallback
+            _urpLit = Shader.Find("Standard"); // final fallback
         _matCounter = 0;
 
         // Clean old generated materials
@@ -54,6 +57,7 @@ public class SceneBootstrapper
 
         CreateLighting();
         CreatePostProcessing();
+        SetupOutlineRendererFeature();
         CreatePrefabs();
         CreateScenerySpawner(player.transform);
         CreatePowerUpSpawner(player.transform);
@@ -171,10 +175,18 @@ public class SceneBootstrapper
             mat.SetFloat("_OcclusionStrength", occlusionStrength);
         }
 
+        // Toon shader shadow color for textured materials
+        if (_toonLit != null && mat.HasProperty("_ShadowColor"))
+        {
+            float h, s, v;
+            Color.RGBToHSV(tint, out h, out s, out v);
+            mat.SetColor("_ShadowColor", Color.HSVToRGB(h, Mathf.Min(s * 1.2f, 1f), v * 0.3f));
+        }
+
         EditorUtility.SetDirty(mat);
 
         if (diffuse != null)
-            Debug.Log($"TTR: Created textured material '{name}' with {texPrefix} textures");
+            Debug.Log($"TTR: Created textured material '{name}' with {texPrefix} textures (toon)");
         else
             Debug.LogWarning($"TTR: Textures not found for '{name}', using flat color");
 
@@ -519,48 +531,48 @@ public class SceneBootstrapper
         Debug.Log("TTR: Created Pooper Snooper progress tracker!");
     }
 
-    // ===== LIGHTING =====
+    // ===== LIGHTING (Toon-optimized: strong directional + minimal fill for hard shadow bands) =====
     static void CreateLighting()
     {
-        // Main directional - bright, warm, cartoon-like (think Mario Kart underground)
+        // Main directional - the ONLY shadow-casting light for clean toon shadow bands
         GameObject lightObj = new GameObject("Directional Light");
         Light light = lightObj.AddComponent<Light>();
         light.type = LightType.Directional;
-        light.color = new Color(0.9f, 0.82f, 0.6f); // warm golden
-        light.intensity = 1.8f; // brighter to compensate for no player spotlight
+        light.color = new Color(1f, 0.95f, 0.85f); // near-white warm light for clean toon color
+        light.intensity = 2.0f; // strong - toon shading needs clear lit vs shadow
         light.shadows = LightShadows.Soft;
-        light.shadowStrength = 0.25f; // soft, cartoon-friendly shadows
-        lightObj.transform.rotation = Quaternion.Euler(35, -20, 0); // more forward-facing angle
+        light.shadowStrength = 0.8f; // strong shadows for visible toon shadow band
+        lightObj.transform.rotation = Quaternion.Euler(40, -15, 0); // overhead-ish for pipe interior
 
-        // Fill light from below - illuminates inside of pipe (removes harsh shadows)
+        // Fill light - very subtle, just prevents pitch-black areas inside pipe
         GameObject fillObj = new GameObject("Fill Light");
         Light fill = fillObj.AddComponent<Light>();
         fill.type = LightType.Directional;
-        fill.color = new Color(0.4f, 0.45f, 0.3f); // green sewer fill
-        fill.intensity = 0.8f; // stronger fill for pipe interior visibility
+        fill.color = new Color(0.35f, 0.4f, 0.3f); // subtle green sewer fill
+        fill.intensity = 0.3f; // reduced - we want shadow bands to be visible
         fill.shadows = LightShadows.None;
-        fillObj.transform.rotation = Quaternion.Euler(-30, 45, 0);
+        fillObj.transform.rotation = Quaternion.Euler(-25, 45, 0);
 
-        // Back fill - prevents anything from being pitch black
+        // Back fill - minimal
         GameObject backObj = new GameObject("Back Fill Light");
         Light back = backObj.AddComponent<Light>();
         back.type = LightType.Directional;
-        back.color = new Color(0.35f, 0.3f, 0.22f);
-        back.intensity = 0.5f; // stronger backfill
+        back.color = new Color(0.3f, 0.28f, 0.22f);
+        back.intensity = 0.25f; // very subtle
         back.shadows = LightShadows.None;
         backObj.transform.rotation = Quaternion.Euler(15, 160, 0);
 
-        // Ambient - bright and warm, cartoonish (not muddy dark)
+        // Ambient - moderate, toon shading handles dark areas via _ShadowColor
         RenderSettings.ambientMode = UnityEngine.Rendering.AmbientMode.Trilight;
-        RenderSettings.ambientSkyColor = new Color(0.38f, 0.42f, 0.28f);
-        RenderSettings.ambientEquatorColor = new Color(0.32f, 0.35f, 0.24f);
-        RenderSettings.ambientGroundColor = new Color(0.24f, 0.26f, 0.18f);
+        RenderSettings.ambientSkyColor = new Color(0.32f, 0.35f, 0.25f);
+        RenderSettings.ambientEquatorColor = new Color(0.28f, 0.30f, 0.22f);
+        RenderSettings.ambientGroundColor = new Color(0.22f, 0.24f, 0.16f);
 
-        // Fog - light enough to see obstacles, gives depth
+        // Fog - subtle, mainly for depth fade into darkness
         RenderSettings.fog = true;
         RenderSettings.fogMode = FogMode.ExponentialSquared;
-        RenderSettings.fogColor = new Color(0.06f, 0.08f, 0.04f);
-        RenderSettings.fogDensity = 0.003f; // very light fog for depth without obscuring
+        RenderSettings.fogColor = new Color(0.04f, 0.06f, 0.03f);
+        RenderSettings.fogDensity = 0.004f; // slightly denser for sewer atmosphere
     }
 
     // ===== POST-PROCESSING =====
@@ -582,38 +594,31 @@ public class SceneBootstrapper
             if (bloomType != null)
             {
                 var bloom = (VolumeComponent)profile.Add(bloomType);
-                SetVolumeParam(bloom, "threshold", 0.6f);  // bloom on moderately bright things
-                SetVolumeParam(bloom, "intensity", 2.5f);   // strong bloom for cartoon glow
-                SetVolumeParam(bloom, "scatter", 0.75f);    // wide spread for dreamy sewer
-                Debug.Log("TTR: Bloom added to post-processing");
+                SetVolumeParam(bloom, "threshold", 0.8f);   // only bright emissives bloom
+                SetVolumeParam(bloom, "intensity", 1.5f);    // moderate - toon look is flat, not glowy
+                SetVolumeParam(bloom, "scatter", 0.6f);
+                Debug.Log("TTR: Bloom added (toon-optimized)");
             }
 
             if (vignetteType != null)
             {
                 var vignette = (VolumeComponent)profile.Add(vignetteType);
-                SetVolumeParam(vignette, "intensity", 0.3f);  // subtle edge darkening
-                SetVolumeParam(vignette, "smoothness", 0.5f);
-                SetVolumeParamColor(vignette, "color", new Color(0.03f, 0.04f, 0.02f));
-                Debug.Log("TTR: Vignette added to post-processing");
+                SetVolumeParam(vignette, "intensity", 0.35f);  // subtle panel-frame vignette
+                SetVolumeParam(vignette, "smoothness", 0.4f);
+                SetVolumeParamColor(vignette, "color", new Color(0.02f, 0.02f, 0.02f));
+                Debug.Log("TTR: Vignette added (comic panel frame)");
             }
 
             if (colorAdjType != null)
             {
                 var colorAdj = (VolumeComponent)profile.Add(colorAdjType);
-                SetVolumeParam(colorAdj, "saturation", 35f);   // punchy, cartoonish colors
-                SetVolumeParam(colorAdj, "contrast", 25f);     // strong depth like Mario Kart
-                SetVolumeParam(colorAdj, "postExposure", 0.5f); // noticeably brighter overall
-                Debug.Log("TTR: Color adjustments added to post-processing");
+                SetVolumeParam(colorAdj, "saturation", 45f);    // extra punchy for toon
+                SetVolumeParam(colorAdj, "contrast", 35f);      // strong bands need contrast
+                SetVolumeParam(colorAdj, "postExposure", 0.3f);
+                Debug.Log("TTR: Color adjustments added (toon-optimized)");
             }
 
-            // Film grain for gritty sewer atmosphere
-            System.Type filmGrainType = System.Type.GetType("UnityEngine.Rendering.Universal.FilmGrain, Unity.RenderPipelines.Universal.Runtime");
-            if (filmGrainType != null)
-            {
-                var filmGrain = (VolumeComponent)profile.Add(filmGrainType);
-                SetVolumeParam(filmGrain, "intensity", 0.15f); // subtle grain
-                Debug.Log("TTR: Film grain added to post-processing");
-            }
+            // No film grain - conflicts with hatching lines
 
             // Save profile
             AssetDatabase.CreateAsset(profile, "Assets/Materials/PostProcessProfile.asset");
@@ -739,12 +744,68 @@ public class SceneBootstrapper
             coinPrefab = AssetDatabase.LoadAssetAtPath<GameObject>("Assets/Prefabs/CornCoin.prefab");
         }
 
+        // Apply creature-specific materials for better visual variety
+        ApplyCreatureMaterials();
+
         // Wire to spawner
         ObstacleSpawner spawner = Object.FindFirstObjectByType<ObstacleSpawner>();
         if (spawner != null)
         {
             spawner.obstaclePrefabs = obstaclePrefabs.ToArray();
             spawner.coinPrefab = coinPrefab;
+        }
+    }
+
+    /// <summary>
+    /// Overrides generic UpgradeToURP materials on creature prefabs with unique surface properties.
+    /// Each creature gets distinct metallic/smoothness/emission for visual identity.
+    /// </summary>
+    static void ApplyCreatureMaterials()
+    {
+        // creature name → (color, metallic, smoothness, emissionColor, emissionStrength)
+        var creatures = new (string name, Color color, float metal, float smooth, Color emission, float emStr)[]
+        {
+            ("SewerRat",    new Color(0.32f, 0.2f, 0.1f),   0.05f, 0.25f, new Color(0.15f, 0.08f, 0.03f), 0.3f),  // rough fur
+            ("ToxicBarrel", new Color(0.25f, 0.5f, 0.12f),  0.45f, 0.55f, new Color(0.1f, 0.6f, 0.05f),   2.5f),  // corroded metal + green glow
+            ("PoopBlob",    new Color(0.35f, 0.2f, 0.08f),  0.05f, 0.78f, new Color(0.12f, 0.06f, 0.02f), 0.4f),  // wet glossy organic
+            ("SewerMine",   new Color(0.22f, 0.22f, 0.24f), 0.7f,  0.6f,  new Color(0.6f, 0.08f, 0.05f),  1.5f),  // heavy metal + red accent
+            ("Cockroach",   new Color(0.3f, 0.15f, 0.06f),  0.15f, 0.8f,  new Color(0.05f, 0.02f, 0.01f), 0.2f),  // chitinous shell sheen
+        };
+
+        foreach (var c in creatures)
+        {
+            string prefabPath = $"Assets/Prefabs/{c.name}.prefab";
+            GameObject prefab = AssetDatabase.LoadAssetAtPath<GameObject>(prefabPath);
+            if (prefab == null) continue;
+
+            GameObject instance = (GameObject)Object.Instantiate(prefab);
+
+            Material creatureMat = MakeURPMat($"{c.name}_Creature", c.color, c.metal, c.smooth);
+            creatureMat.EnableKeyword("_EMISSION");
+            creatureMat.SetColor("_EmissionColor", c.emission * c.emStr);
+            EditorUtility.SetDirty(creatureMat);
+
+            foreach (Renderer r in instance.GetComponentsInChildren<Renderer>())
+            {
+                // Skip face feature primitives (eyes, pupils, etc.)
+                MeshFilter mf = r.GetComponent<MeshFilter>();
+                if (mf != null && mf.sharedMesh != null)
+                {
+                    string mn = mf.sharedMesh.name;
+                    if (mn == "Sphere" || mn == "Capsule" || mn == "Cube" ||
+                        mn == "Quad" || mn == "Cylinder")
+                        continue;
+                }
+
+                Material[] mats = new Material[r.sharedMaterials.Length];
+                for (int mi = 0; mi < mats.Length; mi++)
+                    mats[mi] = creatureMat;
+                r.sharedMaterials = mats;
+            }
+
+            PrefabUtility.SaveAsPrefabAsset(instance, prefabPath);
+            Object.DestroyImmediate(instance);
+            Debug.Log($"TTR: Applied creature material to {c.name} (metal={c.metal}, smooth={c.smooth})");
         }
     }
 
@@ -774,17 +835,17 @@ public class SceneBootstrapper
 
         spawner.sceneryPrefabs = sceneryPrefabs.ToArray();
 
-        // Gross pipe decor - ONLY small, flat, wall-hugging details that blend in.
-        // Large 3D shapes (ads, signs, pipes, patches) looked like programmer art
-        // and clashed with the textured FBX models. Removed in favor of subtle stains.
+        // Gross pipe decor - stains, drips, cracks, and sewer signs/ads
         List<GameObject> grossPrefabs = new List<GameObject>();
         grossPrefabs.Add(CreateSlimeDripPrefab());
         grossPrefabs.Add(CreateGrimeStainPrefab());
         grossPrefabs.Add(CreateCrackDecalPrefab());
         grossPrefabs.Add(CreateRustDripPrefab());
+        grossPrefabs.Add(CreateGraffitiSignPrefab());  // re-added, smaller scale
+        grossPrefabs.Add(CreateSewerAdPrefab());        // re-added, smaller scale
 
         spawner.grossPrefabs = grossPrefabs.ToArray();
-        Debug.Log("TTR: Created 4 subtle gross pipe decor types (stains, drips, cracks).");
+        Debug.Log("TTR: Created 6 gross pipe decor types (stains, drips, cracks, signs, ads).");
     }
 
     // ===== GROSS PIPE CHARACTER PREFABS =====
@@ -976,6 +1037,7 @@ public class SceneBootstrapper
             Quaternion.identity, new Vector3(0.015f, 0.05f, 0.015f), paintMat);
 
         RemoveAllColliders(root);
+        root.transform.localScale = Vector3.one * 0.7f; // smaller to blend with environment
         GameObject prefab = PrefabUtility.SaveAsPrefabAsset(root, path);
         Object.DestroyImmediate(root);
         return prefab;
@@ -1225,7 +1287,7 @@ public class SceneBootstrapper
             Quaternion.identity, new Vector3(0.12f, 0.08f, 0.003f), grimeMat);
 
         RemoveAllColliders(root);
-        root.transform.localScale = Vector3.one * 2.5f;
+        root.transform.localScale = Vector3.one * 1.2f; // smaller than before to blend better
         GameObject prefab = PrefabUtility.SaveAsPrefabAsset(root, path);
         Object.DestroyImmediate(root);
         return prefab;
@@ -1294,55 +1356,72 @@ public class SceneBootstrapper
         string prefabPath = "Assets/Prefabs/SpeedBoost.prefab";
         GameObject root = new GameObject("SpeedBoost");
 
-        // Glowing cyan pad - EXTREMELY bright and eye-catching
-        Material boostMat = MakeURPMat("SpeedBoost_Mat", new Color(0.1f, 0.92f, 1f), 0.4f, 0.9f);
-        boostMat.EnableKeyword("_EMISSION");
-        boostMat.SetColor("_EmissionColor", new Color(0.3f, 1.2f, 1.5f) * 5f);
-        EditorUtility.SetDirty(boostMat);
+        // Try loading the ToiletSeat FBX model
+        GameObject toiletModel = LoadModel("Assets/Models/ToiletSeat.fbx");
+        if (toiletModel == null)
+            toiletModel = LoadModel("Assets/Models/ToiletSeat.glb");
 
-        // Base pad - big and visible
-        AddPrimChild(root, "Pad", PrimitiveType.Cube, Vector3.zero,
-            Quaternion.identity, new Vector3(2.5f, 0.15f, 3f), boostMat);
+        // Porcelain white material with cyan glow emission
+        Material porcelainMat = MakeURPMat("SpeedBoost_Porcelain", new Color(0.95f, 0.95f, 0.92f), 0.15f, 0.85f);
+        porcelainMat.EnableKeyword("_EMISSION");
+        porcelainMat.SetColor("_EmissionColor", new Color(0.2f, 0.8f, 1f) * 2f);
+        EditorUtility.SetDirty(porcelainMat);
 
-        // Raised side rails (helps player see it from a distance)
-        Material railMat = MakeURPMat("SpeedBoost_Rail", new Color(0.05f, 0.5f, 0.8f), 0.3f, 0.7f);
-        railMat.EnableKeyword("_EMISSION");
-        railMat.SetColor("_EmissionColor", new Color(0.1f, 0.7f, 1f) * 2f);
-        EditorUtility.SetDirty(railMat);
-
-        AddPrimChild(root, "LeftRail", PrimitiveType.Cube,
-            new Vector3(-1.1f, 0.2f, 0), Quaternion.identity,
-            new Vector3(0.15f, 0.35f, 3f), railMat);
-        AddPrimChild(root, "RightRail", PrimitiveType.Cube,
-            new Vector3(1.1f, 0.2f, 0), Quaternion.identity,
-            new Vector3(0.15f, 0.35f, 3f), railMat);
-
-        // Arrow chevrons - big bright white arrows
-        Material arrowMat = MakeURPMat("SpeedBoost_Arrow", new Color(1f, 1f, 1f), 0.6f, 0.95f);
-        arrowMat.EnableKeyword("_EMISSION");
-        arrowMat.SetColor("_EmissionColor", Color.white * 5f);
-        EditorUtility.SetDirty(arrowMat);
-
-        for (int i = 0; i < 4; i++)
+        if (toiletModel != null)
         {
-            float z = -0.9f + i * 0.6f;
-            AddPrimChild(root, $"Arrow{i}", PrimitiveType.Cube,
-                new Vector3(0, 0.12f, z), Quaternion.Euler(0, 0, 45),
-                new Vector3(0.7f, 0.06f, 0.18f), arrowMat);
+            // Use real ToiletSeat model
+            GameObject seat = (GameObject)Object.Instantiate(toiletModel);
+            seat.name = "ToiletSeatModel";
+            seat.transform.SetParent(root.transform);
+            seat.transform.localPosition = new Vector3(0, 0.3f, 0); // float above surface
+            seat.transform.localScale = new Vector3(1.2f, 1.2f, 1.2f);
+            UpgradeToURP(seat);
+
+            // Override all materials with glowing porcelain
+            foreach (Renderer r in seat.GetComponentsInChildren<Renderer>())
+            {
+                Material[] mats = new Material[r.sharedMaterials.Length];
+                for (int mi = 0; mi < mats.Length; mi++)
+                    mats[mi] = porcelainMat;
+                r.sharedMaterials = mats;
+            }
+
+            // Remove imported colliders
+            foreach (Collider c in seat.GetComponentsInChildren<Collider>())
+                Object.DestroyImmediate(c);
+
+            Debug.Log("TTR: Loaded ToiletSeat FBX for speed boost");
         }
+        else
+        {
+            // Fallback: torus-like shape from cylinders to suggest toilet seat
+            AddPrimChild(root, "Ring", PrimitiveType.Cylinder,
+                new Vector3(0, 0.3f, 0), Quaternion.identity,
+                new Vector3(1.8f, 0.1f, 1.8f), porcelainMat);
+            Debug.LogWarning("TTR: ToiletSeat model not found, using fallback cylinder");
+        }
+
+        // Glowing ring underneath (ground effect)
+        Material glowRingMat = MakeURPMat("SpeedBoost_GlowRing", new Color(0.1f, 0.9f, 1f), 0.3f, 0.9f);
+        glowRingMat.EnableKeyword("_EMISSION");
+        glowRingMat.SetColor("_EmissionColor", new Color(0.2f, 1f, 1.2f) * 4f);
+        EditorUtility.SetDirty(glowRingMat);
+        AddPrimChild(root, "GlowRing", PrimitiveType.Cylinder,
+            new Vector3(0, 0.02f, 0), Quaternion.identity,
+            new Vector3(2f, 0.02f, 2f), glowRingMat);
 
         // Trigger collider
         BoxCollider col = root.AddComponent<BoxCollider>();
         col.isTrigger = true;
         col.center = new Vector3(0, 0.5f, 0);
-        col.size = new Vector3(3f, 1.5f, 3.5f);
+        col.size = new Vector3(2.5f, 1.5f, 2.5f);
 
         root.AddComponent<SpeedBoost>();
-        root.transform.localScale = Vector3.one * 1.1f;
+        root.transform.localScale = Vector3.one * 1.0f;
 
         GameObject prefab = PrefabUtility.SaveAsPrefabAsset(root, prefabPath);
         Object.DestroyImmediate(root);
-        Debug.Log("TTR: Created Speed Boost prefab");
+        Debug.Log("TTR: Created Spinning Toilet Seat speed boost prefab");
         return prefab;
     }
 
@@ -1488,42 +1567,44 @@ public class SceneBootstrapper
         Vector3 fwd = fb.fwd, upV = fb.upV, sideV = fb.sideV;
         float fwdExt = fb.fwdExt, upExt = fb.upExt, sideExt = fb.sideExt;
 
-        Material whiteMat = MakeURPMat("SmoothSnake_EyeWhite", Color.white, 0f, 0.9f);
+        // Warm yellowish tint to differentiate from player's bright white eyes
+        Material whiteMat = MakeURPMat("SmoothSnake_EyeWhite", new Color(1f, 0.95f, 0.82f), 0f, 0.9f);
         whiteMat.EnableKeyword("_EMISSION");
-        whiteMat.SetColor("_EmissionColor", new Color(0.5f, 0.5f, 0.5f));
+        whiteMat.SetColor("_EmissionColor", new Color(0.45f, 0.4f, 0.3f));
         EditorUtility.SetDirty(whiteMat);
         Material pupilMat = MakeURPMat("SmoothSnake_Pupil", new Color(0.02f, 0.02f, 0.02f), 0f, 0.95f);
         Material lidMat = MakeURPMat("SmoothSnake_Lid", new Color(0.15f, 0.08f, 0.03f), 0f, 0.6f);
 
         Vector3 frontPos = fb.frontPos;
-        float eyeGap = Mathf.Max(sideExt * 0.28f, 0.1f);
-        float eyeSize = Mathf.Max(sideExt, upExt) * 0.4f;
-        eyeSize = Mathf.Clamp(eyeSize, 0.15f, 1.0f);
+        float eyeGap = Mathf.Max(sideExt * 0.24f, 0.08f);
+        // Smaller eyes than player (0.3x instead of 0.4x)
+        float eyeSize = Mathf.Max(sideExt, upExt) * 0.3f;
+        eyeSize = Mathf.Clamp(eyeSize, 0.12f, 0.8f);
         Vector3 eyeBase = frontPos + upV * (upExt * 0.3f);
 
-        // Smug narrowed eyes
+        // Smug narrowed eyes (smaller than player)
         GameObject leftEye = AddPrimChild(snake, "LeftEye", PrimitiveType.Sphere,
             eyeBase - sideV * eyeGap, Quaternion.identity,
-            new Vector3(eyeSize, eyeSize * 0.7f, eyeSize * 0.8f), whiteMat); // squished vertically = smug
+            new Vector3(eyeSize, eyeSize * 0.6f, eyeSize * 0.7f), whiteMat);
         AddPrimChild(leftEye, "LeftPupil", PrimitiveType.Sphere,
             fwd * 0.35f - upV * 0.05f, Quaternion.identity,
             Vector3.one * 0.5f, pupilMat);
         // Heavy eyelid
         AddPrimChild(snake, "LeftLid", PrimitiveType.Sphere,
-            eyeBase - sideV * eyeGap + upV * (eyeSize * 0.25f),
+            eyeBase - sideV * eyeGap + upV * (eyeSize * 0.22f),
             Quaternion.identity,
-            new Vector3(eyeSize * 1.1f, eyeSize * 0.35f, eyeSize * 0.9f), lidMat);
+            new Vector3(eyeSize * 1.15f, eyeSize * 0.4f, eyeSize * 0.85f), lidMat);
 
         GameObject rightEye = AddPrimChild(snake, "RightEye", PrimitiveType.Sphere,
             eyeBase + sideV * eyeGap, Quaternion.identity,
-            new Vector3(eyeSize, eyeSize * 0.7f, eyeSize * 0.8f), whiteMat);
+            new Vector3(eyeSize, eyeSize * 0.6f, eyeSize * 0.7f), whiteMat);
         AddPrimChild(rightEye, "RightPupil", PrimitiveType.Sphere,
             fwd * 0.35f - upV * 0.05f, Quaternion.identity,
             Vector3.one * 0.5f, pupilMat);
         AddPrimChild(snake, "RightLid", PrimitiveType.Sphere,
-            eyeBase + sideV * eyeGap + upV * (eyeSize * 0.25f),
+            eyeBase + sideV * eyeGap + upV * (eyeSize * 0.22f),
             Quaternion.identity,
-            new Vector3(eyeSize * 1.1f, eyeSize * 0.35f, eyeSize * 0.9f), lidMat);
+            new Vector3(eyeSize * 1.15f, eyeSize * 0.4f, eyeSize * 0.85f), lidMat);
 
         // Smirk mouth
         Material mouthMat = MakeURPMat("SmoothSnake_Mouth", new Color(0.5f, 0.1f, 0.1f), 0f, 0.5f);
@@ -1561,53 +1642,82 @@ public class SceneBootstrapper
         // Bright white emissive eyes - always visible even in dark sewer
         Material whiteMat = MakeURPMat("MrCorny_EyeWhite", Color.white, 0f, 0.85f);
         whiteMat.EnableKeyword("_EMISSION");
-        whiteMat.SetColor("_EmissionColor", new Color(0.9f, 0.9f, 0.9f));
+        whiteMat.SetColor("_EmissionColor", new Color(0.95f, 0.95f, 0.95f));
         EditorUtility.SetDirty(whiteMat);
 
         Material pupilMat = MakeURPMat("MrCorny_Pupil", new Color(0.02f, 0.02f, 0.02f), 0f, 0.9f);
         Material stacheMat = MakeURPMat("MrCorny_Stache", new Color(0.25f, 0.14f, 0.06f), 0f, 0.3f);
 
-        // Use shared transform-based face positioning (handles FBX import rotation correctly)
-        FaceBounds fb = ComputeFaceBounds(model);
+        // REAR-FACING: face on back so camera behind player can see it
+        FaceBounds fb = ComputeFaceBounds(model, rear: true);
         Vector3 fwd = fb.fwd, upV = fb.upV, sideV = fb.sideV;
         float fwdExt = fb.fwdExt, upExt = fb.upExt, sideExt = fb.sideExt;
         Vector3 frontPos = fb.frontPos;
         float eyeGap = fb.eyeGap;
-        float eyeSize = fb.eyeSize;
+        float eyeSize = fb.eyeSize * 1.4f; // 40% larger eyes for expressiveness
 
-        // === BIG GOOGLY EYES ===
+        // === BIG EXPRESSIVE GOOGLY EYES ===
         Vector3 eyeBase = frontPos + upV * (upExt * 0.35f);
 
         // Left eye (slightly bigger for goofiness)
         GameObject leftEye = AddPrimChild(model, "LeftGooglyEye", PrimitiveType.Sphere,
             eyeBase - sideV * eyeGap, Quaternion.identity,
             Vector3.one * eyeSize, whiteMat);
-        AddPrimChild(leftEye, "LeftPupil", PrimitiveType.Sphere,
-            fwd * 0.35f - upV * 0.05f, Quaternion.identity,
-            Vector3.one * 0.4f, pupilMat);
+        GameObject leftPupil = AddPrimChild(leftEye, "LeftPupil", PrimitiveType.Sphere,
+            fwd * 0.3f - upV * 0.03f, Quaternion.identity,
+            Vector3.one * 0.55f, pupilMat);
 
         // Right eye (slightly different size for asymmetric googly look)
         GameObject rightEye = AddPrimChild(model, "RightGooglyEye", PrimitiveType.Sphere,
-            eyeBase + sideV * eyeGap + upV * (eyeSize * 0.15f),
-            Quaternion.identity, Vector3.one * eyeSize * 0.88f, whiteMat);
-        AddPrimChild(rightEye, "RightPupil", PrimitiveType.Sphere,
-            fwd * 0.35f - upV * 0.07f + sideV * 0.05f, Quaternion.identity,
-            Vector3.one * 0.45f, pupilMat);
+            eyeBase + sideV * eyeGap + upV * (eyeSize * 0.12f),
+            Quaternion.identity, Vector3.one * eyeSize * 0.9f, whiteMat);
+        GameObject rightPupil = AddPrimChild(rightEye, "RightPupil", PrimitiveType.Sphere,
+            fwd * 0.3f - upV * 0.05f + sideV * 0.03f, Quaternion.identity,
+            Vector3.one * 0.6f, pupilMat);
 
-        // === HANDLEBAR MUSTACHE ===
-        Vector3 stacheBase = frontPos - upV * (upExt * 0.05f);
-        float stacheThick = eyeSize * 0.22f;
+        // === CURLY HANDLEBAR MUSTACHE ===
+        Vector3 stacheBase = frontPos - upV * (upExt * 0.08f);
+        float stacheThick = eyeSize * 0.18f;
 
-        AddPrimChild(model, "StacheLeft", PrimitiveType.Capsule,
-            stacheBase - sideV * (eyeGap * 0.5f),
-            Quaternion.Euler(0, 0, -30),
-            new Vector3(stacheThick, stacheThick * 2.5f, stacheThick), stacheMat);
-        AddPrimChild(model, "StacheRight", PrimitiveType.Capsule,
-            stacheBase + sideV * (eyeGap * 0.5f),
-            Quaternion.Euler(0, 0, 30),
-            new Vector3(stacheThick, stacheThick * 2.5f, stacheThick), stacheMat);
+        // Center bridge piece
+        GameObject stacheBridge = AddPrimChild(model, "StacheBridge", PrimitiveType.Capsule,
+            stacheBase,
+            Quaternion.Euler(0, 0, 90),
+            new Vector3(stacheThick * 0.8f, stacheThick * 1.5f, stacheThick * 0.8f), stacheMat);
 
-        Debug.Log($"TTR: Added big googly eyes and mustache (fwd={fwd}, eyeSize={eyeSize:F2})");
+        // Left bar (longer, angled down)
+        GameObject stacheL = AddPrimChild(model, "StacheLeft", PrimitiveType.Capsule,
+            stacheBase - sideV * (eyeGap * 0.55f) - upV * (stacheThick * 0.3f),
+            Quaternion.Euler(0, 0, -25),
+            new Vector3(stacheThick, stacheThick * 3f, stacheThick), stacheMat);
+        // Left curl tip (curls upward at end)
+        AddPrimChild(model, "StacheLeftCurl", PrimitiveType.Sphere,
+            stacheBase - sideV * (eyeGap * 1.0f) + upV * (stacheThick * 0.5f),
+            Quaternion.identity,
+            Vector3.one * stacheThick * 1.4f, stacheMat);
+
+        // Right bar (longer, angled down)
+        GameObject stacheR = AddPrimChild(model, "StacheRight", PrimitiveType.Capsule,
+            stacheBase + sideV * (eyeGap * 0.55f) - upV * (stacheThick * 0.3f),
+            Quaternion.Euler(0, 0, 25),
+            new Vector3(stacheThick, stacheThick * 3f, stacheThick), stacheMat);
+        // Right curl tip
+        AddPrimChild(model, "StacheRightCurl", PrimitiveType.Sphere,
+            stacheBase + sideV * (eyeGap * 1.0f) + upV * (stacheThick * 0.5f),
+            Quaternion.identity,
+            Vector3.one * stacheThick * 1.4f, stacheMat);
+
+        // === WIRE UP FACE ANIMATOR ===
+        MrCornyFaceAnimator anim = model.AddComponent<MrCornyFaceAnimator>();
+        anim.leftEye = leftEye.transform;
+        anim.rightEye = rightEye.transform;
+        anim.leftPupil = leftPupil.transform;
+        anim.rightPupil = rightPupil.transform;
+        anim.stacheLeft = stacheL.transform;
+        anim.stacheRight = stacheR.transform;
+        anim.stacheBridge = stacheBridge.transform;
+
+        Debug.Log($"TTR: Added rear-facing animated face (fwd={fwd}, eyeSize={eyeSize:F2}, with animator)");
     }
 
     // ===== DOODLE DOO FACE (artistic turd with beret, goatee, paint splats) =====
@@ -2035,7 +2145,7 @@ public class SceneBootstrapper
     /// The parent root (player) faces forward along the pipe, so we use root.forward to find
     /// the front of the model's bounding box, then convert that position to model-local coords.
     /// </summary>
-    static FaceBounds ComputeFaceBounds(GameObject model)
+    static FaceBounds ComputeFaceBounds(GameObject model, bool rear = false)
     {
         // Step 1: Get world-space bounds of the body mesh only (skip face feature primitives)
         Bounds worldBounds = new Bounds(model.transform.position, Vector3.one * 0.01f);
@@ -2069,8 +2179,21 @@ public class SceneBootstrapper
         float wUpExt = Mathf.Abs(worldUp.x) * we.x + Mathf.Abs(worldUp.y) * we.y + Mathf.Abs(worldUp.z) * we.z;
         float wSideExt = Mathf.Abs(worldRight.x) * we.x + Mathf.Abs(worldRight.y) * we.y + Mathf.Abs(worldRight.z) * we.z;
 
-        // Step 4: Compute face position in world space (90% toward front surface)
-        Vector3 worldFrontPos = worldBounds.center + worldFwd * wFwdExt * 0.9f;
+        // Step 4: Compute face position in world space
+        // rear=true: face on back (visible to camera behind player)
+        // rear=false: face on front (default, facing travel direction)
+        Vector3 worldFrontPos;
+        Vector3 faceFwd;
+        if (rear)
+        {
+            worldFrontPos = worldBounds.center - worldFwd * wFwdExt * 0.9f;
+            faceFwd = -worldFwd; // face looks backward (toward camera)
+        }
+        else
+        {
+            worldFrontPos = worldBounds.center + worldFwd * wFwdExt * 0.9f;
+            faceFwd = worldFwd;
+        }
 
         // Step 5: Convert everything to model-local space for child placement
         // InverseTransformPoint handles rotation AND scale correctly
@@ -2078,7 +2201,7 @@ public class SceneBootstrapper
         if (uniformScale < 0.001f) uniformScale = 1f;
 
         FaceBounds fb = new FaceBounds();
-        fb.fwd = model.transform.InverseTransformDirection(worldFwd).normalized;
+        fb.fwd = model.transform.InverseTransformDirection(faceFwd).normalized;
         fb.upV = model.transform.InverseTransformDirection(worldUp).normalized;
         fb.sideV = model.transform.InverseTransformDirection(worldRight).normalized;
         fb.fwdExt = wFwdExt / uniformScale;
@@ -2089,7 +2212,7 @@ public class SceneBootstrapper
         fb.eyeSize = Mathf.Max(fb.sideExt, fb.upExt) * 0.6f;
         fb.eyeSize = Mathf.Clamp(fb.eyeSize, 0.2f, 1.5f);
 
-        Debug.Log($"TTR: FaceBounds worldCenter={worldBounds.center} worldFront={worldFrontPos} " +
+        Debug.Log($"TTR: FaceBounds rear={rear} worldCenter={worldBounds.center} worldFront={worldFrontPos} " +
             $"localFront={fb.frontPos} fwd={fb.fwd} scale={uniformScale:F3} " +
             $"fwdExt={fb.fwdExt:F2} upExt={fb.upExt:F2} sideExt={fb.sideExt:F2}");
 
@@ -2980,9 +3103,17 @@ public class SceneBootstrapper
                 m.SetFloat("_Metallic", metallic);
                 m.SetFloat("_Smoothness", smoothness);
                 if (mainTex != null) m.SetTexture("_BaseMap", mainTex);
-                if (normalMap != null) m.SetTexture("_BumpMap", normalMap);
+                if (normalMap != null) { m.SetTexture("_BumpMap", normalMap); m.EnableKeyword("_NORMALMAP"); }
                 if (metallicMap != null) m.SetTexture("_MetallicGlossMap", metallicMap);
                 if (occlusionMap != null) m.SetTexture("_OcclusionMap", occlusionMap);
+
+                // Toon shader shadow color
+                if (_toonLit != null && m.HasProperty("_ShadowColor"))
+                {
+                    float ch, cs, cv;
+                    Color.RGBToHSV(baseColor, out ch, out cs, out cv);
+                    m.SetColor("_ShadowColor", Color.HSVToRGB(ch, Mathf.Min(cs * 1.2f, 1f), cv * 0.35f));
+                }
 
                 if (mainTex != null)
                     Debug.Log($"TTR: Preserved texture '{mainTex.name}' on material '{matName}'");
@@ -3002,7 +3133,135 @@ public class SceneBootstrapper
         mat.SetColor("_BaseColor", color);
         mat.SetFloat("_Metallic", metallic);
         mat.SetFloat("_Smoothness", smoothness);
+
+        // Toon shader shadow color: auto-computed darker desaturated version
+        if (_toonLit != null && mat.HasProperty("_ShadowColor"))
+        {
+            float h, s, v;
+            Color.RGBToHSV(color, out h, out s, out v);
+            // Shadow = darker, slightly more saturated, hue-shifted toward cool
+            Color shadowCol = Color.HSVToRGB(h, Mathf.Min(s * 1.2f, 1f), v * 0.35f);
+            mat.SetColor("_ShadowColor", shadowCol);
+        }
+
         return SaveMaterial(mat);
+    }
+
+    // ===== OUTLINE RENDERER FEATURE =====
+    static void SetupOutlineRendererFeature()
+    {
+        try
+        {
+            // Load the outline shader and create a material for it
+            Shader outlineShader = Shader.Find("Hidden/OutlineEdgeDetect");
+            if (outlineShader == null)
+            {
+                Debug.LogWarning("TTR: OutlineEdgeDetect shader not found - outlines disabled");
+                return;
+            }
+
+            Material outlineMat = new Material(outlineShader);
+            outlineMat.name = "OutlineEdgeDetect";
+            outlineMat.SetColor("_OutlineColor", new Color(0f, 0f, 0f, 1f)); // pure black ink
+            outlineMat.SetFloat("_OutlineThickness", 2.5f); // thick comic lines
+            outlineMat.SetFloat("_DepthThreshold", 1.5f);
+            outlineMat.SetFloat("_NormalThreshold", 0.4f);
+            EnsureMaterialsFolder();
+            AssetDatabase.CreateAsset(outlineMat, $"Assets/Materials/OutlineEdgeDetect_{_matCounter++}.mat");
+            outlineMat = AssetDatabase.LoadAssetAtPath<Material>($"Assets/Materials/OutlineEdgeDetect_{_matCounter - 1}.mat");
+
+            // Find the URP renderer data asset and add the outline feature
+            string[] rendererGuids = AssetDatabase.FindAssets("PC_Renderer t:ScriptableObject");
+            if (rendererGuids.Length == 0)
+            {
+                // Try loading directly
+                var rendererData = AssetDatabase.LoadAssetAtPath<ScriptableObject>("Assets/Settings/PC_Renderer.asset");
+                if (rendererData != null)
+                    AddOutlineFeatureToRenderer(rendererData, outlineMat);
+                else
+                    Debug.LogWarning("TTR: Could not find PC_Renderer asset for outline feature");
+                return;
+            }
+
+            foreach (string guid in rendererGuids)
+            {
+                string path = AssetDatabase.GUIDToAssetPath(guid);
+                if (path.Contains("PC_Renderer"))
+                {
+                    var rendererData = AssetDatabase.LoadAssetAtPath<ScriptableObject>(path);
+                    if (rendererData != null)
+                        AddOutlineFeatureToRenderer(rendererData, outlineMat);
+                    break;
+                }
+            }
+        }
+        catch (System.Exception e)
+        {
+            Debug.LogWarning($"TTR: Outline feature setup failed (non-fatal): {e.Message}");
+        }
+    }
+
+    static void AddOutlineFeatureToRenderer(ScriptableObject rendererData, Material outlineMat)
+    {
+        // Use reflection to add the renderer feature to the URP renderer
+        // This avoids hard dependency on URP assembly internals
+        var rdType = rendererData.GetType();
+        var featuresField = rdType.GetField("m_RendererFeatures",
+            System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
+        if (featuresField == null)
+        {
+            Debug.LogWarning("TTR: Cannot access renderer features field via reflection");
+            return;
+        }
+
+        var featuresList = featuresField.GetValue(rendererData) as System.Collections.IList;
+        if (featuresList == null) return;
+
+        // Check if outline feature already exists
+        foreach (var f in featuresList)
+        {
+            if (f != null && f.GetType().Name == "OutlineRendererFeature")
+            {
+                Debug.Log("TTR: Outline renderer feature already exists, updating material");
+                // Update the material reference
+                var settingsField = f.GetType().GetField("settings");
+                if (settingsField != null)
+                {
+                    var settings = settingsField.GetValue(f);
+                    var matField = settings.GetType().GetField("outlineMaterial");
+                    if (matField != null) matField.SetValue(settings, outlineMat);
+                }
+                EditorUtility.SetDirty(rendererData);
+                return;
+            }
+        }
+
+        // Create new OutlineRendererFeature instance
+        var feature = ScriptableObject.CreateInstance<OutlineRendererFeature>();
+        feature.name = "OutlineRendererFeature";
+        feature.settings.outlineMaterial = outlineMat;
+        feature.settings.thickness = 2.5f;
+        feature.settings.outlineColor = Color.black;
+        feature.settings.depthThreshold = 1.5f;
+        feature.settings.normalThreshold = 0.4f;
+
+        // Add as sub-asset of the renderer data
+        AssetDatabase.AddObjectToAsset(feature, rendererData);
+        featuresList.Add(feature);
+        featuresField.SetValue(rendererData, featuresList);
+
+        // Also update the feature map
+        var mapField = rdType.GetField("m_RendererFeatureMap",
+            System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
+        if (mapField != null)
+        {
+            // The map is a long, just set any value - Unity will recalculate
+            // Actually we need to trigger Create() on the renderer data
+        }
+
+        EditorUtility.SetDirty(rendererData);
+        AssetDatabase.SaveAssets();
+        Debug.Log("TTR: Added OutlineRendererFeature to URP renderer!");
     }
 
     // ===== PIPE ZONE SYSTEM =====

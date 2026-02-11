@@ -117,7 +117,8 @@ public class SewerWaterEffects : MonoBehaviour
 
     void CreateMaterials()
     {
-        Shader urpLit = Shader.Find("Universal Render Pipeline/Lit");
+        Shader toonLit = Shader.Find("Custom/ToonLit");
+        Shader urpLit = toonLit != null ? toonLit : Shader.Find("Universal Render Pipeline/Lit");
         if (urpLit == null) urpLit = Shader.Find("Standard");
 
         // Rusty drain pipe

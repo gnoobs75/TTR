@@ -124,11 +124,20 @@ public class PipeZoneSystem : MonoBehaviour
     public Color CurrentPipeEmission { get; private set; }
     public Color CurrentWaterColor { get; private set; }
     public Color CurrentWaterEmission { get; private set; }
+    public Color CurrentPipeShadowColor { get; private set; }
+    public Color CurrentWaterShadowColor { get; private set; }
     public float CurrentBumpScale { get; private set; }
     public float CurrentEmissionBoost { get; private set; }
     public int CurrentZoneIndex => _currentZoneIndex;
     public string CurrentZoneName => zones[_currentZoneIndex].name;
     public float ZoneBlend => _zoneBlend;
+
+    static Color ComputeShadowColor(Color baseCol)
+    {
+        float h, s, v;
+        Color.RGBToHSV(baseCol, out h, out s, out v);
+        return Color.HSVToRGB(h, Mathf.Min(s * 1.2f, 1f), v * 0.3f);
+    }
 
     void Awake()
     {
@@ -146,6 +155,8 @@ public class PipeZoneSystem : MonoBehaviour
         CurrentPipeEmission = zones[0].pipeEmission;
         CurrentWaterColor = zones[0].waterColor;
         CurrentWaterEmission = zones[0].waterEmission;
+        CurrentPipeShadowColor = ComputeShadowColor(zones[0].pipeColor);
+        CurrentWaterShadowColor = ComputeShadowColor(zones[0].waterColor);
         CurrentBumpScale = zones[0].bumpScale;
         CurrentEmissionBoost = zones[0].emissionBoost;
     }
@@ -185,6 +196,8 @@ public class PipeZoneSystem : MonoBehaviour
         CurrentPipeEmission = Color.Lerp(current.pipeEmission, next.pipeEmission, blend);
         CurrentWaterColor = Color.Lerp(current.waterColor, next.waterColor, blend);
         CurrentWaterEmission = Color.Lerp(current.waterEmission, next.waterEmission, blend);
+        CurrentPipeShadowColor = Color.Lerp(ComputeShadowColor(current.pipeColor), ComputeShadowColor(next.pipeColor), blend);
+        CurrentWaterShadowColor = Color.Lerp(ComputeShadowColor(current.waterColor), ComputeShadowColor(next.waterColor), blend);
         CurrentBumpScale = Mathf.Lerp(current.bumpScale, next.bumpScale, blend);
         CurrentEmissionBoost = Mathf.Lerp(current.emissionBoost, next.emissionBoost, blend);
 

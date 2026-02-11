@@ -47,30 +47,50 @@ public class PipeGenerator : MonoBehaviour
 
     public float SegmentLength => nodesPerSegment * nodeSpacing;
 
+    // Structural geometry materials (shared across segments for batching)
+    private Material _bracketMat;
+    private Material _brickMat;
+    private Material _grateMat;
+    private Material _conduitMat;
+    private Material _chainMat;
+    private Material _rivetMat;
+
     void Awake()
     {
-        Shader urpLit = Shader.Find("Universal Render Pipeline/Lit");
+        // Use toon shader if available, fall back to URP Lit
+        Shader toonLit = Shader.Find("Custom/ToonLit");
+        Shader urpLit = toonLit != null ? toonLit : Shader.Find("Universal Render Pipeline/Lit");
         if (urpLit == null) urpLit = Shader.Find("Standard");
+
         _defaultMat = new Material(urpLit);
-        // Sewer concrete - brighter, warmer, cartoon-visible
         _defaultMat.SetColor("_BaseColor", new Color(0.32f, 0.27f, 0.2f));
         _defaultMat.SetFloat("_Metallic", 0.05f);
         _defaultMat.SetFloat("_Smoothness", 0.3f);
-        // Subtle self-illumination so pipe walls are never black
         _defaultMat.EnableKeyword("_EMISSION");
         _defaultMat.SetColor("_EmissionColor", new Color(0.04f, 0.035f, 0.025f));
+        if (_defaultMat.HasProperty("_ShadowColor"))
+            _defaultMat.SetColor("_ShadowColor", new Color(0.12f, 0.1f, 0.07f));
 
-        // Sewage water - bright toxic green sludge with strong glow
+        // Sewage water - toxic green sludge
         _waterMat = new Material(urpLit);
         _waterMat.SetColor("_BaseColor", new Color(0.22f, 0.38f, 0.1f));
         _waterMat.SetFloat("_Metallic", 0.6f);
         _waterMat.SetFloat("_Smoothness", 0.95f);
         _waterMat.EnableKeyword("_EMISSION");
         _waterMat.SetColor("_EmissionColor", new Color(0.1f, 0.18f, 0.05f));
-        _waterMat.SetFloat("_Cull", 0); // Render both faces for visibility
-        // Specular highlights make water look wet and alive
-        _waterMat.SetFloat("_SpecularHighlights", 1f);
-        _waterMat.SetFloat("_EnvironmentReflections", 1f);
+        _waterMat.SetFloat("_Cull", 0);
+        if (_waterMat.HasProperty("_ShadowColor"))
+            _waterMat.SetColor("_ShadowColor", new Color(0.08f, 0.15f, 0.03f));
+        if (_waterMat.HasProperty("_SpecularSize"))
+            _waterMat.SetFloat("_SpecularSize", 0.3f); // big shiny water highlight band
+
+        // Structural geometry shared materials
+        _bracketMat = MakeToonMat(urpLit, "Bracket", new Color(0.35f, 0.32f, 0.28f), 0.5f, 0.4f);
+        _brickMat = MakeToonMat(urpLit, "Brick", new Color(0.55f, 0.35f, 0.22f), 0.05f, 0.2f);
+        _grateMat = MakeToonMat(urpLit, "Grate", new Color(0.3f, 0.3f, 0.28f), 0.6f, 0.35f);
+        _conduitMat = MakeToonMat(urpLit, "Conduit", new Color(0.4f, 0.38f, 0.32f), 0.4f, 0.45f);
+        _chainMat = MakeToonMat(urpLit, "Chain", new Color(0.28f, 0.26f, 0.22f), 0.55f, 0.3f);
+        _rivetMat = MakeToonMat(urpLit, "Rivet", new Color(0.25f, 0.24f, 0.2f), 0.7f, 0.5f);
 
         // Seed initial path
         _positions.Add(Vector3.zero);
@@ -132,16 +152,37 @@ public class PipeGenerator : MonoBehaviour
         pipeMat.SetColor("_EmissionColor", zone.CurrentPipeEmission * zone.CurrentEmissionBoost);
         if (pipeMat.HasProperty("_BumpScale"))
             pipeMat.SetFloat("_BumpScale", zone.CurrentBumpScale);
+        // Update toon shadow color to match zone
+        if (pipeMat.HasProperty("_ShadowColor"))
+        {
+            Color pc = zone.CurrentPipeColor;
+            float ph, ps, pv;
+            Color.RGBToHSV(pc, out ph, out ps, out pv);
+            pipeMat.SetColor("_ShadowColor", Color.HSVToRGB(ph, Mathf.Min(ps * 1.2f, 1f), pv * 0.3f));
+        }
 
         // Update water material with stronger emission for zone visibility
         _waterMat.SetColor("_BaseColor", zone.CurrentWaterColor);
         _waterMat.SetColor("_EmissionColor", zone.CurrentWaterEmission * zone.CurrentEmissionBoost);
+        if (_waterMat.HasProperty("_ShadowColor"))
+        {
+            Color wc = zone.CurrentWaterColor;
+            float wh, ws, wv;
+            Color.RGBToHSV(wc, out wh, out ws, out wv);
+            _waterMat.SetColor("_ShadowColor", Color.HSVToRGB(wh, Mathf.Min(ws * 1.3f, 1f), wv * 0.25f));
+        }
 
         // Update pipe ring material to match zone theme
         if (pipeRingMaterial != null)
         {
             Color ringTint = Color.Lerp(zone.CurrentPipeColor, new Color(0.5f, 0.4f, 0.3f), 0.4f);
             pipeRingMaterial.SetColor("_BaseColor", ringTint);
+            if (pipeRingMaterial.HasProperty("_ShadowColor"))
+            {
+                float rh, rs, rv;
+                Color.RGBToHSV(ringTint, out rh, out rs, out rv);
+                pipeRingMaterial.SetColor("_ShadowColor", Color.HSVToRGB(rh, rs, rv * 0.3f));
+            }
         }
     }
 
@@ -200,6 +241,9 @@ public class PipeGenerator : MonoBehaviour
         // Add procedural pipe wall detail (rust, slime, cracks)
         AddPipeDetail(obj, start, end, segDist);
 
+        // Add dense structural sewer geometry (brackets, braces, grates, etc.)
+        AddStructuralGeometry(obj, start, end, segDist);
+
         _segs.Enqueue(new Seg { obj = obj, startNode = start, dist = segDist });
         _nextSegStart = end;
     }
@@ -239,7 +283,8 @@ public class PipeGenerator : MonoBehaviour
     /// </summary>
     void AddPipeDetail(GameObject parent, int startNode, int endNode, float segDist)
     {
-        Shader urpLit = Shader.Find("Universal Render Pipeline/Lit");
+        Shader toonLit = Shader.Find("Custom/ToonLit");
+        Shader urpLit = toonLit != null ? toonLit : Shader.Find("Universal Render Pipeline/Lit");
         if (urpLit == null) urpLit = Shader.Find("Standard");
 
         // Deterministic seed per segment
@@ -325,6 +370,13 @@ public class PipeGenerator : MonoBehaviour
             {
                 mat.EnableKeyword("_EMISSION");
                 mat.SetColor("_EmissionColor", detailEmission);
+            }
+            // Toon shadow color
+            if (mat.HasProperty("_ShadowColor"))
+            {
+                float dh, ds, dv;
+                Color.RGBToHSV(detailColor, out dh, out ds, out dv);
+                mat.SetColor("_ShadowColor", Color.HSVToRGB(dh, Mathf.Min(ds * 1.2f, 1f), dv * 0.3f));
             }
 
             // Create detail geometry - larger patches for visibility
@@ -518,5 +570,393 @@ public class PipeGenerator : MonoBehaviour
             refUp = Vector3.forward;
         right = Vector3.Cross(forward, refUp).normalized;
         up = Vector3.Cross(right, forward).normalized;
+    }
+
+    // ===== TOON MATERIAL HELPER =====
+    static Material MakeToonMat(Shader shader, string name, Color color, float metallic, float smoothness)
+    {
+        Material mat = new Material(shader);
+        mat.name = name;
+        mat.SetColor("_BaseColor", color);
+        mat.SetFloat("_Metallic", metallic);
+        mat.SetFloat("_Smoothness", smoothness);
+        if (mat.HasProperty("_ShadowColor"))
+        {
+            float h, s, v;
+            Color.RGBToHSV(color, out h, out s, out v);
+            mat.SetColor("_ShadowColor", Color.HSVToRGB(h, Mathf.Min(s * 1.2f, 1f), v * 0.3f));
+        }
+        return mat;
+    }
+
+    // ===== STRUCTURAL SEWER GEOMETRY =====
+    /// <summary>
+    /// Adds dense structural sewer elements to pipe segments for comic-book visual density.
+    /// Includes brick arch ribs, support brackets, cross-braces, conduits, grates, chains,
+    /// stalactites, and rivet rows. Density increases with distance / zone progression.
+    /// </summary>
+    void AddStructuralGeometry(GameObject parent, int startNode, int endNode, float segDist)
+    {
+        Random.State prev = Random.state;
+        Random.InitState(Mathf.FloorToInt(segDist * 13.7f)); // different seed than detail
+
+        // Density ramps up: Porcelain = sparse, Hellsewer = packed
+        float densityMult = 1f;
+        if (segDist > 800f) densityMult = 2.5f;
+        else if (segDist > 500f) densityMult = 2.0f;
+        else if (segDist > 250f) densityMult = 1.5f;
+        else if (segDist > 80f) densityMult = 1.2f;
+
+        int nodeCount = endNode - startNode;
+        float segLen = nodeCount * nodeSpacing;
+
+        // 1. BRICK ARCH RIBS - rows of flattened bricks forming arches
+        float archSpacing = Mathf.Max(3f, 6f / densityMult);
+        for (float d = 0; d < segLen; d += archSpacing)
+        {
+            int nodeIdx = startNode + Mathf.FloorToInt(d / nodeSpacing);
+            if (nodeIdx >= _positions.Count) break;
+            AddBrickArchRib(parent, nodeIdx);
+        }
+
+        // 2. SUPPORT BRACKETS - L-shaped metal on walls
+        int bracketCount = Mathf.FloorToInt(2 * densityMult);
+        for (int i = 0; i < bracketCount; i++)
+        {
+            int nodeIdx = startNode + Random.Range(2, nodeCount - 2);
+            if (nodeIdx >= _positions.Count) continue;
+            float angle = Random.Range(0f, 360f);
+            AddSupportBracket(parent, nodeIdx, angle);
+        }
+
+        // 3. CROSS-BRACES - diagonal struts
+        if (densityMult > 1.0f)
+        {
+            int braceCount = Mathf.FloorToInt(1 * densityMult);
+            for (int i = 0; i < braceCount; i++)
+            {
+                int nodeIdx = startNode + Random.Range(3, nodeCount - 3);
+                if (nodeIdx >= _positions.Count) continue;
+                AddCrossBrace(parent, nodeIdx);
+            }
+        }
+
+        // 4. PIPE CONDUITS - secondary pipes running along walls/ceiling
+        if (Random.value < 0.4f * densityMult)
+        {
+            float angle = Random.Range(100f, 260f); // upper half
+            AddPipeConduit(parent, startNode, endNode, angle);
+        }
+
+        // 5. GRATE PANELS - thin grids on walls
+        int grateCount = Mathf.FloorToInt(1 * densityMult);
+        for (int i = 0; i < grateCount; i++)
+        {
+            int nodeIdx = startNode + Random.Range(2, nodeCount - 2);
+            if (nodeIdx >= _positions.Count) continue;
+            float angle = Random.Range(0f, 360f);
+            AddGratePanel(parent, nodeIdx, angle);
+        }
+
+        // 6. CHAIN HANGERS - from ceiling
+        if (densityMult > 1.2f && Random.value < 0.5f)
+        {
+            int nodeIdx = startNode + Random.Range(3, nodeCount - 3);
+            if (nodeIdx < _positions.Count)
+                AddChainHanger(parent, nodeIdx);
+        }
+
+        // 7. RIVET ROWS - along structural seams
+        if (densityMult > 1.0f)
+        {
+            int rivetSets = Mathf.FloorToInt(2 * densityMult);
+            for (int i = 0; i < rivetSets; i++)
+            {
+                int nodeIdx = startNode + Random.Range(1, nodeCount - 1);
+                if (nodeIdx >= _positions.Count) continue;
+                AddRivetRow(parent, nodeIdx);
+            }
+        }
+
+        Random.state = prev;
+    }
+
+    void GetNodeFrame(int nodeIdx, out Vector3 center, out Vector3 fwd, out Vector3 right, out Vector3 up)
+    {
+        center = _positions[nodeIdx];
+        fwd = _forwards[nodeIdx];
+        Vector3 refUp = Mathf.Abs(Vector3.Dot(fwd, Vector3.up)) > 0.95f ? Vector3.forward : Vector3.up;
+        right = Vector3.Cross(fwd, refUp).normalized;
+        up = Vector3.Cross(right, fwd).normalized;
+    }
+
+    Vector3 GetWallPos(Vector3 center, Vector3 right, Vector3 up, float angleDeg, float radiusFrac = 0.92f)
+    {
+        float rad = angleDeg * Mathf.Deg2Rad;
+        return center + (right * Mathf.Cos(rad) + up * Mathf.Sin(rad)) * pipeRadius * radiusFrac;
+    }
+
+    // Brick arch: ring of flattened cubes forming a brick arch rib
+    void AddBrickArchRib(GameObject parent, int nodeIdx)
+    {
+        GetNodeFrame(nodeIdx, out Vector3 center, out Vector3 fwd, out Vector3 right, out Vector3 up);
+
+        int brickCount = 16; // bricks around circumference
+        for (int i = 0; i < brickCount; i++)
+        {
+            float angle = (float)i / brickCount * 360f;
+            float rad = angle * Mathf.Deg2Rad;
+
+            Vector3 dir = right * Mathf.Cos(rad) + up * Mathf.Sin(rad);
+            Vector3 pos = center + dir * pipeRadius * 0.88f;
+            Vector3 inward = -dir;
+
+            GameObject brick = GameObject.CreatePrimitive(PrimitiveType.Cube);
+            brick.name = "BrickArch";
+            brick.transform.SetParent(parent.transform);
+            brick.transform.position = pos;
+            brick.transform.rotation = Quaternion.LookRotation(fwd, inward);
+            // Each brick: wide along circumference, thin depth, medium height
+            brick.transform.localScale = new Vector3(
+                pipeRadius * 0.42f, // width (circumference)
+                0.15f,              // depth into wall
+                0.35f               // height along pipe
+            );
+            brick.GetComponent<Renderer>().sharedMaterial = _brickMat;
+            Collider c = brick.GetComponent<Collider>();
+            if (c != null) Destroy(c);
+        }
+    }
+
+    // L-shaped support bracket bolted to wall
+    void AddSupportBracket(GameObject parent, int nodeIdx, float angleDeg)
+    {
+        GetNodeFrame(nodeIdx, out Vector3 center, out Vector3 fwd, out Vector3 right, out Vector3 up);
+        Vector3 wallPos = GetWallPos(center, right, up, angleDeg, 0.88f);
+        float rad = angleDeg * Mathf.Deg2Rad;
+        Vector3 outDir = (right * Mathf.Cos(rad) + up * Mathf.Sin(rad)).normalized;
+        Vector3 inward = -outDir;
+
+        // Vertical arm
+        GameObject arm1 = GameObject.CreatePrimitive(PrimitiveType.Cube);
+        arm1.name = "Bracket_V";
+        arm1.transform.SetParent(parent.transform);
+        arm1.transform.position = wallPos - outDir * 0.15f;
+        arm1.transform.rotation = Quaternion.LookRotation(fwd, inward);
+        arm1.transform.localScale = new Vector3(0.08f, 0.6f, 0.08f);
+        arm1.GetComponent<Renderer>().sharedMaterial = _bracketMat;
+        Collider c1 = arm1.GetComponent<Collider>();
+        if (c1 != null) Destroy(c1);
+
+        // Horizontal arm (shelf)
+        GameObject arm2 = GameObject.CreatePrimitive(PrimitiveType.Cube);
+        arm2.name = "Bracket_H";
+        arm2.transform.SetParent(parent.transform);
+        arm2.transform.position = wallPos - outDir * 0.4f;
+        arm2.transform.rotation = Quaternion.LookRotation(fwd, inward);
+        arm2.transform.localScale = new Vector3(0.08f, 0.08f, 0.5f);
+        arm2.GetComponent<Renderer>().sharedMaterial = _bracketMat;
+        Collider c2 = arm2.GetComponent<Collider>();
+        if (c2 != null) Destroy(c2);
+
+        // Diagonal brace
+        GameObject diag = GameObject.CreatePrimitive(PrimitiveType.Cube);
+        diag.name = "Bracket_D";
+        diag.transform.SetParent(parent.transform);
+        Vector3 diagPos = wallPos - outDir * 0.28f;
+        diag.transform.position = diagPos;
+        Quaternion baseRot = Quaternion.LookRotation(fwd, inward);
+        diag.transform.rotation = baseRot * Quaternion.Euler(0, 0, 45);
+        diag.transform.localScale = new Vector3(0.05f, 0.55f, 0.05f);
+        diag.GetComponent<Renderer>().sharedMaterial = _bracketMat;
+        Collider c3 = diag.GetComponent<Collider>();
+        if (c3 != null) Destroy(c3);
+    }
+
+    // Diagonal cross-brace spanning across pipe
+    void AddCrossBrace(GameObject parent, int nodeIdx)
+    {
+        GetNodeFrame(nodeIdx, out Vector3 center, out Vector3 fwd, out Vector3 right, out Vector3 up);
+
+        float angle1 = Random.Range(20f, 70f);
+        float angle2 = angle1 + 180f;
+        Vector3 p1 = GetWallPos(center, right, up, angle1, 0.85f);
+        Vector3 p2 = GetWallPos(center, right, up, angle2, 0.85f);
+
+        Vector3 mid = (p1 + p2) * 0.5f;
+        Vector3 dir = (p2 - p1).normalized;
+        float len = (p2 - p1).magnitude;
+
+        GameObject brace = GameObject.CreatePrimitive(PrimitiveType.Cube);
+        brace.name = "CrossBrace";
+        brace.transform.SetParent(parent.transform);
+        brace.transform.position = mid;
+        brace.transform.rotation = Quaternion.LookRotation(fwd, dir);
+        brace.transform.localScale = new Vector3(0.06f, len, 0.06f);
+        brace.GetComponent<Renderer>().sharedMaterial = _bracketMat;
+        Collider c = brace.GetComponent<Collider>();
+        if (c != null) Destroy(c);
+    }
+
+    // Secondary pipe conduit running along wall
+    void AddPipeConduit(GameObject parent, int startNode, int endNode, float angleDeg)
+    {
+        GetNodeFrame(startNode, out Vector3 startCenter, out Vector3 startFwd, out Vector3 sR, out Vector3 sU);
+        GetNodeFrame(endNode, out Vector3 endCenter, out Vector3 endFwd, out Vector3 eR, out Vector3 eU);
+
+        // Place cylinder segments along the conduit path
+        int steps = 3;
+        for (int i = 0; i < steps; i++)
+        {
+            float t0 = (float)i / steps;
+            float t1 = (float)(i + 1) / steps;
+            int n0 = startNode + Mathf.FloorToInt(t0 * (endNode - startNode));
+            int n1 = startNode + Mathf.FloorToInt(t1 * (endNode - startNode));
+            if (n0 >= _positions.Count || n1 >= _positions.Count) break;
+
+            GetNodeFrame(n0, out Vector3 c0, out Vector3 f0, out Vector3 r0, out Vector3 u0);
+            GetNodeFrame(n1, out Vector3 c1, out Vector3 f1, out Vector3 r1, out Vector3 u1);
+
+            Vector3 p0 = GetWallPos(c0, r0, u0, angleDeg, 0.82f);
+            Vector3 p1 = GetWallPos(c1, r1, u1, angleDeg, 0.82f);
+
+            Vector3 mid = (p0 + p1) * 0.5f;
+            Vector3 dir = (p1 - p0).normalized;
+            float len = (p1 - p0).magnitude;
+
+            GameObject cond = GameObject.CreatePrimitive(PrimitiveType.Cylinder);
+            cond.name = "Conduit";
+            cond.transform.SetParent(parent.transform);
+            cond.transform.position = mid;
+            cond.transform.rotation = Quaternion.LookRotation(dir) * Quaternion.Euler(90, 0, 0);
+            cond.transform.localScale = new Vector3(0.15f, len * 0.5f, 0.15f);
+            cond.GetComponent<Renderer>().sharedMaterial = _conduitMat;
+            Collider c = cond.GetComponent<Collider>();
+            if (c != null) Destroy(c);
+        }
+
+        // Mounting brackets for conduit
+        for (int i = 0; i <= steps; i++)
+        {
+            float t = (float)i / steps;
+            int nIdx = startNode + Mathf.FloorToInt(t * (endNode - startNode));
+            if (nIdx >= _positions.Count) break;
+            GetNodeFrame(nIdx, out Vector3 cn, out Vector3 fn, out Vector3 rn, out Vector3 un);
+            Vector3 mountPos = GetWallPos(cn, rn, un, angleDeg, 0.86f);
+            float rad = angleDeg * Mathf.Deg2Rad;
+            Vector3 outDir = (rn * Mathf.Cos(rad) + un * Mathf.Sin(rad)).normalized;
+
+            GameObject mount = GameObject.CreatePrimitive(PrimitiveType.Cube);
+            mount.name = "ConduitMount";
+            mount.transform.SetParent(parent.transform);
+            mount.transform.position = mountPos;
+            mount.transform.rotation = Quaternion.LookRotation(fn, -outDir);
+            mount.transform.localScale = new Vector3(0.25f, 0.08f, 0.25f);
+            mount.GetComponent<Renderer>().sharedMaterial = _bracketMat;
+            Collider mc = mount.GetComponent<Collider>();
+            if (mc != null) Destroy(mc);
+        }
+    }
+
+    // Grid grate panel on wall
+    void AddGratePanel(GameObject parent, int nodeIdx, float angleDeg)
+    {
+        GetNodeFrame(nodeIdx, out Vector3 center, out Vector3 fwd, out Vector3 right, out Vector3 up);
+        Vector3 wallPos = GetWallPos(center, right, up, angleDeg, 0.87f);
+        float rad = angleDeg * Mathf.Deg2Rad;
+        Vector3 outDir = (right * Mathf.Cos(rad) + up * Mathf.Sin(rad)).normalized;
+
+        // Frame
+        GameObject frame = GameObject.CreatePrimitive(PrimitiveType.Cube);
+        frame.name = "GrateFrame";
+        frame.transform.SetParent(parent.transform);
+        frame.transform.position = wallPos;
+        frame.transform.rotation = Quaternion.LookRotation(fwd, -outDir);
+        frame.transform.localScale = new Vector3(0.8f, 0.04f, 0.8f);
+        frame.GetComponent<Renderer>().sharedMaterial = _grateMat;
+        Collider fc = frame.GetComponent<Collider>();
+        if (fc != null) Destroy(fc);
+
+        // Horizontal bars
+        for (int i = 0; i < 4; i++)
+        {
+            float offset = (i - 1.5f) * 0.18f;
+            GameObject bar = GameObject.CreatePrimitive(PrimitiveType.Cube);
+            bar.name = "GrateBar";
+            bar.transform.SetParent(parent.transform);
+            bar.transform.position = wallPos + fwd * offset;
+            bar.transform.rotation = Quaternion.LookRotation(fwd, -outDir);
+            bar.transform.localScale = new Vector3(0.7f, 0.06f, 0.03f);
+            bar.GetComponent<Renderer>().sharedMaterial = _grateMat;
+            Collider bc = bar.GetComponent<Collider>();
+            if (bc != null) Destroy(bc);
+        }
+
+        // Vertical bars
+        for (int i = 0; i < 4; i++)
+        {
+            float offset = (i - 1.5f) * 0.18f;
+            Vector3 tangent = Vector3.Cross(outDir, fwd).normalized;
+            GameObject bar = GameObject.CreatePrimitive(PrimitiveType.Cube);
+            bar.name = "GrateBarV";
+            bar.transform.SetParent(parent.transform);
+            bar.transform.position = wallPos + tangent * offset;
+            bar.transform.rotation = Quaternion.LookRotation(fwd, -outDir);
+            bar.transform.localScale = new Vector3(0.03f, 0.06f, 0.7f);
+            bar.GetComponent<Renderer>().sharedMaterial = _grateMat;
+            Collider bc = bar.GetComponent<Collider>();
+            if (bc != null) Destroy(bc);
+        }
+    }
+
+    // Chain hanging from ceiling
+    void AddChainHanger(GameObject parent, int nodeIdx)
+    {
+        GetNodeFrame(nodeIdx, out Vector3 center, out Vector3 fwd, out Vector3 right, out Vector3 up);
+        Vector3 ceilingPos = center + up * pipeRadius * 0.85f;
+
+        int links = Random.Range(3, 7);
+        for (int i = 0; i < links; i++)
+        {
+            GameObject link = GameObject.CreatePrimitive(PrimitiveType.Cube);
+            link.name = "ChainLink";
+            link.transform.SetParent(parent.transform);
+            link.transform.position = ceilingPos - up * (i * 0.2f);
+            link.transform.rotation = Quaternion.LookRotation(fwd, up);
+            // Alternate link orientation for chain look
+            if (i % 2 == 1)
+                link.transform.rotation *= Quaternion.Euler(0, 90, 0);
+            link.transform.localScale = new Vector3(0.08f, 0.06f, 0.15f);
+            link.GetComponent<Renderer>().sharedMaterial = _chainMat;
+            Collider c = link.GetComponent<Collider>();
+            if (c != null) Destroy(c);
+        }
+    }
+
+    // Row of rivets along a circumferential line
+    void AddRivetRow(GameObject parent, int nodeIdx)
+    {
+        GetNodeFrame(nodeIdx, out Vector3 center, out Vector3 fwd, out Vector3 right, out Vector3 up);
+
+        int rivetCount = 12;
+        float startAngle = Random.Range(0f, 360f);
+        float arcSpan = Random.Range(60f, 180f);
+
+        for (int i = 0; i < rivetCount; i++)
+        {
+            float angle = startAngle + (float)i / rivetCount * arcSpan;
+            float rad = angle * Mathf.Deg2Rad;
+            Vector3 dir = right * Mathf.Cos(rad) + up * Mathf.Sin(rad);
+            Vector3 pos = center + dir * pipeRadius * 0.89f;
+
+            GameObject rivet = GameObject.CreatePrimitive(PrimitiveType.Sphere);
+            rivet.name = "Rivet";
+            rivet.transform.SetParent(parent.transform);
+            rivet.transform.position = pos;
+            rivet.transform.localScale = Vector3.one * 0.06f;
+            rivet.GetComponent<Renderer>().sharedMaterial = _rivetMat;
+            Collider c = rivet.GetComponent<Collider>();
+            if (c != null) Destroy(c);
+        }
     }
 }

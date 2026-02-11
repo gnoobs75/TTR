@@ -210,7 +210,8 @@ public class WaterAnimator : MonoBehaviour
 
     void CreateDebrisMaterials()
     {
-        Shader urpLit = Shader.Find("Universal Render Pipeline/Lit");
+        Shader toonLit = Shader.Find("Custom/ToonLit");
+        Shader urpLit = toonLit != null ? toonLit : Shader.Find("Universal Render Pipeline/Lit");
         if (urpLit == null) urpLit = Shader.Find("Standard");
 
         // Toilet paper - dirty white
@@ -394,7 +395,8 @@ public class WaterAnimator : MonoBehaviour
                 beak.transform.SetParent(obj.transform);
                 beak.transform.localPosition = new Vector3(0, 0.03f, 0.05f);
                 beak.transform.localScale = new Vector3(0.015f, 0.008f, 0.02f);
-                Shader urpLit = Shader.Find("Universal Render Pipeline/Lit");
+                Shader toonLit2 = Shader.Find("Custom/ToonLit");
+                Shader urpLit = toonLit2 != null ? toonLit2 : Shader.Find("Universal Render Pipeline/Lit");
                 if (urpLit == null) urpLit = Shader.Find("Standard");
                 Material beakMat = new Material(urpLit);
                 beakMat.SetColor("_BaseColor", new Color(1f, 0.5f, 0f));
