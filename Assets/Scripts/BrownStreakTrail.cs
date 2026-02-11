@@ -40,26 +40,25 @@ public class BrownStreakTrail : MonoBehaviour
 
     void CreateStreakMaterial()
     {
-        Shader urpLit = Shader.Find("Universal Render Pipeline/Lit");
-        if (urpLit == null) urpLit = Shader.Find("Standard");
+        // Use URP Particles/Unlit for transparent quads - Lit shader's transparency
+        // requires complex pipeline setup and often renders as black squares on quads.
+        Shader shader = Shader.Find("Universal Render Pipeline/Particles/Unlit");
+        if (shader == null || shader.name.Contains("Error"))
+            shader = Shader.Find("Particles/Standard Unlit");
+        if (shader == null || shader.name.Contains("Error"))
+            shader = Shader.Find("Sprites/Default");
 
-        _streakMat = new Material(urpLit);
-        // Semi-transparent brown - nasty poop streak
+        _streakMat = new Material(shader);
         _streakMat.SetFloat("_Surface", 1); // Transparent
         _streakMat.SetFloat("_Blend", 0);   // Alpha
         _streakMat.SetFloat("_Cull", 0);    // No culling
         _streakMat.SetFloat("_ZWrite", 0);
-        _streakMat.SetFloat("_Metallic", 0.3f);
-        _streakMat.SetFloat("_Smoothness", 0.7f); // slimy
+        _streakMat.SetInt("_SrcBlend", (int)UnityEngine.Rendering.BlendMode.SrcAlpha);
+        _streakMat.SetInt("_DstBlend", (int)UnityEngine.Rendering.BlendMode.OneMinusSrcAlpha);
         _streakMat.EnableKeyword("_SURFACE_TYPE_TRANSPARENT");
         _streakMat.EnableKeyword("_ALPHABLEND_ON");
         _streakMat.SetOverrideTag("RenderType", "Transparent");
-        _streakMat.SetInt("_SrcBlend", (int)UnityEngine.Rendering.BlendMode.SrcAlpha);
-        _streakMat.SetInt("_DstBlend", (int)UnityEngine.Rendering.BlendMode.OneMinusSrcAlpha);
         _streakMat.renderQueue = 3000;
-
-        // Enable emission for wet sheen
-        _streakMat.EnableKeyword("_EMISSION");
     }
 
     void Update()
@@ -147,17 +146,15 @@ public class BrownStreakTrail : MonoBehaviour
         float l = streakLength * Random.Range(0.7f, 1.3f);
         streak.transform.localScale = new Vector3(w, l, 1f);
 
-        // Random brown shade
+        // Random brown shade - subtle so streaks blend with pipe wall
         float shade = Random.Range(0.15f, 0.35f);
-        float alpha = Random.Range(0.4f, 0.7f);
+        float alpha = Random.Range(0.12f, 0.25f);
         Color streakColor = new Color(shade, shade * 0.6f, shade * 0.2f, alpha);
 
         var rend = streak.GetComponent<Renderer>();
         rend.material = new Material(_streakMat);
         rend.material.SetColor("_BaseColor", streakColor);
-        // Wet emission
-        Color emissionColor = new Color(shade * 0.3f, shade * 0.15f, 0f);
-        rend.material.SetColor("_EmissionColor", emissionColor);
+        rend.material.SetColor("_Color", streakColor); // fallback property name
         rend.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
 
         _streaks.Add(new StreakData

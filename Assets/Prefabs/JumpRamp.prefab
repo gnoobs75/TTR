@@ -71,8 +71,8 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: ca32be4aacd7a824db6b8ed1eceb371b, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::JumpRamp
-  launchForce: 8
-  arcDuration: 0.8
+  launchHeight: 3.5
+  arcDuration: 1.2
 --- !u!1 &2644565386162181442
 GameObject:
   m_ObjectHideFlags: 0
@@ -139,7 +139,7 @@ MeshRenderer:
   m_RenderingLayerMask: 1
   m_RendererPriority: 0
   m_Materials:
-  - {fileID: 2100000, guid: 9e0e02fe8e5f9a34b9dfb58a9bc67a8c, type: 2}
+  - {fileID: 2100000, guid: c5e0bf7b0353a0a4999ce373de8769ec, type: 2}
   m_StaticBatchInfo:
     firstSubMesh: 0
     subMeshCount: 0
@@ -229,7 +229,7 @@ MeshRenderer:
   m_RenderingLayerMask: 1
   m_RendererPriority: 0
   m_Materials:
-  - {fileID: 2100000, guid: 3e845e48bc60384429e9b4e2100d2b9c, type: 2}
+  - {fileID: 2100000, guid: 27872b05446c1dd46a6a150925c7bf0f, type: 2}
   m_StaticBatchInfo:
     firstSubMesh: 0
     subMeshCount: 0
@@ -319,7 +319,7 @@ MeshRenderer:
   m_RenderingLayerMask: 1
   m_RendererPriority: 0
   m_Materials:
-  - {fileID: 2100000, guid: 1155ac7bb31fa6b4b8db7014d8c852ab, type: 2}
+  - {fileID: 2100000, guid: 1243e585cfc267c4e8a99a6b62d8a99b, type: 2}
   m_StaticBatchInfo:
     firstSubMesh: 0
     subMeshCount: 0
@@ -409,7 +409,7 @@ MeshRenderer:
   m_RenderingLayerMask: 1
   m_RendererPriority: 0
   m_Materials:
-  - {fileID: 2100000, guid: 9e0e02fe8e5f9a34b9dfb58a9bc67a8c, type: 2}
+  - {fileID: 2100000, guid: c5e0bf7b0353a0a4999ce373de8769ec, type: 2}
   m_StaticBatchInfo:
     firstSubMesh: 0
     subMeshCount: 0
@@ -499,7 +499,7 @@ MeshRenderer:
   m_RenderingLayerMask: 1
   m_RendererPriority: 0
   m_Materials:
-  - {fileID: 2100000, guid: 3e845e48bc60384429e9b4e2100d2b9c, type: 2}
+  - {fileID: 2100000, guid: 27872b05446c1dd46a6a150925c7bf0f, type: 2}
   m_StaticBatchInfo:
     firstSubMesh: 0
     subMeshCount: 0

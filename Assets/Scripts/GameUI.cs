@@ -11,6 +11,7 @@ public class GameUI : MonoBehaviour
     public Text distanceText;
     public Text comboText;
     public Text walletText;
+    public Text multiplierText;
 
     [Header("Game Over Panel")]
     public GameObject gameOverPanel;
@@ -102,6 +103,28 @@ public class GameUI : MonoBehaviour
     {
         if (distanceText != null)
             distanceText.text = Mathf.FloorToInt(meters) + "m";
+    }
+
+    public void UpdateMultiplier(float mult)
+    {
+        if (multiplierText == null) return;
+        if (mult > 1.1f)
+        {
+            multiplierText.gameObject.SetActive(true);
+            multiplierText.text = $"x{mult:F1}";
+            // Color ramp: white → yellow → orange → red
+            float t = Mathf.Clamp01((mult - 1f) / 4f);
+            multiplierText.color = Color.Lerp(
+                new Color(1f, 1f, 0.7f),
+                new Color(1f, 0.3f, 0.1f), t);
+            // Pulse at high multipliers
+            float pulse = 1f + Mathf.Sin(Time.time * (5f + t * 10f)) * t * 0.15f;
+            multiplierText.transform.localScale = Vector3.one * pulse;
+        }
+        else
+        {
+            multiplierText.gameObject.SetActive(false);
+        }
     }
 
     public void UpdateWallet()

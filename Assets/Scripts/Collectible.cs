@@ -55,6 +55,9 @@ public class Collectible : MonoBehaviour
             if (GameManager.Instance != null)
                 GameManager.Instance.CollectCoin();
 
+            if (ScorePopup.Instance != null)
+                ScorePopup.Instance.ShowCoin(transform.position, GameManager.Instance != null ? GameManager.Instance.scorePerCoin : 10);
+
             if (ComboSystem.Instance != null)
                 ComboSystem.Instance.RegisterEvent(ComboSystem.EventType.CoinCollect);
 

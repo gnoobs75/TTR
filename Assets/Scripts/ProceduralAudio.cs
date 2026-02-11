@@ -53,6 +53,14 @@ public class ProceduralAudio : MonoBehaviour
     private AudioClip _waterfallSplash;
     private AudioClip _waterDrip;
 
+    // New feature sounds
+    private AudioClip _zoneTransition;
+    private AudioClip _flushSound;
+    private AudioClip _countdownTick;
+    private AudioClip _celebration;
+    private AudioClip _bubblePop;
+    private AudioClip _coinMagnet;
+
     // Music
     private AudioClip _bgmLoop;
     private bool _musicPlaying;
@@ -339,6 +347,70 @@ public class ProceduralAudio : MonoBehaviour
             return (plop * 0.5f + splash) * 0.45f;
         });
 
+        // Zone transition: deep rumbling shift with rising tone
+        _zoneTransition = GenerateClip("ZoneTransition", 0.8f, (t, dur) =>
+        {
+            float freq = Mathf.Lerp(80f, 300f, t / dur);
+            float env = Mathf.Sin(Mathf.PI * t / dur);
+            float rumble = Mathf.Sin(2f * Mathf.PI * freq * t) * 0.3f;
+            float sweep = Mathf.Sin(2f * Mathf.PI * (freq * 2f) * t) * 0.2f;
+            float noise = Mathf.Sin(t * 3456f) * 0.05f * env;
+            return (rumble + sweep + noise) * env * 0.35f;
+        });
+
+        // Flush: whooshing water swirl descending
+        _flushSound = GenerateClip("Flush", 1.5f, (t, dur) =>
+        {
+            float freq = Mathf.Lerp(600f, 80f, t / dur);
+            float env = t < 0.2f ? t / 0.2f : Mathf.Exp(-(t - 0.2f) * 2f);
+            float swirl = Mathf.Sin(2f * Mathf.PI * freq * t + Mathf.Sin(t * 8f) * 3f);
+            float noise = (Mathf.Sin(t * 8765f) * Mathf.Cos(t * 5432f)) * 0.4f;
+            float bubbles = Mathf.Sin(2f * Mathf.PI * 200f * t) * Mathf.Max(0, Mathf.Sin(t * 20f)) * 0.2f;
+            return (swirl * 0.3f + noise * env + bubbles) * env * 0.5f;
+        });
+
+        // Countdown tick: sharp percussive tick
+        _countdownTick = GenerateClip("CountdownTick", 0.15f, (t, dur) =>
+        {
+            float freq = 800f;
+            float env = Mathf.Exp(-t * 30f);
+            return Mathf.Sin(2f * Mathf.PI * freq * t) * env * 0.5f;
+        });
+
+        // Celebration: ascending fanfare chord
+        _celebration = GenerateClip("Celebration", 0.5f, (t, dur) =>
+        {
+            float prog = t / dur;
+            float f1 = 523f + prog * 100f; // Rising C5
+            float f2 = 659f + prog * 100f; // Rising E5
+            float f3 = 784f + prog * 100f; // Rising G5
+            float f4 = 1047f + prog * 100f; // Rising C6
+            float env = Mathf.Sin(Mathf.PI * prog);
+            float mix = Mathf.Sin(2f * Mathf.PI * f1 * t) * 0.25f
+                      + Mathf.Sin(2f * Mathf.PI * f2 * t) * 0.25f
+                      + Mathf.Sin(2f * Mathf.PI * f3 * t) * 0.2f
+                      + Mathf.Sin(2f * Mathf.PI * f4 * t) * 0.15f;
+            return mix * env * 0.45f;
+        });
+
+        // Bubble pop: quick high-pitched blip
+        _bubblePop = GenerateClip("BubblePop", 0.08f, (t, dur) =>
+        {
+            float freq = Mathf.Lerp(1200f, 600f, t / dur);
+            float env = Mathf.Exp(-t * 50f);
+            return Mathf.Sin(2f * Mathf.PI * freq * t) * env * 0.3f;
+        });
+
+        // Coin magnet: shimmer with ascending ping
+        _coinMagnet = GenerateClip("CoinMagnet", 0.2f, (t, dur) =>
+        {
+            float freq = Mathf.Lerp(1000f, 2000f, t / dur);
+            float env = Mathf.Sin(Mathf.PI * t / dur);
+            float shimmer = Mathf.Sin(2f * Mathf.PI * freq * t) * 0.3f
+                          + Mathf.Sin(2f * Mathf.PI * freq * 1.5f * t) * 0.15f;
+            return shimmer * env * 0.3f;
+        });
+
         // Background music: simple bass-driven loop
         GenerateBGM();
     }
@@ -461,6 +533,14 @@ public class ProceduralAudio : MonoBehaviour
     public void PlayWaterGush() => PlaySFX(_waterGush, 0.6f);
     public void PlayWaterfallSplash() => PlaySFX(_waterfallSplash, 0.5f);
     public void PlayWaterDrip() => PlaySFX(_waterDrip, 0.35f);
+
+    // New feature sounds
+    public void PlayZoneTransition() => PlaySFX(_zoneTransition, 0.7f);
+    public void PlayFlush() => PlaySFX(_flushSound);
+    public void PlayCountdownTick() => PlaySFX(_countdownTick);
+    public void PlayCelebration() => PlaySFX(_celebration);
+    public void PlayBubblePop() => PlaySFX(_bubblePop, 0.4f);
+    public void PlayCoinMagnet() => PlaySFX(_coinMagnet, 0.5f);
 
     public void StartMusic()
     {

@@ -79,6 +79,13 @@ public class TurdController : MonoBehaviour
     private float _trickAngle = 0f;    // accumulated rotation degrees
     private int _tricksCompleted = 0;  // full 360s completed this jump
 
+    // Water tracking
+    private bool _wasInWater = false;
+
+    // Coin magnet
+    private float _coinMagnetTimer = 0f;
+    private const float COIN_MAGNET_RADIUS = 6f;
+
     public float DistanceTraveled => _distanceAlongPath;
     public float CurrentSpeed => _currentSpeed;
     public float CurrentAngle => _currentAngle;
@@ -207,9 +214,9 @@ public class TurdController : MonoBehaviour
                 // Parabolic arc: 4h * t * (1-t) peaks at h at t=0.5
                 float arcOffset = 4f * _jumpHeight * jumpT * (1f - jumpT);
 
-                // Move away from pipe center (inward = toward center, so we go outward)
-                Vector3 surfaceNormal = (targetPos - center).normalized;
-                targetPos += surfaceNormal * arcOffset;
+                // Move TOWARD pipe center (jump into the air inside the pipe)
+                Vector3 towardCenter = (center - targetPos).normalized;
+                targetPos += towardCenter * arcOffset;
 
                 // Squash/stretch
                 float squash;
@@ -248,6 +255,17 @@ public class TurdController : MonoBehaviour
                         }
                         if (ComboSystem.Instance != null)
                             ComboSystem.Instance.RegisterEvent(ComboSystem.EventType.NearMiss);
+
+                        // Score popup
+                        string trickName = _trickDirection > 0 ? "FLIP" : "BACKFLIP";
+                        if (_tricksCompleted > 1) trickName = $"{_tricksCompleted}x " + trickName;
+                        if (ScorePopup.Instance != null)
+                            ScorePopup.Instance.ShowTrick(transform.position, trickName, bonus);
+
+                        // Freeze frame for juice
+                        if (GameManager.Instance != null)
+                            GameManager.Instance.TriggerFreezeFrame(0.06f);
+
                         HapticManager.HeavyTap();
                     }
                     else
@@ -296,7 +314,7 @@ public class TurdController : MonoBehaviour
             transform.position = pos;
 
             Quaternion targetRot = Quaternion.Euler(0, 0, _currentAngle - 90f);
-            transform.rotation = Quaternion.Slerp(transform.rotation, targetRot, Time.deltaTime * 5f);
+            transform.rotation = Quaternion.Slerp(transform.rotation, targetRot, Time.deltaTime * 8f);
         }
 
         // Feed slither animation
@@ -312,6 +330,34 @@ public class TurdController : MonoBehaviour
             _stompComboTimer -= Time.deltaTime;
             if (_stompComboTimer <= 0f)
                 _stompCombo = 0;
+        }
+
+        // === WATER INTERACTION ===
+        float angleDeltaFromBottom = Mathf.Abs(Mathf.DeltaAngle(_currentAngle, 270f));
+        bool inWater = angleDeltaFromBottom < 25f && !_isJumping;
+        if (inWater && !_wasInWater)
+        {
+            // Entering water - splash!
+            if (ParticleManager.Instance != null)
+                ParticleManager.Instance.PlayWaterSplash(transform.position);
+            if (ProceduralAudio.Instance != null)
+                ProceduralAudio.Instance.PlayWaterfallSplash();
+            ParticleManager.Instance?.StartWakeSpray(transform);
+        }
+        else if (!inWater && _wasInWater)
+        {
+            // Leaving water
+            ParticleManager.Instance?.StopWakeSpray();
+        }
+        _wasInWater = inWater;
+
+        // === COIN MAGNET ===
+        if (_coinMagnetTimer > 0f)
+        {
+            _coinMagnetTimer -= Time.deltaTime;
+            AttractNearbyCoins();
+            if (_coinMagnetTimer <= 0f)
+                ParticleManager.Instance?.StopCoinMagnet();
         }
 
         // === INVINCIBILITY FLASH ===
@@ -359,6 +405,10 @@ public class TurdController : MonoBehaviour
         if (ProceduralAudio.Instance != null)
             ProceduralAudio.Instance.PlayObstacleHit();
         HapticManager.HeavyTap();
+
+        // Reset multiplier
+        if (GameManager.Instance != null)
+            GameManager.Instance.OnPlayerHit();
 
         _stunCoroutine = StartCoroutine(StunCoroutine());
     }
@@ -418,6 +468,14 @@ public class TurdController : MonoBehaviour
         if (GameManager.Instance != null)
             GameManager.Instance.AddScore(stompScore);
 
+        // Score popup
+        if (ScorePopup.Instance != null)
+            ScorePopup.Instance.ShowStomp(transform.position, _stompCombo, stompScore);
+
+        // Freeze frame on combo stomps
+        if (_stompCombo >= 2 && GameManager.Instance != null)
+            GameManager.Instance.TriggerFreezeFrame(0.05f);
+
         // Register as combo event
         if (ComboSystem.Instance != null)
             ComboSystem.Instance.RegisterEvent(ComboSystem.EventType.NearMiss); // reuse near-miss for combo
@@ -466,6 +524,31 @@ public class TurdController : MonoBehaviour
         HapticManager.LightTap();
     }
 
+    public void ActivateCoinMagnet(float duration)
+    {
+        _coinMagnetTimer = duration;
+        if (ParticleManager.Instance != null)
+            ParticleManager.Instance.StartCoinMagnet(transform);
+        if (ProceduralAudio.Instance != null)
+            ProceduralAudio.Instance.PlayCoinMagnet();
+    }
+
+    void AttractNearbyCoins()
+    {
+        Collider[] nearby = Physics.OverlapSphere(transform.position, COIN_MAGNET_RADIUS);
+        foreach (var col in nearby)
+        {
+            if (col == null) continue;
+            Collectible coin = col.GetComponent<Collectible>();
+            if (coin != null)
+            {
+                // Pull coin toward player
+                Vector3 dir = (transform.position - coin.transform.position).normalized;
+                coin.transform.position += dir * 12f * Time.deltaTime;
+            }
+        }
+    }
+
     public void ApplySpeedBoost(float multiplier, float duration)
     {
         StartCoroutine(SpeedBoostCoroutine(multiplier, duration));
@@ -480,7 +563,11 @@ public class TurdController : MonoBehaviour
         if (PipeCamera.Instance != null)
             PipeCamera.Instance.PunchFOV(6f);
         if (ParticleManager.Instance != null)
+        {
             ParticleManager.Instance.StartBoostTrail(transform);
+            if (Camera.main != null)
+                ParticleManager.Instance.StartSpeedLines(Camera.main.transform);
+        }
         if (ProceduralAudio.Instance != null)
             ProceduralAudio.Instance.PlaySpeedBoost();
         HapticManager.MediumTap();
@@ -489,6 +576,9 @@ public class TurdController : MonoBehaviour
 
         maxSpeed = originalMax;
         if (ParticleManager.Instance != null)
+        {
             ParticleManager.Instance.StopBoostTrail();
+            ParticleManager.Instance.StopSpeedLines();
+        }
     }
 }

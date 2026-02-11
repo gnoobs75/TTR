@@ -62,6 +62,23 @@ public static class SkinData
         new Skin("RainbowCorny", "Rainbow Corny", 1000,
             Color.white,                        // animated (special case)
             Color.white * 0.3f, 0.7f, 0.4f),
+
+        // === NEW CHARACTER SKINS ===
+        new Skin("DoodleDoo", "Doodle Doo", 200,
+            new Color(0.52f, 0.33f, 0.15f),     // warm sienna brown
+            new Color(0.8f, 0.3f, 0.6f) * 0.2f, 0.2f, 0f),
+
+        new Skin("ProfPlop", "Prof. Plop", 300,
+            new Color(0.38f, 0.26f, 0.14f),     // distinguished dark brown
+            new Color(0.6f, 0.5f, 0.1f) * 0.15f, 0.55f, 0.1f),
+
+        new Skin("BabyStool", "Baby Stool", 150,
+            new Color(0.65f, 0.5f, 0.28f),      // lighter baby poo yellow-brown
+            new Color(1f, 0.9f, 0.5f) * 0.1f, 0.15f, 0f),
+
+        new Skin("ElTurdo", "El Turdo", 500,
+            new Color(0.35f, 0.18f, 0.08f),     // dark fierce brown
+            new Color(1f, 0.2f, 0f) * 0.4f, 0.45f, 0.2f),
     };
 
     public static Skin GetSkin(string id)

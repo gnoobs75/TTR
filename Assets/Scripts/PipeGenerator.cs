@@ -25,6 +25,7 @@ public class PipeGenerator : MonoBehaviour
 
     [Header("Materials")]
     public Material pipeMaterial;
+    public Material pipeRingMaterial;
 
     [Header("Player Reference")]
     public Transform player;
@@ -36,12 +37,13 @@ public class PipeGenerator : MonoBehaviour
     private float _currentPitch = 0f;
 
     // Mesh segments
-    struct Seg { public GameObject obj; public int startNode; }
+    struct Seg { public GameObject obj; public int startNode; public float dist; }
     private Queue<Seg> _segs = new Queue<Seg>();
     private int _nextSegStart = 0;
     private TurdController _tc;
     private Material _defaultMat;
     private Material _waterMat;
+    private Material _detailMat; // rust/slime overlay
 
     public float SegmentLength => nodesPerSegment * nodeSpacing;
 
@@ -58,14 +60,17 @@ public class PipeGenerator : MonoBehaviour
         _defaultMat.EnableKeyword("_EMISSION");
         _defaultMat.SetColor("_EmissionColor", new Color(0.04f, 0.035f, 0.025f));
 
-        // Sewage water - bright toxic green sludge
+        // Sewage water - bright toxic green sludge with strong glow
         _waterMat = new Material(urpLit);
-        _waterMat.SetColor("_BaseColor", new Color(0.22f, 0.35f, 0.1f));
-        _waterMat.SetFloat("_Metallic", 0.5f);
-        _waterMat.SetFloat("_Smoothness", 0.92f);
+        _waterMat.SetColor("_BaseColor", new Color(0.22f, 0.38f, 0.1f));
+        _waterMat.SetFloat("_Metallic", 0.6f);
+        _waterMat.SetFloat("_Smoothness", 0.95f);
         _waterMat.EnableKeyword("_EMISSION");
-        _waterMat.SetColor("_EmissionColor", new Color(0.08f, 0.14f, 0.04f));
+        _waterMat.SetColor("_EmissionColor", new Color(0.1f, 0.18f, 0.05f));
         _waterMat.SetFloat("_Cull", 0); // Render both faces for visibility
+        // Specular highlights make water look wet and alive
+        _waterMat.SetFloat("_SpecularHighlights", 1f);
+        _waterMat.SetFloat("_EnvironmentReflections", 1f);
 
         // Seed initial path
         _positions.Add(Vector3.zero);
@@ -111,6 +116,33 @@ public class PipeGenerator : MonoBehaviour
             }
             else break;
         }
+
+        // Zone-based material updates
+        UpdateZoneMaterials();
+    }
+
+    void UpdateZoneMaterials()
+    {
+        if (PipeZoneSystem.Instance == null) return;
+        var zone = PipeZoneSystem.Instance;
+
+        // Update pipe material with zone colors and texture properties
+        Material pipeMat = pipeMaterial != null ? pipeMaterial : _defaultMat;
+        pipeMat.SetColor("_BaseColor", zone.CurrentPipeColor);
+        pipeMat.SetColor("_EmissionColor", zone.CurrentPipeEmission * zone.CurrentEmissionBoost);
+        if (pipeMat.HasProperty("_BumpScale"))
+            pipeMat.SetFloat("_BumpScale", zone.CurrentBumpScale);
+
+        // Update water material with stronger emission for zone visibility
+        _waterMat.SetColor("_BaseColor", zone.CurrentWaterColor);
+        _waterMat.SetColor("_EmissionColor", zone.CurrentWaterEmission * zone.CurrentEmissionBoost);
+
+        // Update pipe ring material to match zone theme
+        if (pipeRingMaterial != null)
+        {
+            Color ringTint = Color.Lerp(zone.CurrentPipeColor, new Color(0.5f, 0.4f, 0.3f), 0.4f);
+            pipeRingMaterial.SetColor("_BaseColor", ringTint);
+        }
     }
 
     void AddPathNode()
@@ -154,6 +186,7 @@ public class PipeGenerator : MonoBehaviour
     {
         int start = _nextSegStart;
         int end = start + nodesPerSegment;
+        float segDist = start * nodeSpacing;
         GameObject obj = BuildMesh(start, end);
         obj.transform.parent = transform;
 
@@ -161,8 +194,161 @@ public class PipeGenerator : MonoBehaviour
         GameObject water = BuildWaterPlane(start, end);
         water.transform.parent = obj.transform;
 
-        _segs.Enqueue(new Seg { obj = obj, startNode = start });
+        // Pipe ring cylinders removed - they rendered as solid discs blocking the view.
+        // Segment joints are visually marked by pipe detail patches instead.
+
+        // Add procedural pipe wall detail (rust, slime, cracks)
+        AddPipeDetail(obj, start, end, segDist);
+
+        _segs.Enqueue(new Seg { obj = obj, startNode = start, dist = segDist });
         _nextSegStart = end;
+    }
+
+    /// <summary>
+    /// Adds a visible metal ring band at the pipe segment joint for visual variety.
+    /// Uses a cylinder primitive scaled to wrap the inside of the pipe.
+    /// </summary>
+    void AddPipeRing(GameObject parent, int nodeIdx)
+    {
+        if (nodeIdx >= _positions.Count) return;
+        Material ringMat = pipeRingMaterial;
+        if (ringMat == null) return;
+
+        Vector3 center = _positions[nodeIdx];
+        Vector3 fwd = _forwards[nodeIdx];
+
+        // Create a thin cylinder at the joint
+        GameObject ring = GameObject.CreatePrimitive(PrimitiveType.Cylinder);
+        ring.name = "PipeRing";
+        ring.transform.SetParent(parent.transform);
+        ring.transform.position = center;
+        // Orient cylinder along the pipe direction
+        ring.transform.rotation = Quaternion.LookRotation(fwd) * Quaternion.Euler(90, 0, 0);
+        // Scale: diameter = pipe diameter * 1.01 (slightly inside), height = thin band
+        float diam = pipeRadius * 2.02f;
+        ring.transform.localScale = new Vector3(diam, 0.15f, diam);
+
+        ring.GetComponent<Renderer>().material = ringMat;
+        Collider c = ring.GetComponent<Collider>();
+        if (c != null) Destroy(c);
+    }
+
+    /// <summary>
+    /// Adds rust streaks, slime patches, and grime to pipe segment walls.
+    /// Uses deterministic random based on distance so detail is consistent.
+    /// </summary>
+    void AddPipeDetail(GameObject parent, int startNode, int endNode, float segDist)
+    {
+        Shader urpLit = Shader.Find("Universal Render Pipeline/Lit");
+        if (urpLit == null) urpLit = Shader.Find("Standard");
+
+        // Deterministic seed per segment
+        Random.State prev = Random.state;
+        Random.InitState(Mathf.FloorToInt(segDist * 7.3f));
+
+        int detailCount = Random.Range(2, 6); // 2-5 details per segment
+
+        // More details further into the run
+        if (segDist > 200f) detailCount += 1;
+        if (segDist > 500f) detailCount += 2;
+
+        for (int d = 0; d < detailCount; d++)
+        {
+            int nodeIdx = startNode + Random.Range(1, endNode - startNode - 1);
+            if (nodeIdx >= _positions.Count) continue;
+
+            Vector3 center = _positions[nodeIdx];
+            Vector3 fwd = _forwards[nodeIdx];
+            Vector3 refUp = Mathf.Abs(Vector3.Dot(fwd, Vector3.up)) > 0.95f ? Vector3.forward : Vector3.up;
+            Vector3 right = Vector3.Cross(fwd, refUp).normalized;
+            Vector3 up = Vector3.Cross(right, fwd).normalized;
+
+            float angle = Random.Range(0f, 360f) * Mathf.Deg2Rad;
+            float radius = pipeRadius * 0.90f; // safely inside pipe wall
+            Vector3 pos = center + (right * Mathf.Cos(angle) + up * Mathf.Sin(angle)) * radius;
+            Vector3 inward = (center - pos).normalized;
+
+            int detailType = Random.Range(0, 5);
+            Color detailColor;
+            Color detailEmission = Color.black;
+            float detailSmooth = 0.2f;
+            float detailMetal = 0.05f;
+
+            switch (detailType)
+            {
+                case 0: // Rust streak
+                    detailColor = new Color(
+                        Random.Range(0.4f, 0.6f),
+                        Random.Range(0.18f, 0.3f),
+                        Random.Range(0.05f, 0.12f));
+                    detailSmooth = 0.15f;
+                    detailMetal = 0.3f;
+                    break;
+                case 1: // Slime patch
+                    detailColor = new Color(
+                        Random.Range(0.1f, 0.2f),
+                        Random.Range(0.4f, 0.6f),
+                        Random.Range(0.05f, 0.15f));
+                    detailEmission = detailColor * 0.3f;
+                    detailSmooth = 0.85f;
+                    break;
+                case 2: // Dark grime
+                    detailColor = new Color(
+                        Random.Range(0.08f, 0.15f),
+                        Random.Range(0.06f, 0.12f),
+                        Random.Range(0.04f, 0.08f));
+                    detailSmooth = 0.1f;
+                    break;
+                case 3: // Moss/mold
+                    detailColor = new Color(
+                        Random.Range(0.15f, 0.25f),
+                        Random.Range(0.3f, 0.4f),
+                        Random.Range(0.08f, 0.15f));
+                    detailEmission = detailColor * 0.15f;
+                    detailSmooth = 0.4f;
+                    break;
+                default: // Mineral deposit / calcium buildup
+                    detailColor = new Color(
+                        Random.Range(0.6f, 0.75f),
+                        Random.Range(0.55f, 0.7f),
+                        Random.Range(0.45f, 0.55f));
+                    detailSmooth = 0.6f;
+                    detailMetal = 0.15f;
+                    break;
+            }
+
+            Material mat = new Material(urpLit);
+            mat.SetColor("_BaseColor", detailColor);
+            mat.SetFloat("_Metallic", detailMetal);
+            mat.SetFloat("_Smoothness", detailSmooth);
+            if (detailEmission != Color.black)
+            {
+                mat.EnableKeyword("_EMISSION");
+                mat.SetColor("_EmissionColor", detailEmission);
+            }
+
+            // Create detail geometry - larger patches for visibility
+            GameObject detail = GameObject.CreatePrimitive(
+                detailType == 0 ? PrimitiveType.Cube : PrimitiveType.Sphere);
+            detail.name = "PipeDetail";
+            detail.transform.SetParent(parent.transform);
+            detail.transform.position = pos;
+
+            Quaternion surfaceRot = Quaternion.LookRotation(fwd, -inward);
+            detail.transform.rotation = surfaceRot;
+
+            // Flatten against wall - larger sizes for better visibility at speed
+            float sizeX = Random.Range(0.5f, 1.8f);
+            float sizeY = Random.Range(0.35f, 1.2f);
+            float thickness = Random.Range(0.03f, 0.1f);
+            detail.transform.localScale = new Vector3(sizeX, sizeY, thickness);
+
+            detail.GetComponent<Renderer>().material = mat;
+            Collider c = detail.GetComponent<Collider>();
+            if (c != null) Object.Destroy(c);
+        }
+
+        Random.state = prev;
     }
 
     GameObject BuildMesh(int startNode, int endNode)

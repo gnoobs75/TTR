@@ -1,9 +1,8 @@
 using UnityEngine;
 
 /// <summary>
-/// Pipe-center chase camera. Stays at the pipe center looking forward.
-/// The pipe appears stationary. The turd visually moves around the pipe
-/// cross-section when steering. Uses world up so nothing flips.
+/// Pipe-center rail camera. Rides the center of the pipe like a rail,
+/// a fixed distance behind the turd, looking forward down the tunnel.
 /// </summary>
 public class PipeCamera : MonoBehaviour
 {
@@ -13,16 +12,18 @@ public class PipeCamera : MonoBehaviour
     public Transform target;
 
     [Header("Follow Settings")]
-    public float followDistance = 3f;
-    public float lookAhead = 5f;
-    public float positionSmooth = 10f;
-    public float rotationSmooth = 8f;
+    [Tooltip("How far behind the turd (along the pipe path) the camera sits")]
+    public float followDistance = 4f;
+    [Tooltip("How far ahead of the turd the camera looks")]
+    public float lookAhead = 6f;
+    public float positionSmooth = 12f;
+    public float rotationSmooth = 10f;
 
     [Header("Pipe Awareness")]
     public float pipeRadius = 3.5f;
-    [Tooltip("0 = camera at pipe center, 1 = camera at player. 0.45 is good.")]
-    [Range(0f, 0.8f)]
-    public float playerBias = 0.45f;
+    [Tooltip("How far from the player toward pipe center (0=at player, 1=at center)")]
+    [Range(0f, 1f)]
+    public float centerPull = 0.45f;
 
     [Header("FOV")]
     public float baseFOV = 68f;
@@ -30,12 +31,14 @@ public class PipeCamera : MonoBehaviour
 
     // kept for API compatibility with SceneDiagnostics
     [HideInInspector] public float heightAbovePlayer = 1.2f;
+    [HideInInspector] public float playerBias = 0f;
 
     private PipeGenerator _pipeGen;
     private TurdController _tc;
     private Camera _cam;
     private Vector3 _velocity;
     private bool _initialized = false;
+    private float _debugTimer = 0f;
 
     // Juice
     private float _shakeIntensity;
@@ -64,28 +67,27 @@ public class PipeCamera : MonoBehaviour
         {
             float playerDist = _tc.DistanceTraveled;
 
-            // === CAMERA POSITION: At pipe center, behind player ===
+            // === CAMERA POSITION: Behind the turd, elevated toward center ===
             float camDist = Mathf.Max(0f, playerDist - followDistance);
             Vector3 camCenter, camFwd, camRight, camUp;
             _pipeGen.GetPathFrame(camDist, out camCenter, out camFwd, out camRight, out camUp);
 
-            // Bias camera slightly toward the player so they're prominent in frame
-            // 0 = exact pipe center (pipe perfectly still, player small)
-            // 0.3 = slightly toward player (pipe mostly still, player nicely framed)
-            Vector3 toPlayer = target.position - camCenter;
-            Vector3 desiredPos = camCenter + toPlayer * playerBias;
+            // Get pipe center at the player's current position
+            Vector3 playerCenter, playerFwd, playerRight, playerUp;
+            _pipeGen.GetPathFrame(playerDist, out playerCenter, out playerFwd, out playerRight, out playerUp);
 
-            // === LOOK TARGET: Pipe center ahead, biased toward player ===
-            float lookDist = playerDist + lookAhead;
-            Vector3 lookCenter, lookFwd, lookRight, lookUp;
-            _pipeGen.GetPathFrame(lookDist, out lookCenter, out lookFwd, out lookRight, out lookUp);
+            // Player's offset from pipe center (their position on the pipe wall)
+            Vector3 playerOffset = target.position - playerCenter;
 
-            // Look mostly forward along pipe, with a pull toward where the player is
-            Vector3 lookTarget = Vector3.Lerp(lookCenter, target.position + camFwd * lookAhead, 0.3f);
+            // Camera: behind player on the path, at the player's angular position
+            // but pulled toward pipe center by centerPull (0.45 = slightly above/behind)
+            Vector3 desiredPos = camCenter + playerOffset * (1f - centerPull);
 
-            // === WORLD UP: Pipe stays visually stable, never flips ===
+            // === LOOK TARGET: Ahead of the turd, at the turd's level ===
+            Vector3 lookTarget = target.position + camFwd * lookAhead;
+
+            // === WORLD UP ===
             Vector3 upDir = Vector3.up;
-            // Fallback if pipe goes nearly vertical
             if (Mathf.Abs(Vector3.Dot(camFwd, Vector3.up)) > 0.9f)
                 upDir = -camFwd.z > 0 ? Vector3.forward : Vector3.back;
 
@@ -101,11 +103,11 @@ public class PipeCamera : MonoBehaviour
                 return;
             }
 
-            // Smooth position
+            // Smooth position along the rail
             transform.position = Vector3.SmoothDamp(
                 transform.position, desiredPos, ref _velocity, 1f / positionSmooth);
 
-            // Smooth rotation
+            // Smooth rotation to look forward
             Vector3 lookDir = (lookTarget - transform.position);
             if (lookDir.sqrMagnitude > 0.01f)
             {
@@ -121,6 +123,17 @@ public class PipeCamera : MonoBehaviour
                     ? Mathf.InverseLerp(6f, 14f, _tc.CurrentSpeed) : 0f;
                 float targetFOV = baseFOV + speedNorm * speedFOVBoost + _fovPunch;
                 _cam.fieldOfView = Mathf.Lerp(_cam.fieldOfView, targetFOV, Time.deltaTime * 5f);
+            }
+
+            // Debug: log positions periodically so we can verify
+            _debugTimer += Time.deltaTime;
+            if (_debugTimer > 3f)
+            {
+                _debugTimer = 0f;
+                Debug.Log($"[PipeCamera] playerDist={playerDist:F1} camDist={camDist:F1} " +
+                    $"camPos={transform.position} playerPos={target.position} " +
+                    $"camZ={transform.position.z:F1} playerZ={target.position.z:F1} " +
+                    $"delta={target.position.z - transform.position.z:F1}(+ahead/-behind)");
             }
         }
         else

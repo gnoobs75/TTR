@@ -50,11 +50,11 @@ public class ScenerySpawner : MonoBehaviour
             _nextSpawnDist += Random.Range(minSpacing, maxSpacing);
         }
 
-        // Spawn gross pipe character (more frequently for dense atmosphere)
+        // Spawn subtle pipe decor (sparse - just occasional stains/drips)
         while (_nextGrossDist < playerDist + spawnDistance)
         {
             SpawnGrossDecor(_nextGrossDist);
-            _nextGrossDist += Random.Range(3f, 8f); // dense sewer character
+            _nextGrossDist += Random.Range(8f, 18f); // sparse so it doesn't clutter
         }
 
         // Cleanup behind
@@ -116,7 +116,7 @@ public class ScenerySpawner : MonoBehaviour
         // Gross decor goes EVERYWHERE - full 360°
         float angle = Random.Range(0f, 360f);
         float rad = angle * Mathf.Deg2Rad;
-        float spawnRadius = pipeRadius * Random.Range(0.78f, 0.95f); // close to wall surface
+        float spawnRadius = pipeRadius * Random.Range(0.65f, 0.82f); // inside pipe, not clipping through wall
 
         Vector3 pos = center + (right * Mathf.Cos(rad) + up * Mathf.Sin(rad)) * spawnRadius;
         Vector3 inward = (center - pos).normalized;

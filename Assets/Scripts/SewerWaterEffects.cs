@@ -157,7 +157,7 @@ public class SewerWaterEffects : MonoBehaviour
         _alternateWall = !_alternateWall;
 
         float rad = angle * Mathf.Deg2Rad;
-        float spawnRadius = _pipeRadius * 0.95f;
+        float spawnRadius = _pipeRadius * 0.85f;
         Vector3 wallPos = center + (right * Mathf.Cos(rad) + up * Mathf.Sin(rad)) * spawnRadius;
         Vector3 inward = (center - wallPos).normalized;
 
@@ -327,7 +327,7 @@ public class SewerWaterEffects : MonoBehaviour
         // Position on ceiling (angle 60-120)
         float angle = Random.Range(60f, 120f);
         float rad = angle * Mathf.Deg2Rad;
-        float spawnRadius = _pipeRadius * 0.92f;
+        float spawnRadius = _pipeRadius * 0.82f;
         Vector3 ceilingPos = center + (right * Mathf.Cos(rad) + up * Mathf.Sin(rad)) * spawnRadius;
         Vector3 inward = (center - ceilingPos).normalized;
 

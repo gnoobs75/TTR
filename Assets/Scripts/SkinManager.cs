@@ -19,10 +19,29 @@ public class SkinManager : MonoBehaviour
 
     void Start()
     {
-        // Find player renderers
+        // Find player renderers - ONLY body mesh, not face features
         TurdController tc = Object.FindFirstObjectByType<TurdController>();
         if (tc != null)
-            _playerRenderers = tc.GetComponentsInChildren<Renderer>();
+        {
+            var allRenderers = tc.GetComponentsInChildren<Renderer>();
+            var bodyRenderers = new System.Collections.Generic.List<Renderer>();
+            foreach (var r in allRenderers)
+            {
+                // Skip face features (eyes, mustache, hats, etc.) which are Unity primitives.
+                // FBX body mesh has imported mesh names, while face features use built-in
+                // primitive meshes named "Sphere", "Capsule", "Cube", "Quad", "Cylinder".
+                MeshFilter mf = r.GetComponent<MeshFilter>();
+                if (mf != null && mf.sharedMesh != null)
+                {
+                    string meshName = mf.sharedMesh.name;
+                    if (meshName == "Sphere" || meshName == "Capsule" ||
+                        meshName == "Cube" || meshName == "Quad" || meshName == "Cylinder")
+                        continue;
+                }
+                bodyRenderers.Add(r);
+            }
+            _playerRenderers = bodyRenderers.ToArray();
+        }
 
         ApplySkin(PlayerData.SelectedSkin);
     }
