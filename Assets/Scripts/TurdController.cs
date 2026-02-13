@@ -328,7 +328,7 @@ public class TurdController : MonoBehaviour
             transform.position = Vector3.Lerp(transform.position, targetPos, Time.deltaTime * 10f);
 
             // Face path direction, roll to match surface
-            float surfaceAngle = _currentAngle - 90f;
+            float surfaceAngle = _currentAngle - 90f + 180f;
             Quaternion pathRot = Quaternion.LookRotation(forward, up);
             Quaternion surfaceRoll = Quaternion.Euler(0, 0, surfaceAngle);
             Quaternion targetRot = pathRot * surfaceRoll;

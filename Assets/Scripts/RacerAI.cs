@@ -142,7 +142,7 @@ public class RacerAI : MonoBehaviour
         _angularVelocity += angleDelta * 0.08f * dt;
 
         // === SPEED ===
-        float targetSpeed = baseSpeed + (_distanceAlongPath * 0.008f);
+        float targetSpeed = baseSpeed + (_distanceAlongPath * 0.012f);
 
         // Rubber-band to pack leader
         if (rm != null)
@@ -157,8 +157,12 @@ public class RacerAI : MonoBehaviour
                 targetSpeed *= slowDownMultiplier;
 
             // Aggressive racers push harder when behind
-            if (diff > 5f)
-                targetSpeed *= 1f + aggression * 0.15f;
+            if (diff > 3f)
+                targetSpeed *= 1f + aggression * 0.25f;
+
+            // Draft boost: close to leader = small speed bump (slipstream)
+            if (diff > 0f && diff < rubberBandDistance * 0.5f)
+                targetSpeed *= 1.05f;
         }
 
         targetSpeed = Mathf.Clamp(targetSpeed, baseSpeed * 0.4f, maxSpeed);
@@ -192,7 +196,7 @@ public class RacerAI : MonoBehaviour
         transform.position = Vector3.Lerp(transform.position, targetPos, dt * 6f);
 
         // Face forward with surface roll
-        float surfaceAngle = _currentAngle - 90f;
+        float surfaceAngle = _currentAngle - 90f + 180f;
         Quaternion pathRot = Quaternion.LookRotation(forward, up);
         Quaternion surfaceRoll = Quaternion.Euler(0, 0, surfaceAngle);
         Quaternion targetRot = pathRot * surfaceRoll;
@@ -299,54 +303,63 @@ public class RacerAI : MonoBehaviour
             case "SkidmarkSteve":
                 ai.racerName = "Skidmark Steve";
                 ai.racerColor = new Color(0.7f, 0.35f, 0.1f); // burnt orange
-                ai.baseSpeed = 7.2f;
-                ai.maxSpeed = 13.5f;
+                ai.baseSpeed = 8.5f;
+                ai.maxSpeed = 15f;
+                ai.acceleration = 2.5f;
                 ai.steerSpeed = 2.5f;
                 ai.steerAggressiveness = 1.4f;
                 ai.consistency = 0.3f;
-                ai.aggression = 0.8f;
-                ai.stumbleChance = 0.04f; // sloppy, stumbles more
-                ai.catchUpMultiplier = 1.35f;
+                ai.aggression = 0.9f;
+                ai.stumbleChance = 0.025f; // sloppy but not as much
+                ai.catchUpMultiplier = 1.45f; // closes gaps fast
+                ai.rubberBandDistance = 8f; // kicks in sooner
                 break;
 
             case "PrincessPlop":
                 ai.racerName = "Princess Plop";
                 ai.racerColor = new Color(0.85f, 0.5f, 0.75f); // pink
-                ai.baseSpeed = 6.8f;
-                ai.maxSpeed = 12.8f;
+                ai.baseSpeed = 8f;
+                ai.maxSpeed = 14.5f;
+                ai.acceleration = 2.8f;
                 ai.steerSpeed = 1.8f;
                 ai.steerAggressiveness = 0.8f;
                 ai.consistency = 0.85f;
-                ai.aggression = 0.3f;
-                ai.stumbleChance = 0.01f; // smooth, rarely stumbles
-                ai.slowDownMultiplier = 0.88f; // drafts well, doesn't slow much
+                ai.aggression = 0.6f;
+                ai.stumbleChance = 0.005f; // super smooth, almost never stumbles
+                ai.slowDownMultiplier = 0.92f; // barely slows when ahead
+                ai.catchUpMultiplier = 1.3f;
+                ai.rubberBandDistance = 8f;
                 break;
 
             case "TheLog":
                 ai.racerName = "The Log";
                 ai.racerColor = new Color(0.4f, 0.25f, 0.1f); // dark wood brown
-                ai.baseSpeed = 6.2f;
-                ai.maxSpeed = 14f; // highest top speed
+                ai.baseSpeed = 7.5f;
+                ai.maxSpeed = 15.5f; // highest top speed - scary late game
                 ai.steerSpeed = 1.2f;
                 ai.steerAggressiveness = 0.6f;
                 ai.consistency = 0.95f; // extremely steady
-                ai.aggression = 0.6f;
-                ai.stumbleChance = 0.005f; // almost never stumbles
-                ai.acceleration = 1.2f; // slow to accelerate
-                ai.catchUpMultiplier = 1.15f; // doesn't rubber-band hard
+                ai.aggression = 0.75f;
+                ai.stumbleChance = 0.003f; // almost never stumbles
+                ai.acceleration = 1.8f; // still slow to accelerate but not as bad
+                ai.catchUpMultiplier = 1.3f;
+                ai.rubberBandDistance = 10f;
                 break;
 
             case "LilSquirt":
                 ai.racerName = "Lil Squirt";
                 ai.racerColor = new Color(0.9f, 0.8f, 0.3f); // yellow-brown
-                ai.baseSpeed = 7.5f; // fastest base
-                ai.maxSpeed = 12.5f;
+                ai.baseSpeed = 9f; // fastest base - always nipping at your heels
+                ai.maxSpeed = 14f;
+                ai.acceleration = 3f;
                 ai.steerSpeed = 3f;
                 ai.steerAggressiveness = 1.6f;
                 ai.consistency = 0.15f; // very erratic
-                ai.aggression = 0.5f;
-                ai.stumbleChance = 0.03f;
+                ai.aggression = 0.7f;
+                ai.stumbleChance = 0.02f;
                 ai.steerChangeInterval = 0.8f; // changes direction rapidly
+                ai.catchUpMultiplier = 1.4f;
+                ai.rubberBandDistance = 6f; // rubber-bands very aggressively
                 break;
         }
     }
