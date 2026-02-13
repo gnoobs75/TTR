@@ -1,50 +1,78 @@
 using UnityEngine;
 
 /// <summary>
-/// Corn Coin collectible. Spins, bobs, and glows to stand out.
+/// Sh!tcoin collectible. Stands upright and spins like Sonic rings.
+/// Big, bright, and unmissable Brown Town currency.
 /// </summary>
 [RequireComponent(typeof(Collider))]
 public class Collectible : MonoBehaviour
 {
-    public float rotateSpeed = 180f;
-    public float bobAmplitude = 0.08f;
-    public float bobFrequency = 2.5f;
+    public float rotateSpeed = 360f;  // Full rotation per second - fast spin like Sonic rings
+    public float bobAmplitude = 0.15f;
+    public float bobFrequency = 2f;
     public float pulseFrequency = 3f;
+    public float floatHeight = 0.35f;  // How high above surface to float
 
     private Vector3 _startLocalPos;
     private float _bobOffset;
     private Renderer[] _renderers;
     private MaterialPropertyBlock _mpb;
+    private Transform _halo;
+    private Quaternion _baseRotation;
+    private bool _started;
 
     void Start()
     {
+        _mpb = new MaterialPropertyBlock();
+
         Collider col = GetComponent<Collider>();
         col.isTrigger = true;
         gameObject.tag = "Collectible";
+
+        // Float the coin up off the surface
+        transform.position += transform.up * floatHeight;
+
         _startLocalPos = transform.localPosition;
-        _bobOffset = Random.value * Mathf.PI * 2f; // stagger so coins don't bob in sync
+        _bobOffset = Random.value * Mathf.PI * 2f;
         _renderers = GetComponentsInChildren<Renderer>();
-        _mpb = new MaterialPropertyBlock();
+        Transform h = transform.Find("GlowHalo");
+        if (h != null) _halo = h;
+
+        // Save the spawn rotation so we can add standing-up tilt + spin on top
+        _baseRotation = transform.rotation;
+        _started = true;
     }
 
     void Update()
     {
-        // Spin faster for more eye-catching rotation
-        transform.Rotate(Vector3.up, rotateSpeed * Time.deltaTime, Space.Self);
+        if (!_started) return;
+        // Stand coin upright (90° tilt) then spin like a Sonic ring
+        // The tilt makes the flat disc face perpendicular to the pipe surface
+        // The spin rotates it around the forward axis so the player sees the face flash by
+        float spin = Time.time * rotateSpeed;
+        transform.rotation = _baseRotation * Quaternion.Euler(90f, spin, 0f);
 
-        // Bob up and down in local space (safe in curved pipes)
+        // Pronounced bob up and down
         float bob = Mathf.Sin((Time.time + _bobOffset) * bobFrequency * Mathf.PI) * bobAmplitude;
-        transform.localPosition = _startLocalPos + transform.parent.InverseTransformDirection(transform.up) * bob;
+        if (transform.parent != null)
+            transform.localPosition = _startLocalPos + transform.parent.InverseTransformDirection(Vector3.up) * bob;
 
-        // Pulsing glow intensity
-        float pulse = 2f + Mathf.Sin(Time.time * pulseFrequency * Mathf.PI) * 1f;
-        Color glow = new Color(1f, 0.8f, 0.1f) * pulse;
+        // Subtle glow pulse - visible but not bloom-blinding
+        float pulse = 0.6f + Mathf.Sin(Time.time * pulseFrequency * Mathf.PI) * 0.3f;
+        Color glow = new Color(1f, 0.85f, 0.1f) * pulse;
         foreach (var r in _renderers)
         {
             if (r == null) continue;
             r.GetPropertyBlock(_mpb);
             _mpb.SetColor("_EmissionColor", glow);
             r.SetPropertyBlock(_mpb);
+        }
+
+        // Halo breathe effect
+        if (_halo != null)
+        {
+            float haloScale = 1.0f + Mathf.Sin(Time.time * 2.5f + _bobOffset) * 0.15f;
+            _halo.localScale = new Vector3(haloScale, 0.01f, haloScale);
         }
     }
 
@@ -66,6 +94,9 @@ public class Collectible : MonoBehaviour
 
             if (ProceduralAudio.Instance != null)
                 ProceduralAudio.Instance.PlayCoinCollect();
+
+            if (TutorialOverlay.Instance != null)
+                TutorialOverlay.Instance.OnFirstCoin();
 
             HapticManager.LightTap();
 

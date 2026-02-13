@@ -13,6 +13,8 @@ public abstract class ObstacleBehavior : MonoBehaviour
     public float nearbyRange = 15f;
     public float reactRange = 8f;
     public float soundCooldown = 6f;
+    [Tooltip("Rotate to face the player when nearby")]
+    public bool facePlayer = true;
 
     protected Transform _player;
     protected bool _playerNearby;
@@ -65,7 +67,11 @@ public abstract class ObstacleBehavior : MonoBehaviour
 
         // Eye tracking - always do when nearby (it's cheap)
         if (_playerNearby)
+        {
             UpdateEyeTracking();
+            if (facePlayer)
+                FacePlayer();
+        }
 
         // State machine
         if (_playerApproaching)
@@ -98,6 +104,16 @@ public abstract class ObstacleBehavior : MonoBehaviour
             Transform eye = (i < _eyes.Count) ? _eyes[i] : _pupils[i].parent;
             CreatureAnimUtils.TrackEyeTarget(_pupils[i], eye, target, 0.08f);
         }
+    }
+
+    /// <summary>Rotate body to face the player while preserving pipe surface up.</summary>
+    protected virtual void FacePlayer()
+    {
+        if (_player == null) return;
+        Vector3 toPlayer = _player.position - transform.position;
+        if (toPlayer.sqrMagnitude < 0.01f) return;
+        Quaternion targetRot = Quaternion.LookRotation(toPlayer.normalized, transform.up);
+        transform.rotation = Quaternion.Slerp(transform.rotation, targetRot, Time.deltaTime * 5f);
     }
 
     protected bool TryPlaySound()

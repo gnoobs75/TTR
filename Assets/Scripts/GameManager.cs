@@ -100,6 +100,11 @@ public class GameManager : MonoBehaviour
         }
         if (gameUI != null)
             gameUI.ShowHUD();
+
+        if (TutorialOverlay.Instance != null)
+            TutorialOverlay.Instance.ResetForNewRun();
+        if (AnalyticsManager.Instance != null)
+            AnalyticsManager.Instance.LogRunStart();
     }
 
     void Update()
@@ -182,6 +187,7 @@ public class GameManager : MonoBehaviour
             gameUI.UpdateScore(score + distanceScore);
             gameUI.UpdateDistance(distanceTraveled);
             gameUI.UpdateMultiplier(_multiplier);
+            gameUI.UpdateCoinCount(_runCoins);
         }
     }
 
@@ -243,6 +249,37 @@ public class GameManager : MonoBehaviour
 
         if (gameUI != null)
             gameUI.ShowGameOver(finalScore, PlayerData.HighScore, _runCoins, distanceTraveled, _runNearMisses, _runBestCombo);
+
+        // Game Center: report scores and check zone achievements
+        if (GameCenterManager.Instance != null)
+        {
+            GameCenterManager.Instance.ReportScore(finalScore, distanceTraveled);
+            GameCenterManager.Instance.CheckZoneAchievements(distanceTraveled);
+            if (_runBestCombo >= 20)
+                GameCenterManager.Instance.ReportAchievement(GameCenterManager.ACH_COMBO_KING);
+            if (PlayerData.TotalRuns == 1)
+                GameCenterManager.Instance.ReportAchievement(GameCenterManager.ACH_FIRST_FLUSH);
+        }
+
+        // Cloud save
+        if (CloudSaveManager.Instance != null)
+            CloudSaveManager.Instance.SyncToCloud();
+
+        // Analytics
+        if (AnalyticsManager.Instance != null)
+            AnalyticsManager.Instance.LogRunEnd(finalScore, distanceTraveled, _runCoins, _runNearMisses, _runBestCombo);
+
+        // Rate app prompt (after a good run)
+        if (RateAppPrompt.Instance != null)
+            RateAppPrompt.Instance.OnRunEnd(finalScore, distanceTraveled);
+
+        // Tutorial: mark done after first game over
+        if (TutorialOverlay.Instance != null)
+            TutorialOverlay.Instance.CompleteTutorial();
+
+        // Notify race system of player crash
+        if (RaceManager.Instance != null)
+            RaceManager.Instance.OnPlayerCrashed();
 
         if (player != null)
             player.enabled = false;

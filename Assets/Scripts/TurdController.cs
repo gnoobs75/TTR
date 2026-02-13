@@ -86,6 +86,17 @@ public class TurdController : MonoBehaviour
     private float _coinMagnetTimer = 0f;
     private const float COIN_MAGNET_RADIUS = 6f;
 
+    // Vertical drop state
+    private bool _isDropping = false;
+    private float _dropTimer = 0f;
+    private float _dropDuration = 12f;
+    private float _dropSpeed = 18f;
+    private float _dropMoveRadius = 2.5f;
+    private float _dropMoveSpeed = 8f;
+    private float _dropExitBoostMult = 1.4f;
+    private float _dropExitBoostDur = 3f;
+    private Vector2 _dropOffset = Vector2.zero; // 2D offset from pipe center
+
     public float DistanceTraveled => _distanceAlongPath;
     public float CurrentSpeed => _currentSpeed;
     public float CurrentAngle => _currentAngle;
@@ -94,6 +105,7 @@ public class TurdController : MonoBehaviour
     public bool IsInvincible => _hitState == HitState.Invincible || _hitState == HitState.Stunned;
     public bool IsStunned => _hitState == HitState.Stunned;
     public bool IsJumping => _isJumping;
+    public bool IsDropping => _isDropping;
 
     void Start()
     {
@@ -108,6 +120,13 @@ public class TurdController : MonoBehaviour
     void Update()
     {
         if (GameManager.Instance != null && !GameManager.Instance.isPlaying) return;
+
+        // === VERTICAL DROP MODE (2D freefall) ===
+        if (_isDropping)
+        {
+            UpdateDropState();
+            return;
+        }
 
         // === STEERING INPUT ===
         float rawInput = 0f;
@@ -154,8 +173,28 @@ public class TurdController : MonoBehaviour
             }
         }
 
-        // === FORWARD SPEED ===
-        _currentSpeed = Mathf.Min(_currentSpeed + acceleration * Time.deltaTime, maxSpeed);
+        // === SPEED CONTROL (when not jumping: up/down arrows control speed) ===
+        bool manualSpeedControl = false;
+        if (!_isJumping && _hitState != HitState.Stunned && Keyboard.current != null)
+        {
+            if (Keyboard.current.downArrowKey.isPressed || Keyboard.current.sKey.isPressed)
+            {
+                // Brake: slow down to near crawl (20% of base speed)
+                float brakeTarget = forwardSpeed * 0.2f;
+                _currentSpeed = Mathf.MoveTowards(_currentSpeed, brakeTarget, acceleration * 6f * Time.deltaTime);
+                manualSpeedControl = true;
+            }
+            else if (Keyboard.current.upArrowKey.isPressed || Keyboard.current.wKey.isPressed)
+            {
+                // Boost back up: accelerate faster than normal
+                _currentSpeed = Mathf.MoveTowards(_currentSpeed, maxSpeed, acceleration * 3f * Time.deltaTime);
+                manualSpeedControl = true;
+            }
+        }
+
+        // === FORWARD SPEED (normal gradual acceleration when no manual speed input) ===
+        if (!manualSpeedControl)
+            _currentSpeed = Mathf.Min(_currentSpeed + acceleration * Time.deltaTime, maxSpeed);
 
         // Slope speed effect: slower uphill, faster downhill
         if (pipeGen != null)
@@ -337,16 +376,19 @@ public class TurdController : MonoBehaviour
         bool inWater = angleDeltaFromBottom < 25f && !_isJumping;
         if (inWater && !_wasInWater)
         {
-            // Entering water - splash!
+            // Entering water - comic SPLOSH!
             if (ParticleManager.Instance != null)
                 ParticleManager.Instance.PlayWaterSplash(transform.position);
             if (ProceduralAudio.Instance != null)
-                ProceduralAudio.Instance.PlayWaterfallSplash();
+                ProceduralAudio.Instance.PlayWaterSplosh();
+            HapticManager.MediumTap();
             ParticleManager.Instance?.StartWakeSpray(transform);
         }
         else if (!inWater && _wasInWater)
         {
-            // Leaving water
+            // Leaving water - comic PLOOP!
+            if (ProceduralAudio.Instance != null)
+                ProceduralAudio.Instance.PlayWaterPloop();
             ParticleManager.Instance?.StopWakeSpray();
         }
         _wasInWater = inWater;
@@ -580,5 +622,111 @@ public class TurdController : MonoBehaviour
             ParticleManager.Instance.StopBoostTrail();
             ParticleManager.Instance.StopSpeedLines();
         }
+    }
+
+    // === VERTICAL DROP ===
+
+    /// <summary>Enter freefall drop mode. Called by VerticalDrop trigger.</summary>
+    public void EnterDrop(float duration, float speed, float moveRadius, float moveSpeed,
+        float exitBoostMult, float exitBoostDur)
+    {
+        if (_isDropping || _isJumping) return;
+        _isDropping = true;
+        _dropTimer = 0f;
+        _dropDuration = duration;
+        _dropSpeed = speed;
+        _dropMoveRadius = moveRadius;
+        _dropMoveSpeed = moveSpeed;
+        _dropExitBoostMult = exitBoostMult;
+        _dropExitBoostDur = exitBoostDur;
+        _dropOffset = Vector2.zero;
+
+        // Kill angular velocity during drop
+        _angularVelocity = 0f;
+    }
+
+    void UpdateDropState()
+    {
+        float dt = Time.deltaTime;
+        _dropTimer += dt;
+
+        // 2D movement input (arrow keys / touch move freely within pipe cross-section)
+        float inputX = 0f, inputY = 0f;
+
+        if (TouchInput.Instance != null)
+        {
+            inputX = -TouchInput.Instance.SteerInput; // left/right
+        }
+        else if (Keyboard.current != null)
+        {
+            if (Keyboard.current.leftArrowKey.isPressed || Keyboard.current.aKey.isPressed)
+                inputX += 1f;
+            if (Keyboard.current.rightArrowKey.isPressed || Keyboard.current.dKey.isPressed)
+                inputX -= 1f;
+            if (Keyboard.current.upArrowKey.isPressed || Keyboard.current.wKey.isPressed)
+                inputY += 1f;
+            if (Keyboard.current.downArrowKey.isPressed || Keyboard.current.sKey.isPressed)
+                inputY -= 1f;
+        }
+
+        // Move offset within pipe cross-section
+        Vector2 targetOffset = _dropOffset + new Vector2(inputX, inputY) * _dropMoveSpeed * dt;
+        if (targetOffset.magnitude > _dropMoveRadius)
+            targetOffset = targetOffset.normalized * _dropMoveRadius;
+        _dropOffset = Vector2.Lerp(_dropOffset, targetOffset, dt * 10f);
+
+        // Advance along pipe path at drop speed
+        _distanceAlongPath += _dropSpeed * dt;
+
+        // Position: pipe center + 2D offset
+        if (pipeGen != null)
+        {
+            Vector3 center, forward, right, up;
+            pipeGen.GetPathFrame(_distanceAlongPath, out center, out forward, out right, out up);
+
+            Vector3 targetPos = center + right * _dropOffset.x + up * _dropOffset.y;
+            transform.position = Vector3.Lerp(transform.position, targetPos, dt * 12f);
+
+            // Face forward with slight tilt based on movement
+            Quaternion pathRot = Quaternion.LookRotation(forward, up);
+            Quaternion tilt = Quaternion.Euler(-inputY * 15f, 0, inputX * 20f);
+            Quaternion targetRot = pathRot * tilt;
+            transform.rotation = Quaternion.Slerp(transform.rotation, targetRot, dt * 8f);
+        }
+
+        // Spin animation during freefall
+        transform.Rotate(0, 0, 120f * dt, Space.Self);
+
+        // Feed slither animation
+        if (slither != null)
+        {
+            slither.currentSpeed = _dropSpeed / forwardSpeed;
+            slither.turnInput = inputX;
+        }
+
+        // Check drop end
+        if (_dropTimer >= _dropDuration)
+            ExitDrop();
+    }
+
+    void ExitDrop()
+    {
+        _isDropping = false;
+        _currentAngle = 270f; // snap back to pipe bottom
+        _currentSpeed = forwardSpeed; // reset speed before boost
+
+        // Speed boost on exit
+        ApplySpeedBoost(_dropExitBoostMult, _dropExitBoostDur);
+
+        if (ScorePopup.Instance != null)
+            ScorePopup.Instance.ShowMilestone(transform.position + Vector3.up * 2f, "BOOST!");
+
+        if (PipeCamera.Instance != null)
+        {
+            PipeCamera.Instance.Shake(0.4f);
+            PipeCamera.Instance.PunchFOV(8f);
+        }
+
+        HapticManager.HeavyTap();
     }
 }

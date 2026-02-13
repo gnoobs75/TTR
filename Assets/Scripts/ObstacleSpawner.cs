@@ -20,6 +20,11 @@ public class ObstacleSpawner : MonoBehaviour
     [Header("Collectible Prefabs")]
     public GameObject coinPrefab;
 
+    [Header("Special Prefabs")]
+    public GameObject gratePrefab;
+    public GameObject bigAirRampPrefab;
+    public GameObject dropZonePrefab;
+
     [Header("Difficulty")]
     [Range(0f, 1f)]
     public float obstacleChance = 0.4f;
@@ -34,6 +39,11 @@ public class ObstacleSpawner : MonoBehaviour
     private List<GameObject> _spawnedObjects = new List<GameObject>();
     private float _cleanupDistance = 50f;
     private int _obstacleIndex = 0;
+
+    // Special event tracking
+    private float _nextBigAirDist = 300f;
+    private float _nextDropDist = 200f;
+    private float _nextGrateDist = 80f;
 
     void Start()
     {
@@ -53,6 +63,27 @@ public class ObstacleSpawner : MonoBehaviour
         {
             SpawnAtDistance(_nextSpawnDist);
             _nextSpawnDist += Random.Range(minSpacing, maxSpacing);
+        }
+
+        // Special events: big air ramps (every 300-500m)
+        if (bigAirRampPrefab != null && _nextBigAirDist < playerDist + spawnDistance)
+        {
+            SpawnBigAirRamp(_nextBigAirDist);
+            _nextBigAirDist += Random.Range(300f, 500f);
+        }
+
+        // Special events: vertical drops (every 400-600m, starts after 200m)
+        if (dropZonePrefab != null && _nextDropDist < playerDist + spawnDistance)
+        {
+            SpawnDropZone(_nextDropDist);
+            _nextDropDist += Random.Range(400f, 600f);
+        }
+
+        // Grate obstacles (every 60-120m, starts after 80m)
+        if (gratePrefab != null && _nextGrateDist < playerDist + spawnDistance)
+        {
+            SpawnGrate(_nextGrateDist);
+            _nextGrateDist += Random.Range(60f, 120f);
         }
 
         // Cleanup behind
@@ -157,5 +188,69 @@ public class ObstacleSpawner : MonoBehaviour
             GameObject coin = Instantiate(coinPrefab, pos, rot, transform);
             _spawnedObjects.Add(coin);
         }
+    }
+
+    void SpawnBigAirRamp(float dist)
+    {
+        if (_pipeGen == null) return;
+        Vector3 center, forward, right, up;
+        _pipeGen.GetPathFrame(dist, out center, out forward, out right, out up);
+
+        // Place ramp on the pipe floor (bottom)
+        Vector3 pos = center - up * (pipeRadius * 0.65f);
+        Vector3 inward = (center - pos).normalized;
+        Quaternion rot = Quaternion.LookRotation(forward, inward);
+        GameObject obj = Instantiate(bigAirRampPrefab, pos, rot, transform);
+        _spawnedObjects.Add(obj);
+    }
+
+    void SpawnDropZone(float dist)
+    {
+        if (_pipeGen == null) return;
+        Vector3 center, forward, right, up;
+        _pipeGen.GetPathFrame(dist, out center, out forward, out right, out up);
+
+        // Place drop trigger at pipe center
+        Quaternion rot = Quaternion.LookRotation(forward, up);
+        GameObject obj = Instantiate(dropZonePrefab, center, rot, transform);
+        _spawnedObjects.Add(obj);
+    }
+
+    void SpawnGrate(float dist)
+    {
+        if (_pipeGen == null) return;
+        Vector3 center, forward, right, up;
+        _pipeGen.GetPathFrame(dist, out center, out forward, out right, out up);
+
+        // Pick which half to block (left, right, top, bottom)
+        GrateBehavior.BlockSide side = (GrateBehavior.BlockSide)Random.Range(0, 4);
+        Vector3 offset = Vector3.zero;
+        float halfRadius = pipeRadius * 0.5f;
+
+        switch (side)
+        {
+            case GrateBehavior.BlockSide.Left:
+                offset = -right * halfRadius;
+                break;
+            case GrateBehavior.BlockSide.Right:
+                offset = right * halfRadius;
+                break;
+            case GrateBehavior.BlockSide.Top:
+                offset = up * halfRadius;
+                break;
+            case GrateBehavior.BlockSide.Bottom:
+                offset = -up * halfRadius;
+                break;
+        }
+
+        Vector3 pos = center + offset;
+        Quaternion rot = Quaternion.LookRotation(forward, up);
+        GameObject obj = Instantiate(gratePrefab, pos, rot, transform);
+
+        GrateBehavior grate = obj.GetComponent<GrateBehavior>();
+        if (grate != null)
+            grate.blockSide = side;
+
+        _spawnedObjects.Add(obj);
     }
 }

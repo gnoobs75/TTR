@@ -1,11 +1,12 @@
 using UnityEngine;
 using UnityEngine.Rendering;
 using UnityEngine.Rendering.Universal;
+using UnityEngine.Rendering.RenderGraphModule;
 
 /// <summary>
 /// URP Renderer Feature that applies full-screen edge detection outlines.
 /// Uses Roberts Cross operator on depth + normals for thick comic-book ink lines.
-/// Compatible with URP 17+ (Unity 6).
+/// Supports both RenderGraph (Unity 6 default) and legacy compatibility mode.
 /// </summary>
 public class OutlineRendererFeature : ScriptableRendererFeature
 {
@@ -46,6 +47,12 @@ public class OutlineRendererFeature : ScriptableRendererFeature
         static readonly int BlitTextureId = Shader.PropertyToID("_BlitTexture");
         static readonly int BlitTexelSizeId = Shader.PropertyToID("_BlitTexture_TexelSize");
 
+        class PassData
+        {
+            public TextureHandle source;
+            public Material material;
+        }
+
         public OutlineRenderPass(OutlineSettings settings)
         {
             _settings = settings;
@@ -53,6 +60,62 @@ public class OutlineRendererFeature : ScriptableRendererFeature
             ConfigureInput(ScriptableRenderPassInput.Depth | ScriptableRenderPassInput.Normal);
         }
 
+        void SetMaterialProperties()
+        {
+            _settings.outlineMaterial.SetColor(OutlineColorId, _settings.outlineColor);
+            _settings.outlineMaterial.SetFloat(OutlineThicknessId, _settings.thickness);
+            _settings.outlineMaterial.SetFloat(DepthThresholdId, _settings.depthThreshold);
+            _settings.outlineMaterial.SetFloat(NormalThresholdId, _settings.normalThreshold);
+        }
+
+        // === RENDER GRAPH PATH (Unity 6 / URP 17 default) ===
+        public override void RecordRenderGraph(RenderGraph renderGraph, ContextContainer frameData)
+        {
+            if (_settings.outlineMaterial == null) return;
+
+            var resourceData = frameData.Get<UniversalResourceData>();
+            if (resourceData.isActiveTargetBackBuffer) return;
+
+            SetMaterialProperties();
+
+            var source = resourceData.activeColorTexture;
+            var desc = renderGraph.GetTextureDesc(source);
+            desc.name = "_OutlineTemp";
+            var temp = renderGraph.CreateTexture(desc);
+
+            // Pass 1: Blit source -> temp with outline material
+            using (var builder = renderGraph.AddRasterRenderPass<PassData>("OutlineEdgeDetect", out var passData))
+            {
+                passData.source = source;
+                passData.material = _settings.outlineMaterial;
+
+                builder.UseTexture(source);
+                builder.SetRenderAttachment(temp, 0);
+
+                builder.SetRenderFunc(static (PassData data, RasterGraphContext ctx) =>
+                {
+                    Blitter.BlitTexture(ctx.cmd, data.source, new Vector4(1, 1, 0, 0), data.material, 0);
+                });
+            }
+
+            // Pass 2: Blit temp -> source (copy back)
+            using (var builder = renderGraph.AddRasterRenderPass<PassData>("OutlineCopyBack", out var passData))
+            {
+                passData.source = temp;
+                passData.material = null;
+
+                builder.UseTexture(temp);
+                builder.SetRenderAttachment(source, 0);
+
+                builder.SetRenderFunc(static (PassData data, RasterGraphContext ctx) =>
+                {
+                    Blitter.BlitTexture(ctx.cmd, data.source, new Vector4(1, 1, 0, 0), 0, false);
+                });
+            }
+        }
+
+        // === LEGACY PATH (compatibility mode) ===
+        [System.Obsolete("Legacy path for compatibility mode only")]
         public override void OnCameraSetup(CommandBuffer cmd, ref RenderingData renderingData)
         {
             var desc = renderingData.cameraData.cameraTargetDescriptor;
@@ -60,31 +123,23 @@ public class OutlineRendererFeature : ScriptableRendererFeature
             RenderingUtils.ReAllocateHandleIfNeeded(ref _tempRT, desc, name: "_OutlineTempRT");
         }
 
+        [System.Obsolete("Legacy path for compatibility mode only")]
         public override void Execute(ScriptableRenderContext context, ref RenderingData renderingData)
         {
             if (_settings.outlineMaterial == null) return;
 
             CommandBuffer cmd = CommandBufferPool.Get("OutlineEdgeDetect");
 
-            // Set material properties
-            _settings.outlineMaterial.SetColor(OutlineColorId, _settings.outlineColor);
-            _settings.outlineMaterial.SetFloat(OutlineThicknessId, _settings.thickness);
-            _settings.outlineMaterial.SetFloat(DepthThresholdId, _settings.depthThreshold);
-            _settings.outlineMaterial.SetFloat(NormalThresholdId, _settings.normalThreshold);
+            SetMaterialProperties();
 
-            // Get camera color target
             RTHandle cameraColor = renderingData.cameraData.renderer.cameraColorTargetHandle;
 
-            // Set the source texture for our shader
             cmd.SetGlobalTexture(BlitTextureId, cameraColor);
             var desc = renderingData.cameraData.cameraTargetDescriptor;
             cmd.SetGlobalVector(BlitTexelSizeId, new Vector4(
                 1f / desc.width, 1f / desc.height, desc.width, desc.height));
 
-            // Blit: camera color → temp with outline shader
             Blitter.BlitCameraTexture(cmd, cameraColor, _tempRT, _settings.outlineMaterial, 0);
-
-            // Blit: temp → camera color (copy back)
             Blitter.BlitCameraTexture(cmd, _tempRT, cameraColor);
 
             context.ExecuteCommandBuffer(cmd);
