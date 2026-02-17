@@ -63,6 +63,10 @@ public class ProceduralAudio : MonoBehaviour
     private AudioClip _bubblePop;
     private AudioClip _coinMagnet;
 
+    // Real audio file clips
+    private AudioClip _toiletFlush;
+    private AudioClip[] _fartClips;
+
     // Music
     private AudioClip _bgmLoop;
     private bool _musicPlaying;
@@ -89,6 +93,7 @@ public class ProceduralAudio : MonoBehaviour
         _musicSource.loop = true;
 
         GenerateAllClips();
+        LoadAudioFiles();
     }
 
     void GenerateAllClips()
@@ -448,6 +453,24 @@ public class ProceduralAudio : MonoBehaviour
         GenerateBGM();
     }
 
+    void LoadAudioFiles()
+    {
+        // Load real sound files from Assets/sounds/ (Resources path: "sounds/filename" without extension)
+        // Files must be in Assets/Resources/sounds/ OR we load via path
+        // Since they're in Assets/sounds/, we load them as Resources if moved, or use direct path
+        _toiletFlush = Resources.Load<AudioClip>("sounds/toilet1");
+        if (_toiletFlush == null)
+            Debug.LogWarning("[ProceduralAudio] Could not load sounds/toilet1 - make sure Assets/sounds/ is renamed to Assets/Resources/sounds/");
+
+        _fartClips = new AudioClip[5];
+        for (int i = 0; i < 5; i++)
+        {
+            _fartClips[i] = Resources.Load<AudioClip>($"sounds/fart{i + 1}");
+            if (_fartClips[i] == null)
+                Debug.LogWarning($"[ProceduralAudio] Could not load sounds/fart{i + 1}");
+        }
+    }
+
     delegate float SynthFunc(float t, float duration);
 
     AudioClip GenerateClip(string name, float duration, SynthFunc synth)
@@ -535,7 +558,24 @@ public class ProceduralAudio : MonoBehaviour
 
     // === PUBLIC API ===
 
-    public void PlayCoinCollect() => PlaySFX(_coinCollect);
+    public void PlayCoinCollect()
+    {
+        // Play random fart sound for fartcoin pickup, fall back to procedural if not loaded
+        if (_fartClips != null && _fartClips.Length > 0)
+        {
+            AudioClip fart = _fartClips[Random.Range(0, _fartClips.Length)];
+            if (fart != null) { PlaySFX(fart); return; }
+        }
+        PlaySFX(_coinCollect);
+    }
+
+    public void PlayToiletFlush()
+    {
+        if (_toiletFlush != null)
+            PlaySFX(_toiletFlush);
+        else
+            PlaySFX(_flushSound); // fall back to procedural flush
+    }
     public void PlayNearMiss() => PlaySFX(_nearMiss);
     public void PlaySpeedBoost() => PlaySFX(_speedBoost);
     public void PlayGameOver() => PlaySFX(_gameOver);

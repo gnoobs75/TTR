@@ -52,6 +52,10 @@ public class FlushSequence : MonoBehaviour
         State = FlushState.ShowingFaces;
         _timer = faceShowDuration;
 
+        // Play the real toilet flush sound when the sequence begins
+        if (ProceduralAudio.Instance != null)
+            ProceduralAudio.Instance.PlayToiletFlush();
+
         if (_cam != null)
         {
             _originalCamPos = _cam.transform.position;
