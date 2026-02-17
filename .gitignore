@@ -45,5 +45,11 @@
 Thumbs.db
 Desktop.ini
 
+# Android build cache
+.utmp/
+
+# iOS Xcode build output
+/iOSBuild/
+
 # Crashlytics
 crashlytics-build.properties
