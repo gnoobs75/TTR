@@ -27,8 +27,9 @@ public class ToxicBarrelBehavior : ObstacleBehavior
     {
         float t = Time.time;
 
-        // Slow menacing rotation
-        transform.Rotate(Vector3.up, 15f * Time.deltaTime, Space.Self);
+        // Subtle sway (stays in place, no drift)
+        float sway = Mathf.Sin(Time.time * 0.8f) * 3f;
+        transform.localRotation *= Quaternion.Euler(0, sway * Time.deltaTime, 0);
 
         // Eye glow pulse
         _glowIntensity = Mathf.Lerp(_glowIntensity, 0.5f + Mathf.Sin(t * 2f) * 0.3f, Time.deltaTime * 3f);
@@ -62,8 +63,9 @@ public class ToxicBarrelBehavior : ObstacleBehavior
         _glowIntensity = Mathf.Lerp(_glowIntensity, 2f + Mathf.Sin(t * 8f) * 0.5f, Time.deltaTime * 6f);
         ApplyGlow(_glowIntensity);
 
-        // Faster rotation
-        transform.Rotate(Vector3.up, 45f * Time.deltaTime, Space.Self);
+        // Agitated wobble (stays in place)
+        float wobble = Mathf.Sin(Time.time * 4f) * 8f;
+        transform.localRotation *= Quaternion.Euler(wobble * Time.deltaTime, 0, wobble * 0.5f * Time.deltaTime);
 
         // Rapid blink
         if (_skull != null)

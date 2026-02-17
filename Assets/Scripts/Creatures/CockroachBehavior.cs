@@ -2,7 +2,8 @@ using UnityEngine;
 using System.Collections.Generic;
 
 /// <summary>
-/// Cockroach: antenna wiggle, leg twitch. Scatter jolt on approach.
+/// Cockroach: antenna wiggle, leg twitch. EXPLODES on hit and slows the player.
+/// Guts and shell fragments scatter everywhere. Satisfyingly disgusting.
 /// </summary>
 public class CockroachBehavior : ObstacleBehavior
 {
@@ -12,6 +13,7 @@ public class CockroachBehavior : ObstacleBehavior
     private Vector3 _originalScale;
     private Vector3 _joltDir;
     private float _joltDecay;
+    private bool _exploded;
 
     protected override void Start()
     {
@@ -24,6 +26,7 @@ public class CockroachBehavior : ObstacleBehavior
 
     protected override void DoIdle()
     {
+        if (_exploded) return;
         float t = Time.time;
 
         // Antenna wiggle - independent frequencies for each
@@ -57,14 +60,15 @@ public class CockroachBehavior : ObstacleBehavior
 
     protected override void DoReact()
     {
+        if (_exploded) return;
         float t = Time.time;
         float timeSinceReact = t - _reactTime;
         float flinch = CreatureAnimUtils.FlinchDecay(timeSinceReact, 0.4f);
 
-        // Scatter jolt - quick sideways movement
+        // Scatter jolt - quick sideways movement (constrained to local right/forward to stay in pipe)
         if (flinch > 0.9f && _joltDir == Vector3.zero)
         {
-            _joltDir = new Vector3(Random.Range(-1f, 1f), 0, Random.Range(-1f, 1f)).normalized;
+            _joltDir = (transform.right * Random.Range(-1f, 1f) + transform.forward * Random.Range(-0.5f, 0.5f)).normalized;
         }
         _joltDecay = Mathf.Lerp(_joltDecay, 0f, Time.deltaTime * 4f);
         if (flinch > 0.5f) _joltDecay = flinch * 0.15f;
@@ -84,7 +88,7 @@ public class CockroachBehavior : ObstacleBehavior
             _antennae[i].localRotation = Quaternion.Euler(panic, panic, 0);
         }
 
-        // Eyes widen (oversized already, pulse bigger)
+        // Eyes widen
         float eyeScale = 1f + flinch * 0.3f;
         for (int i = 0; i < _pupils.Count; i++)
             _pupils[i].localScale = Vector3.one * eyeScale;
@@ -99,57 +103,98 @@ public class CockroachBehavior : ObstacleBehavior
 
     public override void OnPlayerHit(Transform player)
     {
-        StartCoroutine(RoachScurryAnim(player));
+        if (_exploded) return;
+        _exploded = true;
+        StartCoroutine(ExplodeAnim());
     }
 
-    private System.Collections.IEnumerator RoachScurryAnim(Transform player)
+    private System.Collections.IEnumerator ExplodeAnim()
     {
-        // Roach scurries in panic circle, legs flail
-        Vector3 startPos = transform.position;
+        // Play explosion effects
+        if (ParticleManager.Instance != null)
+        {
+            ParticleManager.Instance.PlayCelebration(transform.position); // burst effect
+        }
 
         if (ProceduralAudio.Instance != null)
             ProceduralAudio.Instance.PlayRoachScurry();
 
-        // Frantic circular movement
+        // Scatter all child parts outward as "guts"
+        Renderer[] allRenderers = GetComponentsInChildren<Renderer>();
+        Vector3 center = transform.position;
+        Vector3[] flyDirs = new Vector3[allRenderers.Length];
+        Vector3[] flyStarts = new Vector3[allRenderers.Length];
+        float[] spinSpeeds = new float[allRenderers.Length];
+
+        for (int i = 0; i < allRenderers.Length; i++)
+        {
+            flyStarts[i] = allRenderers[i].transform.position;
+            // Random outward direction for each piece
+            flyDirs[i] = (allRenderers[i].transform.position - center).normalized;
+            if (flyDirs[i].sqrMagnitude < 0.01f)
+                flyDirs[i] = Random.onUnitSphere;
+            flyDirs[i] += Random.insideUnitSphere * 0.5f;
+            flyDirs[i].Normalize();
+            spinSpeeds[i] = Random.Range(360f, 1080f);
+
+            // Make the piece emissive green for a gross glow
+            if (allRenderers[i].material != null)
+            {
+                allRenderers[i].material.EnableKeyword("_EMISSION");
+                allRenderers[i].material.SetColor("_EmissionColor", new Color(0.2f, 0.8f, 0.1f) * 3f);
+            }
+        }
+
+        // Disable collider so we don't double-hit
+        Collider col = GetComponent<Collider>();
+        if (col != null) col.enabled = false;
+
+        // Fly apart animation
         float t = 0f;
-        float circleSpeed = 12f;
-        float circleRadius = 0.3f;
-        while (t < 0.6f)
+        float duration = 0.6f;
+        while (t < duration)
         {
             t += Time.deltaTime;
-            float angle = t * circleSpeed;
-            Vector3 offset = new Vector3(Mathf.Cos(angle), 0, Mathf.Sin(angle)) * circleRadius;
-            transform.position = startPos + offset;
+            float p = t / duration;
 
-            // Frantic legs
-            for (int i = 0; i < _legs.Count; i++)
+            for (int i = 0; i < allRenderers.Length; i++)
             {
-                float panic = CreatureAnimUtils.IdleFidget(Time.time + i * 0.15f, 12f, 30f);
-                _legs[i].localRotation = Quaternion.Euler(panic, panic * 0.5f, 0);
+                if (allRenderers[i] == null) continue;
+
+                // Fly outward with gravity
+                float dist = p * 3f;
+                float gravity = p * p * 2f;
+                allRenderers[i].transform.position = flyStarts[i]
+                    + flyDirs[i] * dist
+                    - Vector3.up * gravity;
+
+                // Spin wildly
+                allRenderers[i].transform.Rotate(spinSpeeds[i] * Time.deltaTime, spinSpeeds[i] * 0.7f * Time.deltaTime, 0);
+
+                // Shrink as they fly
+                float shrink = 1f - p * 0.7f;
+                allRenderers[i].transform.localScale *= (1f - Time.deltaTime * 2f);
             }
-            // Antenna flail
-            for (int i = 0; i < _antennae.Count; i++)
-            {
-                float flail = CreatureAnimUtils.IdleFidget(Time.time + i, 15f, 35f);
-                _antennae[i].localRotation = Quaternion.Euler(flail, flail, 0);
-            }
+
             yield return null;
         }
 
-        // Settle back
-        t = 0f;
-        while (t < 0.2f)
+        Destroy(gameObject);
+    }
+
+    public override void OnStomped(Transform player)
+    {
+        // Stomp also triggers explosion
+        if (!_exploded)
         {
-            t += Time.deltaTime;
-            transform.position = Vector3.Lerp(transform.position, startPos, t / 0.2f);
-            yield return null;
+            _exploded = true;
+            StartCoroutine(ExplodeAnim());
         }
-        transform.position = startPos;
     }
 
     protected override void DoDistantIdle()
     {
-        // Reset jolt direction for next approach
+        if (_exploded) return;
         _joltDir = Vector3.zero;
         base.DoDistantIdle();
     }

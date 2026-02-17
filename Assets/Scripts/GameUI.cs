@@ -12,6 +12,7 @@ public class GameUI : MonoBehaviour
     public Text comboText;
     public Text walletText;
     public Text multiplierText;
+    public Text coinCountText;
 
     [Header("Game Over Panel")]
     public GameObject gameOverPanel;
@@ -26,6 +27,12 @@ public class GameUI : MonoBehaviour
     public Text challengeText;
     public Text startWalletText;
     public Button shopButton;
+
+    [Header("Gallery")]
+    public Button galleryButton;
+
+    [Header("Sewer Tour")]
+    public Button tourButton;
 
     [Header("Shop Panel")]
     public GameObject shopPanel;
@@ -55,6 +62,12 @@ public class GameUI : MonoBehaviour
         if (shopCloseButton != null)
             shopCloseButton.onClick.AddListener(OnShopCloseClicked);
 
+        if (galleryButton != null)
+            galleryButton.onClick.AddListener(OnGalleryClicked);
+
+        if (tourButton != null)
+            tourButton.onClick.AddListener(OnTourClicked);
+
         UpdateWallet();
         BuildShopItems();
     }
@@ -63,6 +76,20 @@ public class GameUI : MonoBehaviour
     {
         if (GameManager.Instance != null)
             GameManager.Instance.StartGame();
+    }
+
+    void OnGalleryClicked()
+    {
+        if (startPanel != null)
+            startPanel.SetActive(false);
+        if (AssetGallery.Instance != null)
+            AssetGallery.Instance.Open();
+    }
+
+    void OnTourClicked()
+    {
+        if (GameManager.Instance != null)
+            GameManager.Instance.StartSewerTour();
     }
 
     void OnShopClicked()
@@ -93,16 +120,44 @@ public class GameUI : MonoBehaviour
         UpdateWallet();
     }
 
+    private int _displayedScore;
+    private float _scorePunchTime;
+    private float _distPunchTime;
+    private int _displayedCoins;
+    private float _coinPunchTime;
+
+    public void UpdateCoinCount(int coins)
+    {
+        if (coinCountText == null) return;
+        coinCountText.text = coins.ToString();
+        if (coins > _displayedCoins && _displayedCoins >= 0)
+            _coinPunchTime = Time.time;
+        _displayedCoins = coins;
+    }
+
     public void UpdateScore(int score)
     {
-        if (scoreText != null)
-            scoreText.text = score.ToString("N0");
+        if (scoreText == null) return;
+        scoreText.text = score.ToString("N0");
+
+        // Punch-scale when score increases
+        if (score > _displayedScore && _displayedScore > 0)
+        {
+            _scorePunchTime = Time.time;
+        }
+        _displayedScore = score;
     }
 
     public void UpdateDistance(float meters)
     {
-        if (distanceText != null)
-            distanceText.text = Mathf.FloorToInt(meters) + "m";
+        if (distanceText == null) return;
+        int m = Mathf.FloorToInt(meters);
+        string prev = distanceText.text;
+        distanceText.text = m + "m";
+
+        // Pulse every 50m
+        if (m > 0 && m % 50 == 0 && prev != distanceText.text)
+            _distPunchTime = Time.time;
     }
 
     public void UpdateMultiplier(float mult)
@@ -112,12 +167,10 @@ public class GameUI : MonoBehaviour
         {
             multiplierText.gameObject.SetActive(true);
             multiplierText.text = $"x{mult:F1}";
-            // Color ramp: white → yellow → orange → red
             float t = Mathf.Clamp01((mult - 1f) / 4f);
             multiplierText.color = Color.Lerp(
                 new Color(1f, 1f, 0.7f),
                 new Color(1f, 0.3f, 0.1f), t);
-            // Pulse at high multipliers
             float pulse = 1f + Mathf.Sin(Time.time * (5f + t * 10f)) * t * 0.15f;
             multiplierText.transform.localScale = Vector3.one * pulse;
         }
@@ -127,14 +180,69 @@ public class GameUI : MonoBehaviour
         }
     }
 
+    void LateUpdate()
+    {
+        // Score punch animation
+        if (scoreText != null)
+        {
+            float scoreSince = Time.time - _scorePunchTime;
+            if (scoreSince < 0.2f)
+            {
+                float punch = 1f + (1f - scoreSince / 0.2f) * 0.25f;
+                scoreText.transform.localScale = Vector3.one * punch;
+            }
+            else
+            {
+                scoreText.transform.localScale = Vector3.one;
+            }
+        }
+
+        // Coin count punch animation
+        if (coinCountText != null)
+        {
+            float coinSince = Time.time - _coinPunchTime;
+            if (coinSince < 0.25f)
+            {
+                float punch = 1f + (1f - coinSince / 0.25f) * 0.4f;
+                coinCountText.transform.localScale = Vector3.one * punch;
+            }
+            else
+            {
+                coinCountText.transform.localScale = Vector3.one;
+            }
+        }
+
+        // Distance milestone pulse
+        if (distanceText != null)
+        {
+            float distSince = Time.time - _distPunchTime;
+            if (distSince < 0.3f)
+            {
+                float punch = 1f + Mathf.Sin(distSince * 20f) * 0.15f * (1f - distSince / 0.3f);
+                distanceText.transform.localScale = Vector3.one * punch;
+            }
+            else
+            {
+                distanceText.transform.localScale = Vector3.one;
+            }
+        }
+    }
+
     public void UpdateWallet()
     {
         string coinStr = PlayerData.Wallet.ToString("N0");
         if (walletText != null)
             walletText.text = coinStr;
         if (startWalletText != null)
-            startWalletText.text = coinStr + " coins";
+            startWalletText.text = coinStr + " Fartcoins";
     }
+
+    static readonly string[] DeathQuips = {
+        "You got FLUSHED!", "Down the drain!", "CLOGGED!", "Totally wiped out!",
+        "Splashdown!", "What a dump!", "Sewer surfing fail!", "Brown out!",
+        "That stinks!", "You hit rock bottom!", "Pipe dream over!",
+        "Went down the toilet!", "PLOP!", "That was crappy!", "Washed up!"
+    };
 
     public void ShowGameOver(int finalScore, int highScore, int coins, float distance, int nearMisses, int bestCombo)
     {
@@ -142,11 +250,11 @@ public class GameUI : MonoBehaviour
             gameOverPanel.SetActive(true);
 
         if (finalScoreText != null)
-            finalScoreText.text = "Score: " + finalScore.ToString("N0");
+            finalScoreText.text = finalScore.ToString("N0");
 
         if (highScoreText != null)
         {
-            if (finalScore >= highScore)
+            if (finalScore >= highScore && finalScore > 0)
                 highScoreText.text = "NEW HIGH SCORE!";
             else
                 highScoreText.text = "Best: " + highScore.ToString("N0");
@@ -154,9 +262,19 @@ public class GameUI : MonoBehaviour
 
         if (runStatsText != null)
         {
-            runStatsText.text = $"{Mathf.FloorToInt(distance)}m  |  {coins} coins";
-            if (nearMisses > 0) runStatsText.text += $"  |  {nearMisses} near misses";
-            if (bestCombo > 1) runStatsText.text += $"  |  {bestCombo}x combo";
+            string stats = $"{Mathf.FloorToInt(distance)}m  |  {coins} Fartcoins";
+            if (nearMisses > 0) stats += $"  |  {nearMisses} close calls";
+            if (bestCombo > 1) stats += $"  |  {bestCombo}x combo";
+            runStatsText.text = stats;
+        }
+
+        // Set random death quip as title
+        Transform goTitle = gameOverPanel.transform.Find("GOTitle");
+        if (goTitle != null)
+        {
+            Text titleText = goTitle.GetComponent<Text>();
+            if (titleText != null)
+                titleText.text = DeathQuips[Random.Range(0, DeathQuips.Length)];
         }
 
         UpdateWallet();
@@ -220,7 +338,7 @@ public class GameUI : MonoBehaviour
         Text nameText = nameObj.AddComponent<Text>();
         nameText.text = skin.name;
         if (!owned && skin.cost > 0)
-            nameText.text += $"\n<size=18>{skin.cost} coins</size>";
+            nameText.text += $"\n<size=18>{skin.cost} Fartcoins</size>";
         nameText.font = Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
         if (nameText.font == null) nameText.font = Font.CreateDynamicFontFromOSFont("Arial", 14);
         nameText.fontSize = 24;

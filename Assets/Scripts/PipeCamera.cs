@@ -13,7 +13,7 @@ public class PipeCamera : MonoBehaviour
 
     [Header("Follow Settings")]
     [Tooltip("How far behind the turd (along the pipe path) the camera sits")]
-    public float followDistance = 2.5f;
+    public float followDistance = 1.8f;
     [Tooltip("How far ahead of the turd the camera looks")]
     public float lookAhead = 6f;
     public float positionSmooth = 12f;

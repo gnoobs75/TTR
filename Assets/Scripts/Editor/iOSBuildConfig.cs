@@ -34,12 +34,12 @@ public class iOSBuildConfig
         PlayerSettings.SetUseDefaultGraphicsAPIs(BuildTarget.iOS, false);
         PlayerSettings.SetGraphicsAPIs(BuildTarget.iOS, new[] { UnityEngine.Rendering.GraphicsDeviceType.Metal });
 
-        // Orientation
-        PlayerSettings.defaultInterfaceOrientation = UIOrientation.Portrait;
-        PlayerSettings.allowedAutorotateToPortrait = true;
+        // Orientation - landscape for tunnel racer
+        PlayerSettings.defaultInterfaceOrientation = UIOrientation.LandscapeLeft;
+        PlayerSettings.allowedAutorotateToPortrait = false;
         PlayerSettings.allowedAutorotateToPortraitUpsideDown = false;
-        PlayerSettings.allowedAutorotateToLandscapeLeft = false;
-        PlayerSettings.allowedAutorotateToLandscapeRight = false;
+        PlayerSettings.allowedAutorotateToLandscapeLeft = true;
+        PlayerSettings.allowedAutorotateToLandscapeRight = true;
 
         // Status bar
         PlayerSettings.statusBarHidden = true;
@@ -62,7 +62,7 @@ public class iOSBuildConfig
             "Target: iOS 15.0+\n" +
             "Architecture: ARM64\n" +
             "Graphics: Metal\n" +
-            "Orientation: Portrait\n\n" +
+            "Orientation: Landscape\n\n" +
             "Next steps:\n" +
             "1. Set App Icon in Player Settings\n" +
             "2. Set Launch Screen\n" +

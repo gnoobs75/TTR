@@ -16,6 +16,7 @@ public class PowerUpSpawner : MonoBehaviour
     [Header("Prefabs")]
     public GameObject speedBoostPrefab;
     public GameObject jumpRampPrefab;
+    public GameObject bonusCoinPrefab;
 
     [Header("Player Reference")]
     public Transform player;
@@ -107,5 +108,20 @@ public class PowerUpSpawner : MonoBehaviour
         Quaternion rot = Quaternion.LookRotation(forward, inward);
         GameObject obj = Instantiate(prefab, pos, rot, transform);
         _spawnedObjects.Add(obj);
+
+        // Spawn a bonus Fartcoin after every jump ramp - only reachable by jumping
+        if (prefab == jumpRampPrefab && bonusCoinPrefab != null)
+        {
+            // Place the coin at the apex of the jump arc: ~6m ahead, ~3m above the surface
+            float bonusDist = dist + 6f;
+            Vector3 bCenter, bFwd, bRight, bUp;
+            _pipeGen.GetPathFrame(bonusDist, out bCenter, out bFwd, out bRight, out bUp);
+
+            // Position coin near pipe center (high up from surface = only reachable mid-air)
+            Vector3 coinPos = bCenter - bUp * (pipeRadius * 0.1f);
+            Quaternion coinRot = Quaternion.LookRotation(bFwd, bUp);
+            GameObject coin = Instantiate(bonusCoinPrefab, coinPos, coinRot, transform);
+            _spawnedObjects.Add(coin);
+        }
     }
 }

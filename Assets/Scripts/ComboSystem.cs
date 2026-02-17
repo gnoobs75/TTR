@@ -76,6 +76,15 @@ public class ComboSystem : MonoBehaviour
             if (ProceduralAudio.Instance != null)
                 ProceduralAudio.Instance.PlayComboUp();
             HapticManager.MediumTap();
+
+            // Hype the combo in the Poop Crew overlay
+            string label;
+            if (ComboCount >= 20) label = "INSANE";
+            else if (ComboCount >= 10) label = "EPIC";
+            else label = "SICK";
+            Color col = Color.Lerp(new Color(1f, 0.9f, 0.2f), new Color(1f, 0.2f, 0.4f),
+                Mathf.Clamp01(ComboCount / 20f));
+            CheerOverlay.Instance?.ShowCheer($"{ComboCount}x {label}!", col, ComboCount >= 10);
         }
     }
 
@@ -98,20 +107,15 @@ public class ComboSystem : MonoBehaviour
         {
             comboText.gameObject.SetActive(true);
 
-            string label;
-            if (ComboCount >= 20) label = "INSANE";
-            else if (ComboCount >= 10) label = "EPIC";
-            else if (ComboCount >= 5) label = "SICK";
-            else label = "COMBO";
+            // Compact counter — hype labels now go to CheerOverlay
+            comboText.text = $"{ComboCount}x";
 
-            comboText.text = $"{ComboCount}x {label}!";
-
-            // Color ramp: yellow -> orange -> red -> magenta
+            // Color ramp: yellow -> red
             float t = Mathf.Clamp01(ComboCount / 20f);
             comboText.color = Color.Lerp(new Color(1f, 0.9f, 0.2f), new Color(1f, 0.2f, 0.4f), t);
 
-            // Pulse
-            float pulse = 1f + Mathf.Sin(Time.time * 10f) * 0.06f * Mathf.Min(ComboCount, 10);
+            // Subtle pulse
+            float pulse = 1f + Mathf.Sin(Time.time * 8f) * 0.04f * Mathf.Min(ComboCount, 10);
             comboText.transform.localScale = Vector3.one * pulse;
         }
         else

@@ -1,8 +1,8 @@
 using UnityEngine;
 
 /// <summary>
-/// Special bonus Sh!tcoin that spawns after jump ramps. Only reachable mid-air.
-/// Worth 10 regular Sh!tcoins. Extra big, extra shiny, extra satisfying.
+/// Special bonus Fartcoin that spawns after jump ramps. Only reachable mid-air.
+/// Worth 10 regular Fartcoins. Extra big, extra shiny, extra satisfying.
 /// Stands upright and spins like a giant Sonic ring.
 /// </summary>
 [RequireComponent(typeof(Collider))]
@@ -72,7 +72,7 @@ public class BonusCoin : MonoBehaviour
             }
 
             if (ScorePopup.Instance != null)
-                ScorePopup.Instance.ShowMilestone(transform.position, $"BONUS! +{coinValue} SH!TCOINS!");
+                ScorePopup.Instance.ShowMilestone(transform.position, $"BONUS! +{coinValue} FARTCOINS!");
 
             if (ComboSystem.Instance != null)
                 ComboSystem.Instance.RegisterEvent(ComboSystem.EventType.CoinCollect);

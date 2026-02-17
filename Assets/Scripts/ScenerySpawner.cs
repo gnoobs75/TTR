@@ -10,8 +10,8 @@ public class ScenerySpawner : MonoBehaviour
 {
     [Header("Spawn Settings")]
     public float spawnDistance = 100f;
-    public float minSpacing = 6f;
-    public float maxSpacing = 14f;
+    public float minSpacing = 5f;
+    public float maxSpacing = 11f;
     public float pipeRadius = 3.5f;
 
     [Header("Scenery Prefabs")]
@@ -20,6 +20,9 @@ public class ScenerySpawner : MonoBehaviour
     [Header("Pipe Character Prefabs (gross stuff)")]
     public GameObject[] grossPrefabs;
 
+    [Header("Sign/Ad Prefabs (spawn more often for readability)")]
+    public GameObject[] signPrefabs;
+
     [Header("Player Reference")]
     public Transform player;
 
@@ -27,6 +30,7 @@ public class ScenerySpawner : MonoBehaviour
     private TurdController _tc;
     private float _nextSpawnDist = 10f;
     private float _nextGrossDist = 5f;
+    private float _nextSignDist = 15f;
     private List<GameObject> _spawnedObjects = new List<GameObject>();
     private float _cleanupDistance = 50f;
 
@@ -43,18 +47,25 @@ public class ScenerySpawner : MonoBehaviour
 
         float playerDist = _tc != null ? _tc.DistanceTraveled : 0f;
 
-        // Spawn regular scenery
+        // Spawn regular scenery (denser for immersion)
         while (_nextSpawnDist < playerDist + spawnDistance)
         {
             SpawnScenery(_nextSpawnDist);
             _nextSpawnDist += Random.Range(minSpacing, maxSpacing);
         }
 
-        // Spawn subtle pipe decor (sparse - just occasional stains/drips)
+        // Spawn pipe decor (stains, drips, cracks)
         while (_nextGrossDist < playerDist + spawnDistance)
         {
             SpawnGrossDecor(_nextGrossDist);
-            _nextGrossDist += Random.Range(8f, 18f); // sparse so it doesn't clutter
+            _nextGrossDist += Random.Range(6f, 14f);
+        }
+
+        // Spawn signs/ads/graffiti separately at their own rate (walls only, readable)
+        while (_nextSignDist < playerDist + spawnDistance)
+        {
+            SpawnSign(_nextSignDist);
+            _nextSignDist += Random.Range(20f, 40f); // readable spacing
         }
 
         // Cleanup behind
@@ -116,13 +127,44 @@ public class ScenerySpawner : MonoBehaviour
         // Gross decor goes EVERYWHERE - full 360°
         float angle = Random.Range(0f, 360f);
         float rad = angle * Mathf.Deg2Rad;
-        float spawnRadius = pipeRadius * Random.Range(0.65f, 0.82f); // inside pipe, not clipping through wall
+        float spawnRadius = pipeRadius * Random.Range(0.65f, 0.82f);
 
         Vector3 pos = center + (right * Mathf.Cos(rad) + up * Mathf.Sin(rad)) * spawnRadius;
         Vector3 inward = (center - pos).normalized;
         Quaternion rot = Quaternion.LookRotation(forward, inward);
 
         GameObject prefab = grossPrefabs[Random.Range(0, grossPrefabs.Length)];
+        GameObject obj = Instantiate(prefab, pos, rot, transform);
+        _spawnedObjects.Add(obj);
+    }
+
+    void SpawnSign(float dist)
+    {
+        if (signPrefabs == null || signPrefabs.Length == 0) return;
+        if (_pipeGen == null) return;
+
+        Vector3 center, forward, right, up;
+        _pipeGen.GetPathFrame(dist, out center, out forward, out right, out up);
+
+        // Spray paint goes on walls and occasionally ceiling
+        float angle;
+        float r = Random.value;
+        if (r < 0.4f)
+            angle = Random.Range(160f, 210f); // right wall
+        else if (r < 0.8f)
+            angle = Random.Range(330f, 390f); // left wall
+        else
+            angle = Random.Range(50f, 130f);  // ceiling
+
+        float rad = angle * Mathf.Deg2Rad;
+        float spawnRadius = pipeRadius * 0.93f; // flush with pipe surface
+
+        Vector3 pos = center + (right * Mathf.Cos(rad) + up * Mathf.Sin(rad)) * spawnRadius;
+        Vector3 inward = (center - pos).normalized;
+        // Signs face inward so players inside the pipe can read them
+        Quaternion rot = Quaternion.LookRotation(-inward, forward);
+
+        GameObject prefab = signPrefabs[Random.Range(0, signPrefabs.Length)];
         GameObject obj = Instantiate(prefab, pos, rot, transform);
         _spawnedObjects.Add(obj);
     }

@@ -1,16 +1,29 @@
 using UnityEngine;
 
 /// <summary>
-/// Sewer rat: snout bob, ear twitch, whisker quiver. Flinches on approach.
+/// Sewer rat: runs horizontally around the pipe circumference as a moving obstacle.
+/// The rat orbits the pipe center, making it a dynamic threat the player must dodge.
+/// Still has snout bob, ear twitch, whisker quiver. Pounces when hit.
 /// </summary>
 public class SewerRatBehavior : ObstacleBehavior
 {
+    [Header("Orbit Settings")]
+    public float orbitSpeed = 100f; // degrees per second around the pipe
+    public float spawnDistToCenter = 2.1f; // set by spawner (actual distance to pipe center)
+
     private Transform _snout;
     private Transform _leftEar;
     private Transform _rightEar;
     private Transform _tail;
     private Vector3 _originalScale;
     private float _flinchOffset;
+
+    // Orbit state
+    private Vector3 _orbitCenter;
+    private Vector3 _orbitAxis;
+    private Vector3 _initialOffset;
+    private float _orbitAngle;
+    private bool _orbitInitialized;
 
     protected override void Start()
     {
@@ -22,6 +35,46 @@ public class SewerRatBehavior : ObstacleBehavior
         if (_rightEar == null) _rightEar = CreatureAnimUtils.FindChildRecursive(transform, "ear_r");
         _tail = CreatureAnimUtils.FindChildRecursive(transform, "tail");
         _originalScale = transform.localScale;
+
+        // Compute orbit parameters from spawn orientation
+        // transform.up points inward toward pipe center (set by spawner LookRotation)
+        // transform.forward points along the pipe direction
+        _orbitAxis = transform.forward;
+        // Use actual spawn distance to center (set by spawner)
+        _orbitCenter = transform.position + transform.up * spawnDistToCenter;
+        _initialOffset = transform.position - _orbitCenter;
+        _orbitAngle = 0f;
+        _orbitInitialized = true;
+
+        // Randomize orbit direction (CW or CCW)
+        if (Random.value < 0.5f)
+            orbitSpeed = -orbitSpeed;
+    }
+
+    protected override void Update()
+    {
+        // Always orbit regardless of player state
+        if (_orbitInitialized)
+        {
+            _orbitAngle += orbitSpeed * Time.deltaTime;
+            UpdateOrbitPosition();
+        }
+
+        base.Update();
+    }
+
+    void UpdateOrbitPosition()
+    {
+        // Rotate the initial offset around the pipe axis
+        Vector3 newOffset = Quaternion.AngleAxis(_orbitAngle, _orbitAxis) * _initialOffset;
+        transform.position = _orbitCenter + newOffset;
+
+        // Orient rat: face the orbit tangent direction, feet on pipe surface
+        Vector3 tangent = Vector3.Cross(_orbitAxis, newOffset).normalized;
+        if (orbitSpeed < 0) tangent = -tangent; // face the direction we're running
+        Vector3 inward = -newOffset.normalized;
+        if (tangent.sqrMagnitude > 0.01f)
+            transform.rotation = Quaternion.LookRotation(tangent, inward);
     }
 
     protected override void DoIdle()
@@ -54,25 +107,21 @@ public class SewerRatBehavior : ObstacleBehavior
             _tail.localRotation = Quaternion.Euler(0, sway, 0);
         }
 
-        // Breathing
-        float breath = CreatureAnimUtils.BreathingScale(t, 1.5f, 0.03f);
-        transform.localScale = _originalScale * breath;
+        // Running bob animation - rat bounces up and down while orbiting
+        float runBob = Mathf.Abs(Mathf.Sin(t * 8f)) * 0.08f;
+        transform.localScale = _originalScale * (1f + runBob * 0.3f);
     }
 
     protected override void DoReact()
     {
         float timeSinceReact = Time.time - _reactTime;
 
-        // Flinch backward
-        float flinch = CreatureAnimUtils.FlinchDecay(timeSinceReact, 0.6f);
-        if (_player != null)
-        {
-            Vector3 awayDir = (transform.position - _player.position).normalized;
-            _flinchOffset = Mathf.Lerp(_flinchOffset, flinch * 0.3f, Time.deltaTime * 8f);
-            transform.position += awayDir * _flinchOffset * Time.deltaTime;
-        }
+        // Speed up orbit when player approaches - rat panics and runs faster
+        float panicMultiplier = 1.5f;
+        _orbitAngle += orbitSpeed * panicMultiplier * Time.deltaTime;
 
-        // Widen eyes (scale pupils bigger)
+        // Widen eyes
+        float flinch = CreatureAnimUtils.FlinchDecay(timeSinceReact, 0.6f);
         float eyeScale = 1f + flinch * 0.4f;
         for (int i = 0; i < _pupils.Count; i++)
             _pupils[i].localScale = Vector3.one * eyeScale;
@@ -82,6 +131,13 @@ public class SewerRatBehavior : ObstacleBehavior
             _leftEar.localRotation = Quaternion.Euler(CreatureAnimUtils.IdleFidget(Time.time, 6f, 15f), 0, 0);
         if (_rightEar != null)
             _rightEar.localRotation = Quaternion.Euler(CreatureAnimUtils.IdleFidget(Time.time + 0.3f, 7f, 15f), 0, 0);
+
+        // Frantic tail
+        if (_tail != null)
+        {
+            float sway = CreatureAnimUtils.OrganicWobble(Time.time, 4f, 6f, 25f, 15f);
+            _tail.localRotation = Quaternion.Euler(0, sway, 0);
+        }
 
         // Squeak sound
         if (flinch > 0.8f && TryPlaySound())
@@ -98,12 +154,13 @@ public class SewerRatBehavior : ObstacleBehavior
 
     private System.Collections.IEnumerator RatPounceAnim(Transform player)
     {
-        // Rat pounces toward player, scales up, then snaps back
+        // Temporarily stop orbiting during pounce
+        _orbitInitialized = false;
+
         Vector3 startPos = transform.position;
         Vector3 startScale = transform.localScale;
         Vector3 pounceTarget = Vector3.Lerp(startPos, player.position, 0.6f);
 
-        // Play pounce sound
         if (ProceduralAudio.Instance != null)
             ProceduralAudio.Instance.PlayRatPounce();
 
@@ -114,14 +171,13 @@ public class SewerRatBehavior : ObstacleBehavior
             t += Time.deltaTime;
             float p = t / 0.25f;
             transform.position = Vector3.Lerp(startPos, pounceTarget, p);
-            transform.localScale = startScale * (1f + p * 0.5f); // grow bigger
+            transform.localScale = startScale * (1f + p * 0.5f);
             yield return null;
         }
 
-        // Hold on player briefly
         yield return new WaitForSeconds(0.3f);
 
-        // Snap back
+        // Snap back and resume orbit from new position
         t = 0f;
         while (t < 0.3f)
         {
@@ -134,5 +190,10 @@ public class SewerRatBehavior : ObstacleBehavior
 
         transform.position = startPos;
         transform.localScale = startScale;
+
+        // Resume orbit
+        _initialOffset = transform.position - _orbitCenter;
+        _orbitAngle = 0f;
+        _orbitInitialized = true;
     }
 }

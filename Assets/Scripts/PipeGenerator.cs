@@ -17,11 +17,11 @@ public class PipeGenerator : MonoBehaviour
     public float nodeSpacing = 2f;
     public int nodesPerSegment = 10;
     [Tooltip("Max yaw change per node in degrees (higher = tighter curves)")]
-    public float maxCurveRate = 6f;
+    public float maxCurveRate = 9f;
     [Tooltip("Max pitch change per node in degrees (up/down undulations)")]
-    public float maxPitchRate = 4f;
+    public float maxPitchRate = 6f;
     [Tooltip("Max pitch angle in degrees (prevents going too vertical)")]
-    public float maxPitchAngle = 60f;
+    public float maxPitchAngle = 70f;
 
     [Header("Materials")]
     public Material pipeMaterial;
@@ -210,6 +210,17 @@ public class PipeGenerator : MonoBehaviour
         _currentPitch *= 0.93f; // dampen to prevent going vertical
         _currentPitch = Mathf.Clamp(_currentPitch, -maxPitchAngle, maxPitchAngle);
 
+        // Occasional dramatic sweep: ~5% chance per node after 80m
+        if (dist > 80f && Random.value < 0.05f)
+        {
+            float sweepStrength = Random.Range(0.5f, 1f);
+            if (Random.value < 0.5f)
+                _currentYaw += maxTurn * 2.5f * sweepStrength * (Random.value < 0.5f ? 1f : -1f);
+            else
+                _currentPitch += maxPitch * 2f * sweepStrength * (Random.value < 0.5f ? 1f : -1f);
+            _currentPitch = Mathf.Clamp(_currentPitch, -maxPitchAngle, maxPitchAngle);
+        }
+
         // Build forward direction from yaw and pitch
         float yawRad = _currentYaw * Mathf.Deg2Rad;
         float pitchRad = _currentPitch * Mathf.Deg2Rad;
@@ -241,8 +252,8 @@ public class PipeGenerator : MonoBehaviour
         // Add procedural pipe wall detail (rust, slime, cracks)
         AddPipeDetail(obj, start, end, segDist);
 
-        // Add dense structural sewer geometry (brackets, braces, grates, etc.)
-        AddStructuralGeometry(obj, start, end, segDist);
+        // Structural geometry disabled - crosshatch shader + pipe detail provides enough visual density
+        // AddStructuralGeometry(obj, start, end, segDist);
 
         _segs.Enqueue(new Seg { obj = obj, startNode = start, dist = segDist });
         _nextSegStart = end;
@@ -379,21 +390,20 @@ public class PipeGenerator : MonoBehaviour
                 mat.SetColor("_ShadowColor", Color.HSVToRGB(dh, Mathf.Min(ds * 1.2f, 1f), dv * 0.3f));
             }
 
-            // Create detail geometry - larger patches for visibility
-            GameObject detail = GameObject.CreatePrimitive(
-                detailType == 0 ? PrimitiveType.Cube : PrimitiveType.Sphere);
+            // Create detail geometry - subtle flat patches hugging the pipe wall
+            GameObject detail = GameObject.CreatePrimitive(PrimitiveType.Quad);
             detail.name = "PipeDetail";
             detail.transform.SetParent(parent.transform);
             detail.transform.position = pos;
 
-            Quaternion surfaceRot = Quaternion.LookRotation(fwd, -inward);
+            // Face outward from pipe wall (quad faces -Z, so inward becomes forward)
+            Quaternion surfaceRot = Quaternion.LookRotation(-inward, fwd);
             detail.transform.rotation = surfaceRot;
 
-            // Flatten against wall - larger sizes for better visibility at speed
-            float sizeX = Random.Range(0.5f, 1.8f);
-            float sizeY = Random.Range(0.35f, 1.2f);
-            float thickness = Random.Range(0.03f, 0.1f);
-            detail.transform.localScale = new Vector3(sizeX, sizeY, thickness);
+            // Small flat patches that hug the wall surface
+            float sizeX = Random.Range(0.3f, 0.9f);
+            float sizeY = Random.Range(0.2f, 0.7f);
+            detail.transform.localScale = new Vector3(sizeX, sizeY, 1f);
 
             detail.GetComponent<Renderer>().material = mat;
             Collider c = detail.GetComponent<Collider>();

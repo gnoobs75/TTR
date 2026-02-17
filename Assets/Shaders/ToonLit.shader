@@ -35,8 +35,8 @@ Shader "Custom/ToonLit"
         _OcclusionStrength ("Occlusion Strength", Range(0, 1)) = 1.0
 
         // Hatching
-        _HatchingDensity ("Hatching Line Density", Float) = 80
-        _HatchingIntensity ("Hatching Intensity", Range(0, 1)) = 0.4
+        _HatchingDensity ("Hatching Line Density", Float) = 25
+        _HatchingIntensity ("Hatching Intensity", Range(0, 1)) = 0
         _HatchingAngle ("Hatching Angle (degrees)", Float) = 45
 
         // Metallic / Smoothness (read by some existing code)
@@ -281,7 +281,7 @@ Shader "Custom/ToonLit"
                 screenUV.x *= _ScreenParams.x / _ScreenParams.y; // aspect correction
                 float shadowAmount = 1.0 - shadowBand; // 1 = deep shadow, 0 = lit
                 float hatch = Hatching(screenUV, shadowAmount);
-                toonColor -= hatch * 0.15; // darken in hatched areas
+                toonColor -= hatch * 0.08; // darken in hatched areas
 
                 // Apply AO
                 toonColor *= occlusion;

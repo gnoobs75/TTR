@@ -21,6 +21,13 @@ public class SceneBootstrapper
     [MenuItem("TTR/Setup Game Scene")]
     public static void SetupGameScene()
     {
+        // Cannot run during play mode
+        if (EditorApplication.isPlaying)
+        {
+            Debug.LogError("TTR: Cannot setup scene during Play Mode. Stop the game first.");
+            return;
+        }
+
         // Ensure asset database is up to date (picks up newly exported GLBs)
         AssetDatabase.Refresh(ImportAssetOptions.ForceSynchronousImport);
 
@@ -71,8 +78,10 @@ public class SceneBootstrapper
         CreatePooperSnooper(player.GetComponent<TurdController>());
         CreatePipeZoneSystem();
         CreateScorePopup();
+        CreateCheerOverlay(gameUI.gameObject);
         CreateFlushSequence();
         CreateAssetGallery(gameUI);
+        CreateSewerTour(player.GetComponent<TurdController>(), pipeGenObj.GetComponent<PipeGenerator>());
         SaveScene();
 
         Debug.Log("TTR: Scene setup complete! Press Play to test.");
@@ -596,6 +605,11 @@ public class SceneBootstrapper
         WaterAnimator wa = pipeGenObj.AddComponent<WaterAnimator>();
         wa.player = player;
         Debug.Log("TTR: Created water wave animator with splash effects!");
+
+        // Poop buddy ski chain - attaches to player so buddies follow
+        GameObject chainObj = new GameObject("PoopBuddyChain");
+        chainObj.AddComponent<PoopBuddyChain>();
+        Debug.Log("TTR: Created poop buddy chain system!");
     }
 
     // ===== SEWER WATER EFFECTS =====
@@ -822,8 +836,8 @@ public class SceneBootstrapper
         obstaclePrefabs.Add(CreateHairWadPrefab("HairWad_Brunette",
             new Color(0.35f, 0.2f, 0.1f), new Color(0.22f, 0.12f, 0.06f)));
 
-        // Sh!tcoin - copper penny with $ emboss, sized like a real coin you'd find in a sewer
-        GameObject coinPrefab = CreateShitcoinPrefab();
+        // Fartcoin - copper penny with $ emboss, sized like a real coin you'd find in a sewer
+        GameObject coinPrefab = CreateFartcoinPrefab();
 
         // Apply creature-specific materials for better visual variety
         ApplyCreatureMaterials();
@@ -858,7 +872,7 @@ public class SceneBootstrapper
             ("SewerRat",    new Color(0.32f, 0.2f, 0.1f),   0.05f, 0.25f, new Color(0.15f, 0.08f, 0.03f), 0.3f),  // rough fur
             ("ToxicBarrel", new Color(0.25f, 0.5f, 0.12f),  0.45f, 0.55f, new Color(0.1f, 0.6f, 0.05f),   2.5f),  // corroded metal + green glow
             ("PoopBlob",    new Color(0.35f, 0.2f, 0.08f),  0.05f, 0.78f, new Color(0.12f, 0.06f, 0.02f), 0.4f),  // wet glossy organic
-            ("SewerMine",   new Color(0.22f, 0.22f, 0.24f), 0.7f,  0.6f,  new Color(0.6f, 0.08f, 0.05f),  1.5f),  // heavy metal + red accent
+            ("SewerMine",   new Color(0.08f, 0.08f, 0.08f), 0.3f,  0.5f,  new Color(0.05f, 0.03f, 0.01f), 0.2f),  // matte black bomb
             ("Cockroach",   new Color(0.3f, 0.15f, 0.06f),  0.15f, 0.8f,  new Color(0.05f, 0.02f, 0.01f), 0.2f),  // chitinous shell sheen
         };
 
@@ -1186,42 +1200,63 @@ public class SceneBootstrapper
         string path = $"Assets/Prefabs/WarningSign_Gross_{_warningIndex}.prefab";
         GameObject root = new GameObject("WarningSign");
 
-        Material yellowMat = MakeURPMat("Gross_WarningBg", new Color(0.95f, 0.85f, 0.1f), 0f, 0.3f);
-        yellowMat.EnableKeyword("_EMISSION");
-        yellowMat.SetColor("_EmissionColor", new Color(0.3f, 0.25f, 0.02f));
-        EditorUtility.SetDirty(yellowMat);
-        Material borderMat = MakeURPMat("Gross_WarningBorder", new Color(0.15f, 0.12f, 0.1f), 0.3f, 0.3f);
+        // Spray paint stencil style — yellow text on pipe surface
+        Color yellow = new Color(0.95f, 0.85f, 0.1f);
 
-        // Diamond-rotated yellow plate
-        AddPrimChild(root, "Plate", PrimitiveType.Cube, Vector3.zero,
-            Quaternion.Euler(0, 0, 45), new Vector3(0.22f, 0.22f, 0.015f), yellowMat);
-        // Border
-        AddPrimChild(root, "Border", PrimitiveType.Cube, Vector3.zero,
-            Quaternion.Euler(0, 0, 45), new Vector3(0.25f, 0.25f, 0.012f), borderMat);
+        // Overspray haze behind text
+        Material hazeMat = MakeURPMat("Gross_WarnHaze", new Color(yellow.r, yellow.g, yellow.b, 0.15f), 0f, 0.1f);
+        hazeMat.EnableKeyword("_EMISSION");
+        hazeMat.SetColor("_EmissionColor", yellow * 0.08f);
+        EditorUtility.SetDirty(hazeMat);
+        AddPrimChild(root, "Haze", PrimitiveType.Sphere, new Vector3(0, 0, -0.001f),
+            Quaternion.identity, new Vector3(0.3f, 0.2f, 0.003f), hazeMat);
 
-        // Warning text
         string txt = WarningTexts[_warningIndex % WarningTexts.Length];
         _warningIndex++;
 
-        GameObject textObj = new GameObject("WarningText");
+        // Spray-painted warning text
+        GameObject textObj = new GameObject("SprayText");
         textObj.transform.SetParent(root.transform, false);
-        textObj.transform.localPosition = new Vector3(0, 0, -0.01f);
-        textObj.transform.localRotation = Quaternion.Euler(0, 180, 0);
+        textObj.transform.localPosition = new Vector3(0, 0, -0.004f);
+        textObj.transform.localRotation = Quaternion.Euler(0, 180, Random.Range(-8f, 8f));
         TextMesh tm = textObj.AddComponent<TextMesh>();
         tm.text = txt;
-        tm.fontSize = 36;
-        tm.characterSize = 0.008f; // small enough to fit inside diamond
+        tm.fontSize = 42;
+        tm.characterSize = 0.012f;
         tm.anchor = TextAnchor.MiddleCenter;
         tm.alignment = TextAlignment.Center;
-        tm.color = new Color(0.1f, 0.08f, 0.05f);
+        tm.color = yellow;
         tm.fontStyle = FontStyle.Bold;
 
-        // Mounting post
-        AddPrimChild(root, "Post", PrimitiveType.Cube, new Vector3(0, -0.2f, 0.005f),
-            Quaternion.identity, new Vector3(0.02f, 0.15f, 0.02f), borderMat);
+        // Stencil-style hazard stripes (thin spray-painted lines)
+        Material stripeMat = MakeURPMat("Gross_WarnStripe", new Color(0.1f, 0.08f, 0.05f), 0f, 0.15f);
+        stripeMat.EnableKeyword("_EMISSION");
+        stripeMat.SetColor("_EmissionColor", new Color(0.02f, 0.02f, 0.01f));
+        EditorUtility.SetDirty(stripeMat);
+        for (int s = 0; s < 3; s++)
+        {
+            float x = -0.08f + s * 0.08f;
+            AddPrimChild(root, $"Stripe{s}", PrimitiveType.Cube,
+                new Vector3(x, 0.08f, -0.003f),
+                Quaternion.Euler(0, 0, 45), new Vector3(0.12f, 0.008f, 0.002f), stripeMat);
+        }
+
+        // Paint drips
+        Material dripMat = MakeURPMat("Gross_WarnDrip", yellow * 0.7f, 0f, 0.15f);
+        dripMat.EnableKeyword("_EMISSION");
+        dripMat.SetColor("_EmissionColor", yellow * 0.1f);
+        EditorUtility.SetDirty(dripMat);
+        for (int d = 0; d < 3; d++)
+        {
+            float x = Random.Range(-0.08f, 0.08f);
+            float len = Random.Range(0.02f, 0.07f);
+            AddPrimChild(root, $"Drip{d}", PrimitiveType.Capsule,
+                new Vector3(x, -0.06f - d * 0.02f, -0.003f),
+                Quaternion.identity, new Vector3(0.005f, len, 0.003f), dripMat);
+        }
 
         RemoveAllColliders(root);
-        root.transform.localScale = Vector3.one * 0.9f;
+        root.transform.localScale = Vector3.one * 1.0f;
         GameObject prefab = PrefabUtility.SaveAsPrefabAsset(root, path);
         Object.DestroyImmediate(root);
         return prefab;
@@ -1240,47 +1275,59 @@ public class SceneBootstrapper
         string path = $"Assets/Prefabs/PipeNumber_Gross_{_pipeNumIndex}.prefab";
         GameObject root = new GameObject("PipeNumber");
 
-        Material plateMat = MakeURPMat("Gross_PipeNumPlate", new Color(0.35f, 0.4f, 0.35f), 0.3f, 0.3f);
+        // Stenciled sector number — white spray paint on pipe
+        Color stencilCol = new Color(0.85f, 0.82f, 0.7f);
 
-        // Metal number plate
-        AddPrimChild(root, "Plate", PrimitiveType.Cube, Vector3.zero,
-            Quaternion.identity, new Vector3(0.3f, 0.12f, 0.01f), plateMat);
+        // Overspray haze
+        Material hazeMat = MakeURPMat("Gross_NumHaze", new Color(stencilCol.r, stencilCol.g, stencilCol.b, 0.1f), 0f, 0.1f);
+        hazeMat.EnableKeyword("_EMISSION");
+        hazeMat.SetColor("_EmissionColor", stencilCol * 0.05f);
+        EditorUtility.SetDirty(hazeMat);
+        AddPrimChild(root, "Haze", PrimitiveType.Sphere, new Vector3(0, 0, -0.001f),
+            Quaternion.identity, new Vector3(0.35f, 0.14f, 0.003f), hazeMat);
 
-        // Number text
         string num = PipeNumbers[_pipeNumIndex % PipeNumbers.Length];
         _pipeNumIndex++;
 
-        GameObject textObj = new GameObject("NumberText");
+        // Stenciled text
+        GameObject textObj = new GameObject("SprayText");
         textObj.transform.SetParent(root.transform, false);
-        textObj.transform.localPosition = new Vector3(0, 0, -0.007f);
-        textObj.transform.localRotation = Quaternion.Euler(0, 180, 0);
+        textObj.transform.localPosition = new Vector3(0, 0, -0.004f);
+        textObj.transform.localRotation = Quaternion.Euler(0, 180, Random.Range(-3f, 3f));
         TextMesh tm = textObj.AddComponent<TextMesh>();
         tm.text = num;
-        tm.fontSize = 40;
-        tm.characterSize = 0.008f; // fits within plate
+        tm.fontSize = 44;
+        tm.characterSize = 0.009f;
         tm.anchor = TextAnchor.MiddleCenter;
         tm.alignment = TextAlignment.Center;
-        tm.color = new Color(0.85f, 0.82f, 0.7f);
+        tm.color = stencilCol;
         tm.fontStyle = FontStyle.Bold;
 
-        // Mounting bolts
-        Material boltMat = MakeURPMat("Gross_PipeNumBolt", new Color(0.3f, 0.28f, 0.25f), 0.5f, 0.5f);
-        AddPrimChild(root, "Bolt1", PrimitiveType.Sphere, new Vector3(-0.12f, 0.04f, -0.006f),
-            Quaternion.identity, Vector3.one * 0.015f, boltMat);
-        AddPrimChild(root, "Bolt2", PrimitiveType.Sphere, new Vector3(0.12f, 0.04f, -0.006f),
-            Quaternion.identity, Vector3.one * 0.015f, boltMat);
-        AddPrimChild(root, "Bolt3", PrimitiveType.Sphere, new Vector3(-0.12f, -0.04f, -0.006f),
-            Quaternion.identity, Vector3.one * 0.015f, boltMat);
-        AddPrimChild(root, "Bolt4", PrimitiveType.Sphere, new Vector3(0.12f, -0.04f, -0.006f),
-            Quaternion.identity, Vector3.one * 0.015f, boltMat);
+        // Underline spray stroke
+        Material lineMat = MakeURPMat("Gross_NumLine", stencilCol * 0.6f, 0f, 0.15f);
+        lineMat.EnableKeyword("_EMISSION");
+        lineMat.SetColor("_EmissionColor", stencilCol * 0.08f);
+        EditorUtility.SetDirty(lineMat);
+        AddPrimChild(root, "Underline", PrimitiveType.Cube,
+            new Vector3(0, -0.04f, -0.003f), Quaternion.identity,
+            new Vector3(0.25f, 0.005f, 0.002f), lineMat);
 
-        // Rust stain below
-        Material rustMat = MakeURPMat("Gross_PipeNumRust", new Color(0.45f, 0.25f, 0.1f), 0f, 0.2f);
-        AddPrimChild(root, "RustStain", PrimitiveType.Sphere, new Vector3(0.02f, -0.1f, 0),
-            Quaternion.identity, new Vector3(0.08f, 0.06f, 0.003f), rustMat);
+        // Paint drips
+        Material dripMat = MakeURPMat("Gross_NumDrip", stencilCol * 0.5f, 0f, 0.15f);
+        dripMat.EnableKeyword("_EMISSION");
+        dripMat.SetColor("_EmissionColor", stencilCol * 0.06f);
+        EditorUtility.SetDirty(dripMat);
+        for (int d = 0; d < 2; d++)
+        {
+            float x = Random.Range(-0.1f, 0.1f);
+            float len = Random.Range(0.015f, 0.04f);
+            AddPrimChild(root, $"Drip{d}", PrimitiveType.Capsule,
+                new Vector3(x, -0.05f - d * 0.015f, -0.003f),
+                Quaternion.identity, new Vector3(0.004f, len, 0.002f), dripMat);
+        }
 
         RemoveAllColliders(root);
-        root.transform.localScale = Vector3.one * 0.8f;
+        root.transform.localScale = Vector3.one * 1.0f;
         GameObject prefab = PrefabUtility.SaveAsPrefabAsset(root, path);
         Object.DestroyImmediate(root);
         return prefab;
@@ -1305,9 +1352,7 @@ public class SceneBootstrapper
         string path = $"Assets/Prefabs/GraffitiSign_Gross_{_graffitiIndex}.prefab";
         GameObject root = new GameObject("GraffitiSign");
 
-        // NO wall patch - spray paint goes directly on the pipe surface (decal style)
-
-        // Spray paint colors - cycle through for variety
+        // Spray paint colors
         Color[] sprayColors = new Color[]
         {
             new Color(0.9f, 0.15f, 0.1f),  // red
@@ -1319,40 +1364,59 @@ public class SceneBootstrapper
         };
         Color sprayColor = sprayColors[_graffitiIndex % sprayColors.Length];
 
-        // 3D TextMesh - spray painted directly on pipe surface
+        // Overspray haze — semi-transparent cloud behind the text
+        Material hazeMat = MakeURPMat("Gross_GrafHaze", new Color(sprayColor.r, sprayColor.g, sprayColor.b, 0.12f), 0f, 0.1f);
+        hazeMat.EnableKeyword("_EMISSION");
+        hazeMat.SetColor("_EmissionColor", sprayColor * 0.06f);
+        EditorUtility.SetDirty(hazeMat);
+        AddPrimChild(root, "Haze", PrimitiveType.Sphere, new Vector3(0, 0, -0.001f),
+            Quaternion.identity, new Vector3(0.35f, 0.25f, 0.003f), hazeMat);
+
+        // Spray painted text
         string msg = GraffitiMessages[_graffitiIndex % GraffitiMessages.Length];
         _graffitiIndex++;
 
         GameObject textObj = new GameObject("SprayText");
         textObj.transform.SetParent(root.transform, false);
-        textObj.transform.localPosition = new Vector3(0, 0, -0.005f); // barely off surface
-        textObj.transform.localRotation = Quaternion.Euler(0, 180, 0);
+        textObj.transform.localPosition = new Vector3(0, 0, -0.004f);
+        textObj.transform.localRotation = Quaternion.Euler(0, 180, Random.Range(-12f, 12f));
 
         TextMesh tm = textObj.AddComponent<TextMesh>();
         tm.text = msg;
         tm.fontSize = 48;
-        tm.characterSize = 0.018f; // smaller to fit naturally on pipe wall
+        tm.characterSize = 0.018f;
         tm.anchor = TextAnchor.MiddleCenter;
         tm.alignment = TextAlignment.Center;
         tm.color = sprayColor;
         tm.fontStyle = FontStyle.Bold;
 
-        // Hand-sprayed tilt
-        textObj.transform.localRotation *= Quaternion.Euler(0, 0, Random.Range(-12f, 12f));
-
-        // Thin paint drips (subtle, just below text)
+        // Paint drips (more for that authentic spray-paint feel)
         Material dripMat = MakeURPMat("Gross_Paint", sprayColor * 0.7f, 0f, 0.15f);
         dripMat.EnableKeyword("_EMISSION");
         dripMat.SetColor("_EmissionColor", sprayColor * 0.15f);
         EditorUtility.SetDirty(dripMat);
 
-        for (int i = 0; i < 2; i++)
+        for (int i = 0; i < 4; i++)
         {
-            float x = Random.Range(-0.08f, 0.08f);
-            float len = Random.Range(0.02f, 0.06f);
+            float x = Random.Range(-0.1f, 0.1f);
+            float len = Random.Range(0.02f, 0.08f);
+            float thick = Random.Range(0.004f, 0.007f);
             AddPrimChild(root, $"Drip{i}", PrimitiveType.Capsule,
-                new Vector3(x, -0.08f - i * 0.02f, -0.003f),
-                Quaternion.identity, new Vector3(0.006f, len, 0.003f), dripMat);
+                new Vector3(x, -0.07f - i * 0.025f, -0.003f),
+                Quaternion.identity, new Vector3(thick, len, 0.003f), dripMat);
+        }
+
+        // Splatter dots (overspray specks)
+        Material splatMat = MakeURPMat("Gross_Splat", sprayColor * 0.8f, 0f, 0.2f);
+        splatMat.EnableKeyword("_EMISSION");
+        splatMat.SetColor("_EmissionColor", sprayColor * 0.1f);
+        EditorUtility.SetDirty(splatMat);
+        for (int s = 0; s < 3; s++)
+        {
+            Vector3 pos = new Vector3(Random.Range(-0.15f, 0.15f), Random.Range(-0.1f, 0.1f), -0.003f);
+            float sz = Random.Range(0.008f, 0.015f);
+            AddPrimChild(root, $"Splat{s}", PrimitiveType.Sphere, pos,
+                Quaternion.identity, new Vector3(sz, sz, 0.002f), splatMat);
         }
 
         RemoveAllColliders(root);
@@ -1574,98 +1638,104 @@ public class SceneBootstrapper
         string[] ad = SewerAds[_adIndex % SewerAds.Length];
         _adIndex++;
 
-        // Billboard frame
-        Material frameMat = MakeURPMat("Gross_AdFrame", new Color(0.3f, 0.28f, 0.25f), 0.4f, 0.3f);
-        Material boardMat = MakeURPMat("Gross_AdBoard", new Color(0.92f, 0.88f, 0.75f), 0.02f, 0.15f);
-        boardMat.EnableKeyword("_EMISSION");
-        boardMat.SetColor("_EmissionColor", new Color(0.2f, 0.18f, 0.12f));
-        EditorUtility.SetDirty(boardMat);
+        // Spray paint ad — all text directly on pipe surface, no board/frame
+        // Each line uses a different spray color for that hand-tagged look
+        Color titleCol = new Color(0.9f, 0.15f, 0.1f);
+        Color subCol = new Color(0.85f, 0.8f, 0.65f);
+        Color bodyCol = new Color(0.2f, 0.6f, 0.95f);
+        Color footCol = new Color(0.95f, 0.85f, 0.15f);
 
-        // Background board
-        AddPrimChild(root, "Board", PrimitiveType.Cube, Vector3.zero,
-            Quaternion.identity, new Vector3(0.6f, 0.45f, 0.012f), boardMat);
-        // Thick frame border
-        Material thickFrame = MakeURPMat("Gross_AdFrameThick", new Color(0.2f, 0.18f, 0.15f), 0.5f, 0.3f);
-        float bw = 0.025f;
-        AddPrimChild(root, "FrameTop", PrimitiveType.Cube, new Vector3(0, 0.235f, 0),
-            Quaternion.identity, new Vector3(0.65f, bw, 0.025f), thickFrame);
-        AddPrimChild(root, "FrameBot", PrimitiveType.Cube, new Vector3(0, -0.235f, 0),
-            Quaternion.identity, new Vector3(0.65f, bw, 0.025f), thickFrame);
-        AddPrimChild(root, "FrameL", PrimitiveType.Cube, new Vector3(-0.313f, 0, 0),
-            Quaternion.identity, new Vector3(bw, 0.5f, 0.025f), thickFrame);
-        AddPrimChild(root, "FrameR", PrimitiveType.Cube, new Vector3(0.313f, 0, 0),
-            Quaternion.identity, new Vector3(bw, 0.5f, 0.025f), thickFrame);
+        // Big overspray haze behind the whole ad
+        Material hazeMat = MakeURPMat("Gross_AdHaze", new Color(0.5f, 0.5f, 0.5f, 0.08f), 0f, 0.1f);
+        AddPrimChild(root, "Haze", PrimitiveType.Sphere, new Vector3(0, -0.02f, -0.001f),
+            Quaternion.identity, new Vector3(0.55f, 0.4f, 0.003f), hazeMat);
 
-        // Title text (3D TextMesh)
-        Color titleCol = new Color(0.7f, 0.15f, 0.1f);
+        float tilt = Random.Range(-5f, 5f);
+
+        // Title — big spray paint
         GameObject titleObj = new GameObject("TitleText");
         titleObj.transform.SetParent(root.transform, false);
-        titleObj.transform.localPosition = new Vector3(0, 0.14f, -0.008f);
-        titleObj.transform.localRotation = Quaternion.Euler(0, 180, 0);
+        titleObj.transform.localPosition = new Vector3(0, 0.1f, -0.004f);
+        titleObj.transform.localRotation = Quaternion.Euler(0, 180, tilt);
         TextMesh titleTm = titleObj.AddComponent<TextMesh>();
-        titleTm.text = ad[0]; // e.g. "PIPE DREAMS"
-        titleTm.fontSize = 60;
+        titleTm.text = ad[0];
+        titleTm.fontSize = 56;
         titleTm.characterSize = 0.012f;
         titleTm.anchor = TextAnchor.MiddleCenter;
         titleTm.alignment = TextAlignment.Center;
         titleTm.color = titleCol;
         titleTm.fontStyle = FontStyle.Bold;
 
-        // Subtitle / company name
+        // Subtitle
         GameObject subObj = new GameObject("SubText");
         subObj.transform.SetParent(root.transform, false);
-        subObj.transform.localPosition = new Vector3(0, 0.08f, -0.008f);
-        subObj.transform.localRotation = Quaternion.Euler(0, 180, 0);
+        subObj.transform.localPosition = new Vector3(0, 0.05f, -0.004f);
+        subObj.transform.localRotation = Quaternion.Euler(0, 180, tilt + Random.Range(-3f, 3f));
         TextMesh subTm = subObj.AddComponent<TextMesh>();
-        subTm.text = ad[1]; // e.g. "Real Estate"
-        subTm.fontSize = 40;
-        subTm.characterSize = 0.01f;
+        subTm.text = ad[1];
+        subTm.fontSize = 38;
+        subTm.characterSize = 0.009f;
         subTm.anchor = TextAnchor.MiddleCenter;
         subTm.alignment = TextAlignment.Center;
-        subTm.color = new Color(0.35f, 0.3f, 0.25f);
+        subTm.color = subCol;
 
-        // Main ad copy (the funny part)
+        // Body — the funny part
         GameObject bodyObj = new GameObject("BodyText");
         bodyObj.transform.SetParent(root.transform, false);
-        bodyObj.transform.localPosition = new Vector3(0, -0.04f, -0.008f);
-        bodyObj.transform.localRotation = Quaternion.Euler(0, 180, 0);
+        bodyObj.transform.localPosition = new Vector3(0, -0.04f, -0.004f);
+        bodyObj.transform.localRotation = Quaternion.Euler(0, 180, tilt + Random.Range(-4f, 4f));
         TextMesh bodyTm = bodyObj.AddComponent<TextMesh>();
-        bodyTm.text = ad[2]; // e.g. "Live Where You Flush!"
-        bodyTm.fontSize = 36;
+        bodyTm.text = ad[2];
+        bodyTm.fontSize = 34;
         bodyTm.characterSize = 0.009f;
         bodyTm.anchor = TextAnchor.MiddleCenter;
         bodyTm.alignment = TextAlignment.Center;
-        bodyTm.color = new Color(0.15f, 0.12f, 0.1f);
-        bodyTm.fontStyle = FontStyle.Italic;
+        bodyTm.color = bodyCol;
+        bodyTm.fontStyle = FontStyle.Bold;
 
-        // Footer / CTA
+        // Footer
         GameObject footObj = new GameObject("FooterText");
         footObj.transform.SetParent(root.transform, false);
-        footObj.transform.localPosition = new Vector3(0, -0.16f, -0.008f);
-        footObj.transform.localRotation = Quaternion.Euler(0, 180, 0);
+        footObj.transform.localPosition = new Vector3(0, -0.12f, -0.004f);
+        footObj.transform.localRotation = Quaternion.Euler(0, 180, tilt + Random.Range(-2f, 2f));
         TextMesh footTm = footObj.AddComponent<TextMesh>();
-        footTm.text = ad[3]; // e.g. "Luxury Sewage Condos from $9.99"
-        footTm.fontSize = 30;
+        footTm.text = ad[3];
+        footTm.fontSize = 28;
         footTm.characterSize = 0.008f;
         footTm.anchor = TextAnchor.MiddleCenter;
         footTm.alignment = TextAlignment.Center;
-        footTm.color = new Color(0.5f, 0.35f, 0.15f);
+        footTm.color = footCol;
 
-        // Poop emoji accent (brown sphere)
-        Material poopIconMat = MakeURPMat("Gross_PoopIcon", new Color(0.4f, 0.25f, 0.1f), 0f, 0.4f);
-        AddPrimChild(root, "PoopIcon", PrimitiveType.Sphere, new Vector3(0.2f, 0.14f, -0.01f),
-            Quaternion.identity, new Vector3(0.04f, 0.05f, 0.01f), poopIconMat);
+        // Paint drips from title (most paint = most drips)
+        Material dripMat = MakeURPMat("Gross_AdDrip", titleCol * 0.7f, 0f, 0.15f);
+        dripMat.EnableKeyword("_EMISSION");
+        dripMat.SetColor("_EmissionColor", titleCol * 0.12f);
+        EditorUtility.SetDirty(dripMat);
+        for (int d = 0; d < 4; d++)
+        {
+            float x = Random.Range(-0.15f, 0.15f);
+            float len = Random.Range(0.03f, 0.1f);
+            float thick = Random.Range(0.004f, 0.007f);
+            AddPrimChild(root, $"Drip{d}", PrimitiveType.Capsule,
+                new Vector3(x, -0.16f - d * 0.025f, -0.003f),
+                Quaternion.identity, new Vector3(thick, len, 0.003f), dripMat);
+        }
 
-        // Grime stain on corner
-        Material grimeMat = MakeURPMat("Gross_AdGrime", new Color(0.15f, 0.12f, 0.08f, 0.6f), 0f, 0.5f);
-        AddPrimChild(root, "Grime", PrimitiveType.Sphere, new Vector3(0.18f, -0.12f, -0.007f),
-            Quaternion.identity, new Vector3(0.1f, 0.08f, 0.003f), grimeMat);
-        // Water damage stain
-        AddPrimChild(root, "WaterStain", PrimitiveType.Sphere, new Vector3(-0.12f, -0.18f, -0.007f),
-            Quaternion.identity, new Vector3(0.14f, 0.06f, 0.003f), grimeMat);
+        // Splatter dots
+        Material splatMat = MakeURPMat("Gross_AdSplat", bodyCol * 0.8f, 0f, 0.2f);
+        splatMat.EnableKeyword("_EMISSION");
+        splatMat.SetColor("_EmissionColor", bodyCol * 0.08f);
+        EditorUtility.SetDirty(splatMat);
+        for (int s = 0; s < 3; s++)
+        {
+            Vector3 pos = new Vector3(Random.Range(-0.2f, 0.2f), Random.Range(-0.15f, 0.12f), -0.003f);
+            float sz = Random.Range(0.008f, 0.018f);
+            AddPrimChild(root, $"Splat{s}", PrimitiveType.Sphere, pos,
+                Quaternion.identity, new Vector3(sz, sz, 0.002f), splatMat);
+        }
 
         RemoveAllColliders(root);
-        root.transform.localScale = Vector3.one * 0.8f; // smaller - flush with pipe wall
+        root.transform.localScale = Vector3.one * 0.9f;
         GameObject prefab = PrefabUtility.SaveAsPrefabAsset(root, path);
         Object.DestroyImmediate(root);
         return prefab;
@@ -1728,7 +1798,7 @@ public class SceneBootstrapper
         // Create jump ramp prefab - angled orange ramp
         spawner.jumpRampPrefab = CreateJumpRampPrefab();
 
-        // Create bonus Sh!tcoin prefab - special big coin only reachable after ramp jumps
+        // Create bonus Fartcoin prefab - special big coin only reachable after ramp jumps
         spawner.bonusCoinPrefab = CreateBonusCoinPrefab();
     }
 
@@ -2189,17 +2259,17 @@ public class SceneBootstrapper
     }
 
     /// <summary>
-    /// Creates the Sh!tcoin collectible - a copper penny with raised $ emboss,
+    /// Creates the Fartcoin collectible - a copper penny with raised $ emboss,
     /// ridged edge, and patina. Smaller and more detailed than the old gold disc.
     /// </summary>
-    static GameObject CreateShitcoinPrefab()
+    static GameObject CreateFartcoinPrefab()
     {
         string prefabPath = "Assets/Prefabs/CornCoin.prefab";
-        GameObject root = new GameObject("Shitcoin");
+        GameObject root = new GameObject("Fartcoin");
 
-        // === MATERIALS (semi-transparent, gentle glow) ===
-        // Copper penny body - semi-transparent
-        Material copperMat = MakeURPMat("Shitcoin_Copper", new Color(0.72f, 0.45f, 0.2f, 0.6f), 0.65f, 0.7f);
+        // === MATERIALS (semi-transparent ghostly coin) ===
+        // Copper penny body - noticeably transparent
+        Material copperMat = MakeURPMat("Fartcoin_Copper", new Color(0.72f, 0.45f, 0.2f, 0.4f), 0.65f, 0.7f);
         copperMat.SetFloat("_Surface", 1f); // Transparent
         copperMat.SetFloat("_Blend", 0f);   // Alpha blend
         copperMat.SetFloat("_SrcBlend", 5f);
@@ -2212,8 +2282,8 @@ public class SceneBootstrapper
         copperMat.SetColor("_EmissionColor", new Color(0.8f, 0.5f, 0.15f) * 0.4f);
         EditorUtility.SetDirty(copperMat);
 
-        // Darker patina for the raised details - semi-transparent
-        Material patinaMat = MakeURPMat("Shitcoin_Patina", new Color(0.5f, 0.32f, 0.12f, 0.5f), 0.5f, 0.5f);
+        // Darker patina for the raised rim - semi-transparent
+        Material patinaMat = MakeURPMat("Fartcoin_Patina", new Color(0.5f, 0.32f, 0.12f, 0.35f), 0.5f, 0.5f);
         patinaMat.SetFloat("_Surface", 1f);
         patinaMat.SetFloat("_Blend", 0f);
         patinaMat.SetFloat("_SrcBlend", 5f);
@@ -2227,7 +2297,7 @@ public class SceneBootstrapper
         EditorUtility.SetDirty(patinaMat);
 
         // Gold for the $ symbol - slightly brighter but still transparent
-        Material symbolMat = MakeURPMat("Shitcoin_Symbol", new Color(1f, 0.85f, 0.25f, 0.7f), 0.8f, 0.85f);
+        Material symbolMat = MakeURPMat("Fartcoin_Symbol", new Color(1f, 0.85f, 0.25f, 0.7f), 0.8f, 0.85f);
         symbolMat.SetFloat("_Surface", 1f);
         symbolMat.SetFloat("_Blend", 0f);
         symbolMat.SetFloat("_SrcBlend", 5f);
@@ -2241,7 +2311,7 @@ public class SceneBootstrapper
         EditorUtility.SetDirty(symbolMat);
 
         // Edge ridges material - semi-transparent
-        Material ridgeMat = MakeURPMat("Shitcoin_Ridge", new Color(0.6f, 0.38f, 0.15f, 0.5f), 0.7f, 0.6f);
+        Material ridgeMat = MakeURPMat("Fartcoin_Ridge", new Color(0.6f, 0.38f, 0.15f, 0.5f), 0.7f, 0.6f);
         ridgeMat.SetFloat("_Surface", 1f);
         ridgeMat.SetFloat("_Blend", 0f);
         ridgeMat.SetFloat("_SrcBlend", 5f);
@@ -2353,11 +2423,11 @@ public class SceneBootstrapper
 
         GameObject prefab = PrefabUtility.SaveAsPrefabAsset(root, prefabPath);
         Object.DestroyImmediate(root);
-        Debug.Log("TTR: Created Sh!tcoin penny with $ emboss and ridged edge");
+        Debug.Log("TTR: Created Fartcoin penny with $ emboss and ridged edge");
         return prefab;
     }
 
-    /// <summary>Creates the bonus Sh!tcoin - bigger, flashier gold penny worth 10x. Only after ramps.</summary>
+    /// <summary>Creates the bonus Fartcoin - bigger, flashier gold penny worth 10x. Only after ramps.</summary>
     static GameObject CreateBonusCoinPrefab()
     {
         string prefabPath = "Assets/Prefabs/BonusCoin.prefab";
@@ -2473,7 +2543,7 @@ public class SceneBootstrapper
 
         GameObject prefab = PrefabUtility.SaveAsPrefabAsset(root, prefabPath);
         Object.DestroyImmediate(root);
-        Debug.Log("TTR: Created Bonus Sh!tcoin (gold penny, 10x value, post-ramp reward)");
+        Debug.Log("TTR: Created Bonus Fartcoin (gold penny, 10x value, post-ramp reward)");
         return prefab;
     }
 
@@ -2953,7 +3023,11 @@ public class SceneBootstrapper
         toothMat.EnableKeyword("_EMISSION");
         toothMat.SetColor("_EmissionColor", new Color(0.9f, 0.9f, 0.85f) * 0.3f);
         EditorUtility.SetDirty(toothMat);
-        Material lipMat = MakeURPMat("MrCorny_Lip", new Color(0.55f, 0.22f, 0.18f), 0f, 0.3f);
+        // White lips so the mouth is clearly visible on the brown poop
+        Material lipMat = MakeURPMat("MrCorny_Lip", new Color(0.95f, 0.92f, 0.88f), 0f, 0.5f);
+        lipMat.EnableKeyword("_EMISSION");
+        lipMat.SetColor("_EmissionColor", new Color(0.9f, 0.88f, 0.85f) * 0.2f);
+        EditorUtility.SetDirty(lipMat);
         Material tongueMat = MakeURPMat("MrCorny_Tongue", new Color(0.85f, 0.35f, 0.35f), 0f, 0.4f);
 
         Vector3 mouthPos = fb.frontPos - fb.upV * (fb.upExt * 0.35f);
@@ -4133,112 +4207,72 @@ public class SceneBootstrapper
 
     // ===== SEWER MINE OBSTACLE =====
     /// <summary>
-    /// Spiky sea-urchin mine with angry squinted eyes, grimacing mouth, and warning light.
+    /// Classic cartoon bomb mine that floats in the sewer water.
+    /// Round black bomb body with a lit fuse on top. The fuse spark is the warning.
+    /// Mostly submerged - only the top and fuse poke above the water surface.
     /// </summary>
     static GameObject CreateSewerMinePrefab()
     {
         string prefabPath = "Assets/Prefabs/SewerMine.prefab";
         GameObject root = new GameObject("SewerMine");
 
-        Material metalMat = MakeURPMat("Mine_Metal", new Color(0.25f, 0.25f, 0.25f), 0.7f, 0.45f);
-        Material rustMat = MakeURPMat("Mine_Rust", new Color(0.45f, 0.25f, 0.12f), 0.4f, 0.3f);
-        Material spikeMat = MakeURPMat("Mine_Spike", new Color(0.3f, 0.3f, 0.28f), 0.8f, 0.5f);
-        Material eyeMat = MakeURPMat("Mine_Eye", new Color(1f, 0.15f, 0.05f), 0f, 0.9f);
-        eyeMat.EnableKeyword("_EMISSION");
-        eyeMat.SetColor("_EmissionColor", new Color(1f, 0.1f, 0.02f) * 2.5f);
-        EditorUtility.SetDirty(eyeMat);
-        Material warnMat = MakeURPMat("Mine_Warn", new Color(1f, 0.2f, 0.1f), 0f, 0.9f);
-        warnMat.EnableKeyword("_EMISSION");
-        warnMat.SetColor("_EmissionColor", new Color(1f, 0.15f, 0.05f) * 3f);
-        EditorUtility.SetDirty(warnMat);
-        Material mouthMat = MakeURPMat("Mine_Mouth", new Color(0.05f, 0.05f, 0.04f), 0f, 0.3f);
-        Material toothMat = MakeURPMat("Mine_Teeth", new Color(0.7f, 0.7f, 0.65f), 0.5f, 0.5f);
-        Material chainMat = MakeURPMat("Mine_Chain", new Color(0.35f, 0.3f, 0.25f), 0.6f, 0.4f);
+        Material bombMat = MakeURPMat("Mine_Bomb", new Color(0.08f, 0.08f, 0.08f), 0.3f, 0.5f);
+        Material fuseTubeMat = MakeURPMat("Mine_FuseTube", new Color(0.45f, 0.35f, 0.2f), 0f, 0.3f);
+        Material fuseSparkMat = MakeURPMat("Mine_Spark", new Color(1f, 0.7f, 0.1f), 0f, 0.9f);
+        fuseSparkMat.EnableKeyword("_EMISSION");
+        fuseSparkMat.SetColor("_EmissionColor", new Color(1f, 0.5f, 0.05f) * 4f);
+        EditorUtility.SetDirty(fuseSparkMat);
+        Material metalRingMat = MakeURPMat("Mine_Ring", new Color(0.35f, 0.3f, 0.25f), 0.7f, 0.5f);
 
-        // Core sphere
-        AddPrimChild(root, "Core", PrimitiveType.Sphere, Vector3.zero,
-            Quaternion.identity, Vector3.one * 1.6f, metalMat);
-        // Rust patches
-        AddPrimChild(root, "Rust1", PrimitiveType.Sphere, new Vector3(0.3f, 0.2f, 0.5f),
-            Quaternion.identity, Vector3.one * 0.5f, rustMat);
-        AddPrimChild(root, "Rust2", PrimitiveType.Sphere, new Vector3(-0.4f, -0.3f, -0.2f),
-            Quaternion.identity, Vector3.one * 0.45f, rustMat);
+        // Main bomb body - big round black sphere
+        AddPrimChild(root, "BombBody", PrimitiveType.Sphere, Vector3.zero,
+            Quaternion.identity, Vector3.one * 1.5f, bombMat);
 
-        // Protruding spikes all around (sea urchin style)
-        int spikeCount = 0;
-        for (int lat = -2; lat <= 2; lat++)
-        {
-            float latAngle = lat * 35f * Mathf.Deg2Rad;
-            int spikesInRing = lat == 0 ? 8 : (Mathf.Abs(lat) == 1 ? 6 : 3);
-            for (int i = 0; i < spikesInRing; i++)
-            {
-                float lonAngle = (i + (lat % 2) * 0.5f) / spikesInRing * Mathf.PI * 2f;
-                float y = Mathf.Sin(latAngle) * 0.8f;
-                float r = Mathf.Cos(latAngle) * 0.8f;
-                Vector3 dir = new Vector3(Mathf.Cos(lonAngle) * r, y, Mathf.Sin(lonAngle) * r);
-                Vector3 pos = dir.normalized * 0.75f;
-                Quaternion rot = Quaternion.LookRotation(dir) * Quaternion.Euler(90, 0, 0);
-                float spikeLen = 0.25f + (spikeCount % 3) * 0.08f;
-                AddPrimChild(root, $"Spike{spikeCount++}", PrimitiveType.Capsule, pos,
-                    rot, new Vector3(0.12f, spikeLen, 0.12f), spikeMat);
-            }
-        }
+        // Metal ring around the fuse hole
+        AddPrimChild(root, "FuseRing", PrimitiveType.Cylinder,
+            new Vector3(0, 0.72f, 0), Quaternion.identity,
+            new Vector3(0.25f, 0.04f, 0.25f), metalRingMat);
 
-        // Angry squinted eyes (thin horizontal slits that glow red)
-        AddPrimChild(root, "LeftEye", PrimitiveType.Sphere,
-            new Vector3(-0.28f, 0.15f, 0.72f), Quaternion.identity,
-            new Vector3(0.25f, 0.1f, 0.1f), eyeMat);
-        AddPrimChild(root, "RightEye", PrimitiveType.Sphere,
-            new Vector3(0.28f, 0.15f, 0.72f), Quaternion.identity,
-            new Vector3(0.25f, 0.1f, 0.1f), eyeMat);
-        // Angry brow lines
-        AddPrimChild(root, "LeftBrow", PrimitiveType.Cube,
-            new Vector3(-0.28f, 0.28f, 0.73f), Quaternion.Euler(0, 0, -20),
-            new Vector3(0.28f, 0.05f, 0.05f), metalMat);
-        AddPrimChild(root, "RightBrow", PrimitiveType.Cube,
-            new Vector3(0.28f, 0.28f, 0.73f), Quaternion.Euler(0, 0, 20),
-            new Vector3(0.28f, 0.05f, 0.05f), metalMat);
+        // Fuse tube - sticks up and curves slightly
+        AddPrimChild(root, "FuseTube", PrimitiveType.Cylinder,
+            new Vector3(0, 0.85f, 0.05f), Quaternion.Euler(0, 0, 5f),
+            new Vector3(0.06f, 0.15f, 0.06f), fuseTubeMat);
 
-        // Grimacing mouth with metal teeth
-        AddPrimChild(root, "MouthBG", PrimitiveType.Sphere,
-            new Vector3(0, -0.15f, 0.72f), Quaternion.identity,
-            new Vector3(0.45f, 0.2f, 0.1f), mouthMat);
-        for (int i = 0; i < 5; i++)
-        {
-            float x = (i - 2) * 0.09f;
-            float h = (i % 2 == 0) ? 0.09f : 0.06f;
-            AddPrimChild(root, $"Tooth{i}", PrimitiveType.Cube,
-                new Vector3(x, -0.12f + (i % 2 == 0 ? 0 : -0.03f), 0.76f),
-                Quaternion.identity, new Vector3(0.06f, h, 0.04f), toothMat);
-        }
+        // Fuse tip - curly bit at the top
+        AddPrimChild(root, "FuseTip", PrimitiveType.Capsule,
+            new Vector3(0.03f, 1.0f, 0.08f), Quaternion.Euler(0, 0, 30f),
+            new Vector3(0.04f, 0.08f, 0.04f), fuseTubeMat);
 
-        // Warning light on top - pulsing red glow
+        // Fuse spark - glowing ball at the lit end (this is the "warning" element)
         AddPrimChild(root, "WarnLight", PrimitiveType.Sphere,
-            new Vector3(0, 0.9f, 0), Quaternion.identity,
-            Vector3.one * 0.2f, warnMat);
-        // Light stem
-        AddPrimChild(root, "LightStem", PrimitiveType.Cylinder,
-            new Vector3(0, 0.8f, 0), Quaternion.identity,
-            new Vector3(0.06f, 0.12f, 0.06f), metalMat);
+            new Vector3(0.06f, 1.08f, 0.1f), Quaternion.identity,
+            Vector3.one * 0.12f, fuseSparkMat);
 
-        // Chain hanging below
-        for (int i = 0; i < 4; i++)
+        // Subtle equator band (decorative ring around the middle of the bomb)
+        AddPrimChild(root, "EquatorBand", PrimitiveType.Cylinder,
+            new Vector3(0, 0, 0), Quaternion.identity,
+            new Vector3(0.78f, 0.025f, 0.78f), metalRingMat);
+
+        // Rivets around equator
+        for (int i = 0; i < 6; i++)
         {
-            AddPrimChild(root, $"Chain{i}", PrimitiveType.Cube,
-                new Vector3(0, -0.9f - i * 0.15f, 0),
-                Quaternion.Euler(0, i * 90, 0),
-                new Vector3(0.12f, 0.08f, 0.06f), chainMat);
+            float angle = i / 6f * Mathf.PI * 2f;
+            float x = Mathf.Cos(angle) * 0.74f;
+            float z = Mathf.Sin(angle) * 0.74f;
+            AddPrimChild(root, $"Rivet{i}", PrimitiveType.Sphere,
+                new Vector3(x, 0, z), Quaternion.identity,
+                Vector3.one * 0.06f, metalRingMat);
         }
 
         SphereCollider col = root.AddComponent<SphereCollider>();
-        col.isTrigger = true; col.radius = 1.0f;
+        col.isTrigger = true; col.radius = 0.85f;
         root.AddComponent<Obstacle>(); root.tag = "Obstacle";
         root.AddComponent<SewerMineBehavior>();
         root.transform.localScale = Vector3.one * 0.95f;
 
         GameObject prefab = PrefabUtility.SaveAsPrefabAsset(root, prefabPath);
         Object.DestroyImmediate(root);
-        Debug.Log("TTR: Created Sewer Mine with angry eyes, spikes, and warning light!");
+        Debug.Log("TTR: Created Sewer Mine - classic bomb with lit fuse!");
         return prefab;
     }
 
@@ -5093,7 +5127,7 @@ public class SceneBootstrapper
             gallery.RegisterAsset(o.name, o.desc, "Obstacles", o.path, 1f);
 
         // === COLLECTIBLES ===
-        gallery.RegisterAsset("Sh!tcoin", "Brown Town's official currency. Spin big and shiny like Sonic rings!",
+        gallery.RegisterAsset("Fartcoin", "Brown Town's official currency. Spin big and shiny like Sonic rings!",
             "Collectibles", "Assets/Prefabs/CornCoin.prefab", 1f);
 
         // === POWER-UPS ===
@@ -5146,8 +5180,8 @@ public class SceneBootstrapper
                 gallery.RegisterAsset(grossLabels[i], grossDescs[i], "Scenery", path, 1f);
         }
 
-        // Bonus Sh!tcoin
-        gallery.RegisterAsset("Bonus Sh!tcoin", "Special golden coin only reachable after ramp jumps. Worth 10 Sh!tcoins!",
+        // Bonus Fartcoin
+        gallery.RegisterAsset("Bonus Fartcoin", "Special golden coin only reachable after ramp jumps. Worth 10 Fartcoins!",
             "Collectibles", "Assets/Prefabs/BonusCoin.prefab", 1f);
 
         Debug.Log($"TTR: Registered gallery assets (check Gallery button on start screen)");
@@ -5229,59 +5263,152 @@ public class SceneBootstrapper
             dOut.effectDistance = new Vector2(2, -2);
         }
 
-        // Combo counter (center screen, hidden until active) - extra large and punchy
+        // Combo counter (compact — hype labels go to CheerOverlay now)
         Text comboText = MakeText(canvasObj.transform, "ComboText", "",
-            68, TextAnchor.MiddleCenter, new Color(1f, 0.9f, 0.2f),
-            new Vector2(0.5f, 0.5f), new Vector2(0, 130), new Vector2(600, 100), true);
+            42, TextAnchor.MiddleCenter, new Color(1f, 0.9f, 0.2f),
+            new Vector2(0.5f, 0.5f), new Vector2(0, 160), new Vector2(200, 60), true);
         Outline comboOutline2 = comboText.gameObject.AddComponent<Outline>();
         comboOutline2.effectColor = new Color(0, 0, 0, 0.6f);
-        comboOutline2.effectDistance = new Vector2(-3, 3);
+        comboOutline2.effectDistance = new Vector2(-2, 2);
         comboText.gameObject.SetActive(false);
 
-        // Start Panel
-        GameObject startPanel = MakePanel(canvasObj.transform, "StartPanel",
-            new Color(0.04f, 0.07f, 0.03f, 0.93f),
-            new Vector2(0.05f, 0.15f), new Vector2(0.95f, 0.85f));
+        // Start Panel - Full screen with bathroom stall splash image
+        GameObject startPanel = new GameObject("StartPanel");
+        startPanel.transform.SetParent(canvasObj.transform, false);
+        {
+            RectTransform srt = startPanel.AddComponent<RectTransform>();
+            srt.anchorMin = Vector2.zero;
+            srt.anchorMax = Vector2.one;
+            srt.offsetMin = Vector2.zero;
+            srt.offsetMax = Vector2.zero;
+        }
 
-        Text titleText = MakeStretchText(startPanel.transform, "Title", "TURD\nTUNNEL\nRUSH",
-            88, TextAnchor.MiddleCenter, new Color(1f, 0.85f, 0.1f),
-            new Vector2(0.05f, 0.48f), new Vector2(0.95f, 0.95f), true);
-        // Double outline for thick comic look
-        Outline titleOutline2 = titleText.gameObject.AddComponent<Outline>();
-        titleOutline2.effectColor = new Color(0.4f, 0.2f, 0f, 0.9f);
-        titleOutline2.effectDistance = new Vector2(4, -4);
+        // Load splash image as background
+        Image startBg = startPanel.AddComponent<Image>();
+        string splashPath = "Assets/Images/TTR_Splash.jpg";
+        TextureImporter splashImp = AssetImporter.GetAtPath(splashPath) as TextureImporter;
+        if (splashImp != null && splashImp.textureType != TextureImporterType.Sprite)
+        {
+            splashImp.textureType = TextureImporterType.Sprite;
+            splashImp.spriteImportMode = SpriteImportMode.Single;
+            splashImp.maxTextureSize = 2048;
+            splashImp.SaveAndReimport();
+        }
+        Sprite splashSprite = AssetDatabase.LoadAssetAtPath<Sprite>(splashPath);
+        if (splashSprite != null)
+        {
+            startBg.sprite = splashSprite;
+            startBg.color = Color.white;
+            startBg.type = Image.Type.Simple;
+            startBg.preserveAspect = false;
+        }
+        else
+        {
+            startBg.color = new Color(0.04f, 0.07f, 0.03f, 0.93f);
+        }
 
-        MakeStretchText(startPanel.transform, "Subtitle", "Sewer Surf Showdown",
-            32, TextAnchor.MiddleCenter, new Color(0.5f, 0.85f, 0.35f),
-            new Vector2(0.1f, 0.38f), new Vector2(0.9f, 0.5f), true);
+        // === Metal plate bolted to the stall door (lower door area) ===
+        // Image shows a metal sign plate at ~53-65% from top (Unity Y anchors 0.35-0.47)
+        GameObject metalPlate = new GameObject("MetalPlate");
+        metalPlate.transform.SetParent(startPanel.transform, false);
+        {
+            RectTransform prt = metalPlate.AddComponent<RectTransform>();
+            prt.anchorMin = new Vector2(0.14f, 0.35f);
+            prt.anchorMax = new Vector2(0.86f, 0.47f);
+            prt.offsetMin = Vector2.zero;
+            prt.offsetMax = Vector2.zero;
+        }
+        Image plateImg = metalPlate.AddComponent<Image>();
+        plateImg.color = new Color(0.42f, 0.40f, 0.37f, 0.92f);
 
-        Button startButton = MakeButton(startPanel.transform, "StartButton", "FLUSH!",
-            46, new Color(0.15f, 0.55f, 0.1f), Color.white,
-            new Vector2(0.2f, 0.12f), new Vector2(0.8f, 0.3f));
+        // Corner bolts on the metal plate
+        Vector2[] boltAnchors = {
+            new Vector2(0.03f, 0.82f), new Vector2(0.97f, 0.82f),
+            new Vector2(0.03f, 0.18f), new Vector2(0.97f, 0.18f)
+        };
+        foreach (var bp in boltAnchors)
+        {
+            GameObject bolt = new GameObject("Bolt");
+            bolt.transform.SetParent(metalPlate.transform, false);
+            RectTransform brt = bolt.AddComponent<RectTransform>();
+            brt.anchorMin = new Vector2(bp.x - 0.02f, bp.y - 0.08f);
+            brt.anchorMax = new Vector2(bp.x + 0.02f, bp.y + 0.08f);
+            brt.offsetMin = Vector2.zero;
+            brt.offsetMax = Vector2.zero;
+            Image boltImg = bolt.AddComponent<Image>();
+            boltImg.color = new Color(0.55f, 0.52f, 0.48f);
+        }
 
-        MakeStretchText(startPanel.transform, "HintText", "or press SPACE",
-            22, TextAnchor.MiddleCenter, new Color(0.45f, 0.45f, 0.4f),
-            new Vector2(0.25f, 0.06f), new Vector2(0.75f, 0.11f), false);
+        // "Poop Alone" button (left half = Single Player / Start)
+        Button startButton = MakeButton(metalPlate.transform, "StartButton", "Poop\nAlone",
+            36, new Color(0.50f, 0.48f, 0.44f, 0.95f), Color.white,
+            new Vector2(0.02f, 0.06f), new Vector2(0.48f, 0.94f));
+        // Extra thick outline for bold sticker look
+        {
+            Text lbl = startButton.GetComponentInChildren<Text>();
+            if (lbl != null)
+            {
+                Outline o2 = lbl.gameObject.AddComponent<Outline>();
+                o2.effectColor = new Color(0f, 0f, 0f, 0.9f);
+                o2.effectDistance = new Vector2(3, -3);
+            }
+        }
 
-        // Wallet display on start screen
-        Text startWalletText = MakeStretchText(startPanel.transform, "StartWallet", "0 coins",
-            24, TextAnchor.MiddleRight, new Color(1f, 0.85f, 0.2f),
-            new Vector2(0.5f, 0.88f), new Vector2(0.95f, 0.97f), false);
+        // Red divider stripe between the two buttons
+        GameObject divider = new GameObject("Divider");
+        divider.transform.SetParent(metalPlate.transform, false);
+        {
+            RectTransform drt = divider.AddComponent<RectTransform>();
+            drt.anchorMin = new Vector2(0.49f, 0.10f);
+            drt.anchorMax = new Vector2(0.51f, 0.90f);
+            drt.offsetMin = Vector2.zero;
+            drt.offsetMax = Vector2.zero;
+        }
+        divider.AddComponent<Image>().color = new Color(0.65f, 0.12f, 0.08f);
 
-        // Daily challenge on start screen
-        Text challengeText = MakeStretchText(startPanel.transform, "ChallengeText", "DAILY: ...",
-            20, TextAnchor.MiddleCenter, new Color(1f, 0.85f, 0.3f),
-            new Vector2(0.05f, 0.3f), new Vector2(0.95f, 0.38f), false);
+        // "Poop With Friends" button (right half = Sewer Tour / Multiplayer)
+        Button tourButton = MakeButton(metalPlate.transform, "TourButton", "Poop With\nFriends",
+            32, new Color(0.12f, 0.12f, 0.12f, 0.95f), Color.white,
+            new Vector2(0.52f, 0.06f), new Vector2(0.98f, 0.94f));
+        // Extra thick outline for bold sticker look
+        {
+            Text lbl = tourButton.GetComponentInChildren<Text>();
+            if (lbl != null)
+            {
+                Outline o2 = lbl.gameObject.AddComponent<Outline>();
+                o2.effectColor = new Color(0f, 0f, 0f, 0.9f);
+                o2.effectDistance = new Vector2(3, -3);
+            }
+        }
 
-        // Shop button on start screen (left half)
+        // === Sticker-style buttons on upper door ===
+
+        // SHOP sticker (upper-left of door, tilted like a stuck-on tag)
         Button shopButton = MakeButton(startPanel.transform, "ShopButton", "SHOP",
-            28, new Color(0.6f, 0.45f, 0.1f), Color.white,
-            new Vector2(0.05f, 0.0f), new Vector2(0.48f, 0.06f));
+            24, new Color(0.65f, 0.50f, 0.12f, 0.92f), Color.white,
+            new Vector2(0.08f, 0.72f), new Vector2(0.30f, 0.78f));
+        shopButton.transform.localRotation = Quaternion.Euler(0, 0, -3f);
 
-        // Gallery button on start screen (right half)
+        // GALLERY sticker (upper-right of door)
         Button galleryButton = MakeButton(startPanel.transform, "GalleryButton", "GALLERY",
-            28, new Color(0.15f, 0.4f, 0.55f), Color.white,
-            new Vector2(0.52f, 0.0f), new Vector2(0.95f, 0.06f));
+            22, new Color(0.15f, 0.42f, 0.58f, 0.92f), Color.white,
+            new Vector2(0.62f, 0.70f), new Vector2(0.88f, 0.76f));
+        galleryButton.transform.localRotation = Quaternion.Euler(0, 0, 2f);
+
+        // Wallet/Fartcoin count (small display above the metal plate)
+        Text startWalletText = MakeStretchText(startPanel.transform, "StartWallet", "0 Fartcoins",
+            20, TextAnchor.MiddleCenter, new Color(1f, 0.85f, 0.2f),
+            new Vector2(0.30f, 0.48f), new Vector2(0.70f, 0.53f), true);
+
+        // Daily challenge text (below the door, subtle on dark area)
+        Text challengeText = MakeStretchText(startPanel.transform, "ChallengeText", "DAILY: ...",
+            16, TextAnchor.MiddleCenter, new Color(1f, 0.85f, 0.3f, 0.7f),
+            new Vector2(0.15f, 0.27f), new Vector2(0.85f, 0.32f), true);
+
+        // "or press SPACE" hint at very bottom
+        MakeStretchText(startPanel.transform, "HintText", "or press SPACE",
+            18, TextAnchor.MiddleCenter, new Color(0.7f, 0.7f, 0.65f, 0.5f),
+            new Vector2(0.25f, 0.02f), new Vector2(0.75f, 0.06f), false);
 
         // Shop Panel (hidden by default)
         GameObject shopPanel = MakePanel(canvasObj.transform, "ShopPanel",
@@ -5340,8 +5467,8 @@ public class SceneBootstrapper
             new Vector2(0.02f, 0.78f), new Vector2(0.18f, 0.84f), true);
         multiplierText.gameObject.SetActive(false);
 
-        // "SH!TCOINS" label
-        Text coinLabel = MakeStretchText(canvasObj.transform, "CoinLabel", "SH!TCOINS",
+        // "FARTCOINS" label
+        Text coinLabel = MakeStretchText(canvasObj.transform, "CoinLabel", "FARTCOINS",
             20, TextAnchor.LowerRight, new Color(0.85f, 0.6f, 0.15f, 0.85f),
             new Vector2(0.68f, 0.675f), new Vector2(0.88f, 0.71f), true);
 
@@ -5410,6 +5537,7 @@ public class SceneBootstrapper
         ui.startWalletText = startWalletText;
         ui.shopButton = shopButton;
         ui.galleryButton = galleryButton;
+        ui.tourButton = tourButton;
         ui.shopPanel = shopPanel;
         ui.shopContent = shopContentObj.transform;
         ui.shopCloseButton = shopCloseButton;
@@ -5422,6 +5550,62 @@ public class SceneBootstrapper
         ui.coinCountText = coinCountText;
 
         return ui;
+    }
+
+    // ===== CHEER OVERLAY (Poop Crew Live) =====
+    static void CreateCheerOverlay(GameObject canvas)
+    {
+        // Fullscreen passthrough container — poops self-build in Start()
+        GameObject container = new GameObject("CheerOverlay");
+        container.transform.SetParent(canvas.transform, false);
+        RectTransform rt = container.AddComponent<RectTransform>();
+        rt.anchorMin = Vector2.zero;
+        rt.anchorMax = Vector2.one;
+        rt.offsetMin = Vector2.zero;
+        rt.offsetMax = Vector2.zero;
+        container.AddComponent<CheerOverlay>();
+    }
+
+    // ===== SEWER TOUR =====
+    static void CreateSewerTour(TurdController player, PipeGenerator pipeGen)
+    {
+        GameObject obj = new GameObject("SewerTour");
+        SewerTour tour = obj.AddComponent<SewerTour>();
+        tour.player = player;
+        tour.pipeGen = pipeGen;
+
+        // Grab prefab references from existing spawners
+        ObstacleSpawner obs = Object.FindFirstObjectByType<ObstacleSpawner>();
+        if (obs != null)
+        {
+            tour.obstaclePrefabs = obs.obstaclePrefabs;
+            tour.coinPrefab = obs.coinPrefab;
+            tour.gratePrefab = obs.gratePrefab;
+            tour.bigAirRampPrefab = obs.bigAirRampPrefab;
+            tour.dropZonePrefab = obs.dropZonePrefab;
+        }
+
+        PowerUpSpawner pus = Object.FindFirstObjectByType<PowerUpSpawner>();
+        if (pus != null)
+        {
+            tour.speedBoostPrefab = pus.speedBoostPrefab;
+            tour.jumpRampPrefab = pus.jumpRampPrefab;
+            tour.bonusCoinPrefab = pus.bonusCoinPrefab;
+        }
+
+        ScenerySpawner ss = Object.FindFirstObjectByType<ScenerySpawner>();
+        if (ss != null)
+        {
+            tour.sceneryPrefabs = ss.sceneryPrefabs;
+            tour.grossPrefabs = ss.grossPrefabs;
+            tour.signPrefabs = ss.signPrefabs;
+        }
+
+        WaterCreatureSpawner wcs = Object.FindFirstObjectByType<WaterCreatureSpawner>();
+        if (wcs != null)
+            tour.squirtPrefab = wcs.squirtPrefab;
+
+        Debug.Log("TTR: Created Sewer Tour with all prefab references wired.");
     }
 
     // ===== UI HELPERS =====

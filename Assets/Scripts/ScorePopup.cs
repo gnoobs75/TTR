@@ -3,8 +3,9 @@ using UnityEngine.UI;
 using System.Collections.Generic;
 
 /// <summary>
-/// Floating score popup system. Shows "+200 FLIP!" "+50 STOMP!" etc.
-/// at the point of action, rising and fading. Pooled for performance.
+/// Comical floating score popup system. Shows "+200 FLIP!" "+50 STOMP!" etc.
+/// with big bold styling, scale punch, rotation wobble, and shake for impact.
+/// Pooled for performance.
 /// </summary>
 public class ScorePopup : MonoBehaviour
 {
@@ -16,10 +17,15 @@ public class ScorePopup : MonoBehaviour
     {
         public GameObject obj;
         public Text text;
+        public Outline outline;
         public float spawnTime;
         public float lifetime;
         public Vector3 worldPos;
         public Vector3 velocity;
+        public float startScale;
+        public float wobbleAngle;
+        public float wobbleSpeed;
+        public Color baseColor;
     }
 
     private Canvas _canvas;
@@ -28,13 +34,13 @@ public class ScorePopup : MonoBehaviour
     private Queue<GameObject> _pool = new Queue<GameObject>();
     private Font _font;
 
-    // Colors per type
-    static readonly Color CoinColor = new Color(1f, 0.9f, 0.2f);
-    static readonly Color NearMissColor = new Color(0.3f, 1f, 0.9f);
-    static readonly Color TrickColor = new Color(1f, 0.4f, 1f);
-    static readonly Color StompColor = new Color(1f, 0.6f, 0.1f);
-    static readonly Color MilestoneColor = new Color(1f, 1f, 1f);
-    static readonly Color ComboColor = new Color(0.4f, 1f, 0.4f);
+    // Bold comic colors
+    static readonly Color CoinColor = new Color(1f, 0.92f, 0.15f);
+    static readonly Color NearMissColor = new Color(0.1f, 1f, 0.85f);
+    static readonly Color TrickColor = new Color(1f, 0.25f, 0.9f);
+    static readonly Color StompColor = new Color(1f, 0.5f, 0f);
+    static readonly Color MilestoneColor = new Color(1f, 1f, 0.6f);
+    static readonly Color ComboColor = new Color(0.3f, 1f, 0.3f);
 
     void Awake()
     {
@@ -56,7 +62,7 @@ public class ScorePopup : MonoBehaviour
         canvasObj.AddComponent<CanvasScaler>();
 
         // Pre-pool some popup objects
-        for (int i = 0; i < 10; i++)
+        for (int i = 0; i < 15; i++)
             _pool.Enqueue(CreatePopupObject());
     }
 
@@ -65,20 +71,25 @@ public class ScorePopup : MonoBehaviour
         GameObject obj = new GameObject("Popup");
         obj.transform.SetParent(_canvas.transform, false);
         RectTransform rt = obj.AddComponent<RectTransform>();
-        rt.sizeDelta = new Vector2(300, 50);
+        rt.sizeDelta = new Vector2(400, 80);
 
         Text txt = obj.AddComponent<Text>();
         txt.font = _font;
-        txt.fontSize = 32;
+        txt.fontSize = 42;
         txt.alignment = TextAnchor.MiddleCenter;
         txt.horizontalOverflow = HorizontalWrapMode.Overflow;
         txt.verticalOverflow = VerticalWrapMode.Overflow;
         txt.fontStyle = FontStyle.Bold;
 
-        // Outline for readability
+        // Thick black outline for comic book readability
         Outline outline = obj.AddComponent<Outline>();
-        outline.effectColor = new Color(0, 0, 0, 0.8f);
-        outline.effectDistance = new Vector2(2, -2);
+        outline.effectColor = new Color(0, 0, 0, 1f);
+        outline.effectDistance = new Vector2(3, -3);
+
+        // Second outline for extra thickness
+        Outline outline2 = obj.AddComponent<Outline>();
+        outline2.effectColor = new Color(0, 0, 0, 0.7f);
+        outline2.effectDistance = new Vector2(-2, 2);
 
         obj.SetActive(false);
         return obj;
@@ -93,8 +104,10 @@ public class ScorePopup : MonoBehaviour
             obj = CreatePopupObject();
 
         Text txt = obj.GetComponent<Text>();
-        txt.text = message;
-        txt.fontSize = Mathf.RoundToInt(32 * scale);
+        int baseFontSize = 42;
+
+        // Scale up font size for impact
+        txt.fontSize = Mathf.RoundToInt(baseFontSize * scale);
 
         Color col;
         switch (type)
@@ -107,57 +120,79 @@ public class ScorePopup : MonoBehaviour
             case PopupType.Combo: col = ComboColor; break;
             default: col = Color.white; break;
         }
+        txt.text = message;
         txt.color = col;
 
         obj.SetActive(true);
-        obj.transform.localScale = Vector3.one * 1.5f; // start big, shrink to 1
+
+        float wobbleAngle = Random.Range(-15f, 15f);
+        float wobbleSpeed = Random.Range(8f, 14f);
+
+        obj.transform.localScale = Vector3.one * 2.2f; // start big for punch-in
+        obj.transform.localRotation = Quaternion.Euler(0, 0, wobbleAngle);
 
         _active.Add(new ActivePopup
         {
             obj = obj,
             text = txt,
+            outline = obj.GetComponent<Outline>(),
             spawnTime = Time.time,
-            lifetime = type == PopupType.Milestone ? 2.5f : 1.2f,
+            lifetime = type == PopupType.Milestone ? 2.5f : 1.4f,
             worldPos = worldPosition,
-            velocity = Vector3.up * 2f + Random.insideUnitSphere * 0.3f
+            velocity = Vector3.up * 2.5f + Random.insideUnitSphere * 0.4f,
+            startScale = scale,
+            wobbleAngle = wobbleAngle,
+            wobbleSpeed = wobbleSpeed,
+            baseColor = col
         });
     }
 
-    // Convenience methods
+    // Convenience methods with comical text
     public void ShowCoin(Vector3 pos, int amount)
     {
-        Show($"+{amount}", pos, PopupType.Coin, 0.8f);
+        string[] coinWords = { "FARTCOIN!", "YOINK!", "SHINY!", "LOOT!", "FILTHY LUCRE!", "SWEET!" };
+        string word = coinWords[Random.Range(0, coinWords.Length)];
+        Show($"+{amount} {word}", pos, PopupType.Coin, 0.85f);
     }
 
     public void ShowTrick(Vector3 pos, string trickName, int points)
     {
-        Show($"+{points} {trickName}!", pos, PopupType.Trick, 1.3f);
+        Show($"+{points}\n{trickName}!", pos, PopupType.Trick, 1.4f);
+        CheerOverlay.Instance?.ShowCheer($"{trickName}! +{points}", TrickColor);
     }
 
     public void ShowStomp(Vector3 pos, int combo, int points)
     {
-        string label = combo > 1 ? $"STOMP x{combo}!" : "STOMP!";
-        Show($"+{points} {label}", pos, PopupType.Stomp, 1f + combo * 0.15f);
+        string[] stompWords = { "SQUASH!", "SPLAT!", "CRUSHED!", "FLATTENED!", "STOMPED!" };
+        string word = stompWords[Mathf.Min(combo - 1, stompWords.Length - 1)];
+        if (combo > 1) word = $"x{combo} {word}";
+        Show($"+{points}\n{word}", pos, PopupType.Stomp, 1.1f + combo * 0.2f);
+        CheerOverlay.Instance?.ShowCheer($"{word} +{points}", StompColor, combo >= 3);
     }
 
     public void ShowNearMiss(Vector3 pos, int bonus)
     {
-        Show($"+{bonus} CLOSE!", pos, PopupType.NearMiss);
+        string[] nearWords = { "CLOSE!", "WHEW!", "YIKES!", "SCARY!", "ALMOST!" };
+        string word = nearWords[Random.Range(0, nearWords.Length)];
+        Show($"+{bonus} {word}", pos, PopupType.NearMiss, 1.0f);
     }
 
     public void ShowMilestone(Vector3 pos, string name)
     {
-        Show(name, pos, PopupType.Milestone, 1.8f);
+        Show(name, pos, PopupType.Milestone, 2.0f);
+        CheerOverlay.Instance?.ShowCheer(name, MilestoneColor, true);
     }
 
     public void ShowCombo(Vector3 pos, int combo)
     {
         string label;
         if (combo >= 20) label = "INSANE!";
+        else if (combo >= 15) label = "BONKERS!";
         else if (combo >= 10) label = "EPIC!";
+        else if (combo >= 7) label = "RADICAL!";
         else if (combo >= 5) label = "SICK!";
         else label = "COMBO!";
-        Show($"{combo}x {label}", pos, PopupType.Combo, 1f + combo * 0.05f);
+        Show($"{combo}x\n{label}", pos, PopupType.Combo, 1.1f + combo * 0.06f);
     }
 
     void Update()
@@ -182,9 +217,9 @@ public class ScorePopup : MonoBehaviour
                 continue;
             }
 
-            // Move world position upward
+            // Move world position upward with deceleration
             p.worldPos += p.velocity * Time.deltaTime;
-            p.velocity *= 0.97f; // slow down
+            p.velocity *= 0.96f;
             _active[i] = p;
 
             // Project to screen
@@ -194,13 +229,31 @@ public class ScorePopup : MonoBehaviour
             p.obj.SetActive(true);
             p.obj.GetComponent<RectTransform>().position = screenPos;
 
-            // Scale: pop in then settle
-            float scaleT = t < 0.15f ? Mathf.Lerp(1.5f, 1f, t / 0.15f) : 1f;
+            // Scale: BIG punch-in then settle with slight bounce
+            float scaleT;
+            if (t < 0.1f)
+                scaleT = Mathf.Lerp(2.2f, 0.85f, t / 0.1f); // overshoot small
+            else if (t < 0.2f)
+                scaleT = Mathf.Lerp(0.85f, 1.05f, (t - 0.1f) / 0.1f); // bounce back
+            else if (t < 0.25f)
+                scaleT = Mathf.Lerp(1.05f, 1f, (t - 0.2f) / 0.05f); // settle
+            else
+                scaleT = 1f;
+
             p.obj.transform.localScale = Vector3.one * scaleT;
 
-            // Fade out in last 40%
-            Color c = p.text.color;
-            c.a = t > 0.6f ? Mathf.Lerp(1f, 0f, (t - 0.6f) / 0.4f) : 1f;
+            // Wobble rotation - starts strong, decays
+            float wobbleDecay = 1f - Mathf.Clamp01(t * 2f);
+            float rot = p.wobbleAngle * wobbleDecay * Mathf.Sin(elapsed * p.wobbleSpeed);
+            p.obj.transform.localRotation = Quaternion.Euler(0, 0, rot);
+
+            // Color: flash white at start then settle to base
+            Color c = p.baseColor;
+            if (t < 0.08f)
+                c = Color.Lerp(Color.white, p.baseColor, t / 0.08f);
+
+            // Fade out in last 35%
+            c.a = t > 0.65f ? Mathf.Lerp(1f, 0f, (t - 0.65f) / 0.35f) : 1f;
             p.text.color = c;
         }
     }

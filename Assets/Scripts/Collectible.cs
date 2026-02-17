@@ -1,7 +1,7 @@
 using UnityEngine;
 
 /// <summary>
-/// Sh!tcoin collectible. Stands upright and spins like Sonic rings.
+/// Fartcoin collectible. Stands upright and spins like Sonic rings.
 /// Big, bright, and unmissable Brown Town currency.
 /// </summary>
 [RequireComponent(typeof(Collider))]

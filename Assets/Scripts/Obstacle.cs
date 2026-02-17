@@ -8,7 +8,7 @@ using UnityEngine;
 public class Obstacle : MonoBehaviour
 {
     public float rotateSpeed = 30f;
-    public bool doesRotate = true;
+    public bool doesRotate = false;
 
     [Header("Near Miss")]
     public float nearMissMultiplier = 1.8f;

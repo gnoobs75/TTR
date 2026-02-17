@@ -34,10 +34,10 @@ public class HairWadBehavior : ObstacleBehavior
             _strands[i].localRotation = Quaternion.Euler(sway, sway * 0.3f, sway * 0.5f);
         }
 
-        // Drip wobble (whole body jiggles like gelatin)
+        // Drip wobble (whole body jiggles like gelatin) — oscillates, doesn't drift
         float jiggleX = CreatureAnimUtils.OrganicWobble(t, 1.1f, 1.7f, 0.015f, 0.008f);
         float jiggleZ = CreatureAnimUtils.OrganicWobble(t + 1f, 0.9f, 1.5f, 0.015f, 0.008f);
-        transform.localPosition += new Vector3(jiggleX, 0, jiggleZ) * Time.deltaTime;
+        transform.localScale = _originalScale * (1f + (jiggleX + jiggleZ) * 0.5f);
 
         // Mouth open/close slowly (breathing)
         if (_mouth != null)

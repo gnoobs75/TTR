@@ -2,22 +2,26 @@ using UnityEngine;
 
 /// <summary>
 /// Spinning toilet seat speed boost that doubles player speed for 5 seconds when touched.
-/// Spins, bobs, and pulses with glowing porcelain energy.
+/// Stands upright and spins like a Sonic ring, bobs, and pulses with glowing energy.
 /// </summary>
 public class SpeedBoost : MonoBehaviour
 {
     public float speedMultiplier = 2f;
     public float duration = 5f;
     public float pulseSpeed = 3f;
-    public float spinSpeed = 90f;       // degrees per second
-    public float bobAmplitude = 0.15f;  // meters up/down
+    public float spinSpeed = 180f;      // degrees per second
+    public float bobAmplitude = 0.2f;   // meters up/down
     public float bobSpeed = 2f;         // cycles per second
+    public float floatHeight = 0.5f;    // float off surface
 
     private Renderer[] _renderers;
+    private Renderer[] _arrowRenderers;
     private Color[] _baseEmissions;
     private bool _used = false;
-    private Vector3 _startPos;
+    private Vector3 _startLocalPos;
     private float _bobPhase;
+    private float _arrowTimer;
+    private Quaternion _baseRotation;
 
     void Start()
     {
@@ -32,22 +36,35 @@ public class SpeedBoost : MonoBehaviour
             }
         }
 
-        _startPos = transform.localPosition;
+        // Float off the pipe surface
+        transform.position += transform.up * floatHeight;
+
+        _startLocalPos = transform.localPosition;
         _bobPhase = Random.Range(0f, Mathf.PI * 2f);
+        _baseRotation = transform.rotation;
+
+        // Find arrow renderers for sequential chase animation
+        var arrows = new System.Collections.Generic.List<Renderer>();
+        foreach (var r in GetComponentsInChildren<Renderer>())
+        {
+            if (r.gameObject.name.StartsWith("BoostArrow"))
+                arrows.Add(r);
+        }
+        _arrowRenderers = arrows.ToArray();
     }
 
     void Update()
     {
         if (_used) return;
 
-        // Spinning rotation around local Y
-        transform.Rotate(Vector3.up, spinSpeed * Time.deltaTime, Space.Self);
+        // Stand upright and spin like a Sonic ring
+        float spin = Time.time * spinSpeed;
+        transform.rotation = _baseRotation * Quaternion.Euler(90f, spin, 0f);
 
         // Bobbing hover
         float bob = Mathf.Sin(Time.time * bobSpeed * Mathf.PI * 2f + _bobPhase) * bobAmplitude;
-        Vector3 pos = _startPos;
-        pos.y += bob;
-        transform.localPosition = pos;
+        if (transform.parent != null)
+            transform.localPosition = _startLocalPos + transform.parent.InverseTransformDirection(Vector3.up) * bob;
 
         // Pulsing glow on all renderers
         float pulse = (Mathf.Sin(Time.time * pulseSpeed) + 1f) * 0.5f;
@@ -56,6 +73,21 @@ public class SpeedBoost : MonoBehaviour
             if (_renderers[i] == null) continue;
             Color glow = _baseEmissions[i] * (1f + pulse * 2f);
             _renderers[i].material.SetColor("_EmissionColor", glow);
+        }
+
+        // Sequential arrow chase animation
+        if (_arrowRenderers != null && _arrowRenderers.Length > 0)
+        {
+            _arrowTimer += Time.deltaTime;
+            for (int i = 0; i < _arrowRenderers.Length; i++)
+            {
+                int pairIdx = i / 2;
+                float phase = (_arrowTimer * 3.5f - pairIdx * 0.35f) % 1f;
+                float brightness = Mathf.Max(0.2f, Mathf.Pow(Mathf.Max(0, 1f - phase * 2f), 2f));
+                Color emitColor = new Color(0.1f, 0.9f, 1f) * (5f * brightness);
+                if (_arrowRenderers[i] != null && _arrowRenderers[i].material != null)
+                    _arrowRenderers[i].material.SetColor("_EmissionColor", emitColor);
+            }
         }
     }
 

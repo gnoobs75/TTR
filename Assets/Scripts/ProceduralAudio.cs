@@ -52,6 +52,8 @@ public class ProceduralAudio : MonoBehaviour
     private AudioClip _waterGush;
     private AudioClip _waterfallSplash;
     private AudioClip _waterDrip;
+    private AudioClip _waterSplosh;  // comic water entry
+    private AudioClip _waterPloop;   // comic water exit
 
     // New feature sounds
     private AudioClip _zoneTransition;
@@ -347,6 +349,37 @@ public class ProceduralAudio : MonoBehaviour
             return (plop * 0.5f + splash) * 0.45f;
         });
 
+        // Water splosh: comical fat body hitting water (bassy thwap + splash)
+        _waterSplosh = GenerateClip("WaterSplosh", 0.45f, (t, dur) =>
+        {
+            float env = t < 0.03f ? t / 0.03f : Mathf.Exp(-t * 8f);
+            // Big bassy impact
+            float bass = Mathf.Sin(2f * Mathf.PI * 80f * t) * 0.6f * Mathf.Exp(-t * 12f);
+            // Water splash noise burst
+            float splash = Mathf.Sin(t * 7654f) * Mathf.Cos(t * 3210f) * 0.4f * Mathf.Exp(-t * 6f);
+            // Descending "splooosh" tone
+            float sploshFreq = Mathf.Lerp(500f, 120f, t / dur);
+            float splosh = Mathf.Sin(2f * Mathf.PI * sploshFreq * t) * 0.3f * env;
+            // Bubbles after impact
+            float bubbles = Mathf.Sin(2f * Mathf.PI * 350f * t) * Mathf.Max(0, Mathf.Sin(t * 25f)) * 0.15f * Mathf.Max(0, t - 0.1f) * 4f;
+            return (bass + splash + splosh + bubbles) * 0.6f;
+        });
+
+        // Water ploop: comical popping out of water (rising pitch pop + drip)
+        _waterPloop = GenerateClip("WaterPloop", 0.35f, (t, dur) =>
+        {
+            float env = t < 0.02f ? t / 0.02f : Mathf.Exp(-t * 10f);
+            // Rising "ploop!" pop
+            float freq = Mathf.Lerp(200f, 800f, Mathf.Min(t * 8f, 1f));
+            float pop = Mathf.Sin(2f * Mathf.PI * freq * t) * 0.5f * env;
+            // Quick suction release
+            float suction = Mathf.Sin(2f * Mathf.PI * 150f * t) * 0.3f * Mathf.Exp(-t * 20f);
+            // Tiny water drops falling back
+            float drips = Mathf.Sin(2f * Mathf.PI * (600f + Mathf.Sin(t * 30f) * 200f) * t)
+                * 0.15f * Mathf.Max(0, t - 0.15f) * 3f * Mathf.Exp(-(t - 0.15f) * 8f);
+            return (pop + suction + drips) * 0.55f;
+        });
+
         // Zone transition: deep rumbling shift with rising tone
         _zoneTransition = GenerateClip("ZoneTransition", 0.8f, (t, dur) =>
         {
@@ -533,6 +566,8 @@ public class ProceduralAudio : MonoBehaviour
     public void PlayWaterGush() => PlaySFX(_waterGush, 0.6f);
     public void PlayWaterfallSplash() => PlaySFX(_waterfallSplash, 0.5f);
     public void PlayWaterDrip() => PlaySFX(_waterDrip, 0.35f);
+    public void PlayWaterSplosh() => PlaySFX(_waterSplosh, 0.7f);
+    public void PlayWaterPloop() => PlaySFX(_waterPloop, 0.6f);
 
     // New feature sounds
     public void PlayZoneTransition() => PlaySFX(_zoneTransition, 0.7f);

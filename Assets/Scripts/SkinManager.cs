@@ -27,9 +27,12 @@ public class SkinManager : MonoBehaviour
             var bodyRenderers = new System.Collections.Generic.List<Renderer>();
             foreach (var r in allRenderers)
             {
-                // Skip face features (eyes, mustache, hats, etc.) which are Unity primitives.
-                // FBX body mesh has imported mesh names, while face features use built-in
-                // primitive meshes named "Sphere", "Capsule", "Cube", "Quad", "Cylinder".
+                // Skip face features AND corn kernels (kernels keep their yellow color)
+                string goName = r.gameObject.name;
+                if (goName.Contains("Eye") || goName.Contains("Pupil") || goName.Contains("Mustache")
+                    || goName.Contains("Mouth") || goName.Contains("CornKernel"))
+                    continue;
+
                 MeshFilter mf = r.GetComponent<MeshFilter>();
                 if (mf != null && mf.sharedMesh != null)
                 {

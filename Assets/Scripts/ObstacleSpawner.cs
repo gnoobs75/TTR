@@ -150,21 +150,41 @@ public class ObstacleSpawner : MonoBehaviour
             angleDeg = Random.Range(60f, 120f);
         }
 
-        float angle = angleDeg * Mathf.Deg2Rad;
-        float spawnRadius = pipeRadius * Random.Range(0.55f, 0.75f);
-
-        Vector3 pos = center + (right * Mathf.Cos(angle) + up * Mathf.Sin(angle)) * spawnRadius;
-
         // Cycle through obstacle types to guarantee variety
         _obstacleIndex = (_obstacleIndex + 1) % obstaclePrefabs.Length;
         GameObject prefab = obstaclePrefabs[_obstacleIndex];
 
+        // Mines always float in the water at the pipe bottom
+        bool isMine = prefab.GetComponent<SewerMineBehavior>() != null;
+        if (isMine)
+        {
+            angleDeg = 270f + Random.Range(-20f, 20f); // water level at bottom
+        }
+
+        float angle = angleDeg * Mathf.Deg2Rad;
+        // Mines float near the water surface (closer to pipe wall = lower in water)
+        float spawnRadius = isMine
+            ? pipeRadius * 0.82f  // at water surface level
+            : pipeRadius * Random.Range(0.55f, 0.75f);
+
+        Vector3 pos = center + (right * Mathf.Cos(angle) + up * Mathf.Sin(angle)) * spawnRadius;
+
         // Orient obstacle: face forward along pipe, "up" points inward toward pipe center
         // This makes obstacles sit naturally on any surface (floor, walls, ceiling)
+        // For mines: orient upright so fuse points up (toward pipe center)
         Vector3 inward = (center - pos).normalized;
-        Quaternion rot = Quaternion.LookRotation(forward, inward);
+        Quaternion rot;
+        if (isMine)
+            rot = Quaternion.LookRotation(forward, inward);
+        else
+            rot = Quaternion.LookRotation(forward, inward);
         GameObject obj = Instantiate(prefab, pos, rot, transform);
         _spawnedObjects.Add(obj);
+
+        // Pass actual spawn distance to rat for accurate orbit
+        SewerRatBehavior rat = obj.GetComponent<SewerRatBehavior>();
+        if (rat != null)
+            rat.spawnDistToCenter = spawnRadius;
     }
 
     void SpawnCoinTrailAlongPath(float startDist)

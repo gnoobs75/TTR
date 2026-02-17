@@ -1,4 +1,5 @@
 using UnityEngine;
+using System.Collections;
 using System.Collections.Generic;
 
 /// <summary>
@@ -33,6 +34,12 @@ public class WaterAnimator : MonoBehaviour
     public int bubbleRate = 5;
     public int currentLineRate = 8;
 
+    [Header("Floating Poop Buddies")]
+    public int maxFloatingPoops = 8;
+    public float poopSpawnInterval = 3f;
+    public float poopDriftSpeed = 2f;
+    public float poopLifetime = 20f;
+
     [Header("Player")]
     public Transform player;
 
@@ -59,6 +66,17 @@ public class WaterAnimator : MonoBehaviour
     private ParticleSystem _bubblePS;
     private ParticleSystem _currentLinePS;
 
+    // Enhanced water interaction particles
+    private ParticleSystem _entryPlumePS;   // big upward splash burst on entry
+    private ParticleSystem _exitDripsPS;    // murky drips falling off poop on exit
+    private ParticleSystem _rippleRingPS;   // expanding rings on water surface
+    private ParticleSystem _bowWavePS;      // front-facing wedge pushing water aside
+    private ParticleSystem _sludgeCurtainPS; // thick curtain of murk kicked up behind
+
+    // Water interaction state
+    private bool _wasInWaterLocal = false;
+    private float _waterEntryTime = 0f;
+
     // Floating debris
     struct DebrisObj
     {
@@ -76,6 +94,26 @@ public class WaterAnimator : MonoBehaviour
     private Material _foamClusterMat;
     private Material _duckMat;
 
+    // Floating poop buddies
+    struct FloatingPoop
+    {
+        public GameObject obj;
+        public Transform leftEye;
+        public Transform rightEye;
+        public Transform mouth;
+        public float pathDist;
+        public float lateralOffset;
+        public float spawnTime;
+        public float bobPhase;      // random phase offset for bobbing
+        public float wobbleSpeed;   // unique wobble speed
+        public int faceType;        // 0=happy, 1=derp, 2=worried, 3=sleeping
+    }
+    private List<FloatingPoop> _floatingPoops = new List<FloatingPoop>();
+    private float _poopSpawnTimer;
+    private Material _poopBodyMat;
+    private Material _poopEyeWhiteMat;
+    private Material _poopPupilMat;
+
     void Start()
     {
         if (player != null) _tc = player.GetComponent<TurdController>();
@@ -88,6 +126,16 @@ public class WaterAnimator : MonoBehaviour
         CreateFoamParticles();
         CreateBubbleParticles();
         CreateCurrentLineParticles();
+
+        // Enhanced water interaction effects
+        CreateEntryPlume();
+        CreateExitDrips();
+        CreateRippleRing();
+        CreateBowWave();
+        CreateSludgeCurtain();
+
+        // Floating poop buddy materials
+        CreatePoopBuddyMaterials();
     }
 
     void Update()
@@ -106,6 +154,7 @@ public class WaterAnimator : MonoBehaviour
         HandleSplash();
         UpdateDebris();
         UpdateSurfaceEffects();
+        UpdateFloatingPoops();
     }
 
     // === WATER MESH ANIMATION ===
@@ -641,8 +690,64 @@ public class WaterAnimator : MonoBehaviour
         float angleDelta = Mathf.Abs(Mathf.DeltaAngle(_tc.CurrentAngle, 270f));
         bool inWater = angleDelta < splashAngleThreshold;
 
+        // --- WATER ENTRY ---
+        if (inWater && !_wasInWaterLocal)
+        {
+            _waterEntryTime = Time.time;
+            Vector3 splashPos = player.position + Vector3.down * 0.05f;
+
+            // Big upward plume of murky water
+            if (_entryPlumePS != null)
+            {
+                _entryPlumePS.gameObject.SetActive(true);
+                _entryPlumePS.transform.position = splashPos;
+                _entryPlumePS.Emit(Random.Range(25, 40));
+            }
+
+            // Expanding ripple ring on surface
+            if (_rippleRingPS != null)
+            {
+                _rippleRingPS.gameObject.SetActive(true);
+                _rippleRingPS.transform.position = splashPos;
+                _rippleRingPS.Emit(Random.Range(8, 14));
+            }
+
+            // Regular splash too
+            if (_splashPS != null)
+            {
+                _splashPS.gameObject.SetActive(true);
+                _splashPS.transform.position = splashPos;
+                _splashPS.Emit(Random.Range(8, 15));
+            }
+        }
+
+        // --- WATER EXIT ---
+        if (!inWater && _wasInWaterLocal)
+        {
+            // Drips falling off the poop
+            if (_exitDripsPS != null)
+            {
+                _exitDripsPS.gameObject.SetActive(true);
+                _exitDripsPS.transform.SetParent(player);
+                _exitDripsPS.transform.localPosition = Vector3.down * 0.15f;
+                _exitDripsPS.Play();
+                // Stop after a short time
+                StartCoroutine(StopAfterDelay(_exitDripsPS, 1.5f));
+            }
+
+            // Exit ripple ring
+            if (_rippleRingPS != null)
+            {
+                _rippleRingPS.gameObject.SetActive(true);
+                _rippleRingPS.transform.position = player.position + Vector3.down * 0.1f;
+                _rippleRingPS.Emit(Random.Range(5, 8));
+            }
+        }
+
+        // --- WHILE IN WATER ---
         if (inWater)
         {
+            // Wake behind player
             if (_wakePS != null)
             {
                 if (!_wakePS.isPlaying)
@@ -653,6 +758,39 @@ public class WaterAnimator : MonoBehaviour
                 _wakePS.transform.position = player.position + Vector3.down * 0.1f;
             }
 
+            // Bow wave at front of player
+            if (_bowWavePS != null)
+            {
+                if (!_bowWavePS.isPlaying)
+                {
+                    _bowWavePS.gameObject.SetActive(true);
+                    _bowWavePS.Play();
+                }
+                _bowWavePS.transform.position = player.position + player.forward * 0.25f + Vector3.down * 0.08f;
+                _bowWavePS.transform.rotation = Quaternion.LookRotation(player.forward, Vector3.up);
+            }
+
+            // Sludge curtain kicked up behind at higher speeds
+            if (_sludgeCurtainPS != null && _tc.CurrentSpeed > 5f)
+            {
+                if (!_sludgeCurtainPS.isPlaying)
+                {
+                    _sludgeCurtainPS.gameObject.SetActive(true);
+                    _sludgeCurtainPS.Play();
+                }
+                _sludgeCurtainPS.transform.position = player.position - player.forward * 0.3f + Vector3.down * 0.05f;
+                _sludgeCurtainPS.transform.rotation = Quaternion.LookRotation(-player.forward, Vector3.up);
+
+                // Scale emission rate with speed
+                var em = _sludgeCurtainPS.emission;
+                em.rateOverTime = Mathf.Lerp(8f, 30f, (_tc.CurrentSpeed - 5f) / 8f);
+            }
+            else if (_sludgeCurtainPS != null && _sludgeCurtainPS.isPlaying && _tc.CurrentSpeed <= 5f)
+            {
+                _sludgeCurtainPS.Stop();
+            }
+
+            // Periodic splashes while moving through water
             if (_tc.CurrentSpeed > 4f && Time.time - _lastSplashTime > splashCooldown)
             {
                 _lastSplashTime = Time.time;
@@ -666,8 +804,21 @@ public class WaterAnimator : MonoBehaviour
         }
         else
         {
-            if (_wakePS != null && _wakePS.isPlaying)
-                _wakePS.Stop();
+            if (_wakePS != null && _wakePS.isPlaying) _wakePS.Stop();
+            if (_bowWavePS != null && _bowWavePS.isPlaying) _bowWavePS.Stop();
+            if (_sludgeCurtainPS != null && _sludgeCurtainPS.isPlaying) _sludgeCurtainPS.Stop();
+        }
+
+        _wasInWaterLocal = inWater;
+    }
+
+    System.Collections.IEnumerator StopAfterDelay(ParticleSystem ps, float delay)
+    {
+        yield return new WaitForSeconds(delay);
+        if (ps != null)
+        {
+            ps.Stop();
+            ps.transform.SetParent(transform);
         }
     }
 
@@ -680,32 +831,39 @@ public class WaterAnimator : MonoBehaviour
         _splashPS = go.AddComponent<ParticleSystem>();
 
         var main = _splashPS.main;
-        main.maxParticles = 50;
-        main.startLifetime = new ParticleSystem.MinMaxCurve(0.3f, 0.6f);
-        main.startSpeed = new ParticleSystem.MinMaxCurve(1f, 3f);
-        main.startSize = new ParticleSystem.MinMaxCurve(0.02f, 0.06f);
+        main.maxParticles = 80;
+        main.startLifetime = new ParticleSystem.MinMaxCurve(0.4f, 0.8f);
+        main.startSpeed = new ParticleSystem.MinMaxCurve(2f, 5f);
+        main.startSize = new ParticleSystem.MinMaxCurve(0.015f, 0.05f);
         main.startColor = new ParticleSystem.MinMaxGradient(
-            new Color(0.25f, 0.35f, 0.12f, 0.8f),
-            new Color(0.15f, 0.25f, 0.05f, 0.6f));
+            new Color(0.2f, 0.3f, 0.08f, 0.85f),
+            new Color(0.12f, 0.2f, 0.04f, 0.6f));
         main.loop = false;
         main.playOnAwake = false;
         main.simulationSpace = ParticleSystemSimulationSpace.World;
-        main.gravityModifier = 1.5f;
+        main.gravityModifier = 2.0f; // heavy gravity for arcing droplets
 
         var emission = _splashPS.emission;
         emission.rateOverTime = 0;
 
         var shape = _splashPS.shape;
         shape.shapeType = ParticleSystemShapeType.Hemisphere;
-        shape.radius = 0.15f;
+        shape.radius = 0.2f;
 
         var sizeOverLife = _splashPS.sizeOverLifetime;
         sizeOverLife.enabled = true;
         sizeOverLife.size = new ParticleSystem.MinMaxCurve(1f,
-            AnimationCurve.EaseInOut(0f, 1f, 1f, 0f));
+            new AnimationCurve(
+                new Keyframe(0f, 0.6f),
+                new Keyframe(0.3f, 1f),
+                new Keyframe(1f, 0f)));
 
+        // Stretch along velocity so they look like water droplets, not circles
         var renderer = go.GetComponent<ParticleSystemRenderer>();
-        renderer.material = MakeParticleMat(new Color(0.2f, 0.3f, 0.1f, 0.7f));
+        renderer.renderMode = ParticleSystemRenderMode.Stretch;
+        renderer.lengthScale = 2.5f;
+        renderer.velocityScale = 0.08f;
+        renderer.material = MakeParticleMat(new Color(0.18f, 0.28f, 0.08f, 0.8f));
 
         go.SetActive(false);
     }
@@ -717,49 +875,655 @@ public class WaterAnimator : MonoBehaviour
         _wakePS = go.AddComponent<ParticleSystem>();
 
         var main = _wakePS.main;
-        main.maxParticles = 80;
-        main.startLifetime = new ParticleSystem.MinMaxCurve(0.4f, 0.8f);
-        main.startSpeed = new ParticleSystem.MinMaxCurve(0.2f, 0.8f);
-        main.startSize = new ParticleSystem.MinMaxCurve(0.03f, 0.08f);
+        main.maxParticles = 120;
+        main.startLifetime = new ParticleSystem.MinMaxCurve(0.5f, 1.0f);
+        main.startSpeed = new ParticleSystem.MinMaxCurve(0.5f, 1.5f);
+        main.startSize = new ParticleSystem.MinMaxCurve(0.04f, 0.12f);
         main.startColor = new ParticleSystem.MinMaxGradient(
-            new Color(0.3f, 0.4f, 0.15f, 0.5f),
-            new Color(0.2f, 0.3f, 0.08f, 0.3f));
+            new Color(0.22f, 0.32f, 0.1f, 0.6f),
+            new Color(0.15f, 0.25f, 0.06f, 0.35f));
         main.loop = true;
         main.playOnAwake = false;
         main.simulationSpace = ParticleSystemSimulationSpace.World;
-        main.gravityModifier = 0.3f;
+        main.gravityModifier = 0.15f; // slight gravity for settling
 
         var emission = _wakePS.emission;
-        emission.rateOverTime = 25;
+        emission.rateOverTime = 35;
 
+        // V-shaped wake spreading outward behind player
         var shape = _wakePS.shape;
         shape.shapeType = ParticleSystemShapeType.Cone;
-        shape.angle = 25f;
-        shape.radius = 0.2f;
+        shape.angle = 40f; // wider V-shape
+        shape.radius = 0.15f;
 
         var sizeOverLife = _wakePS.sizeOverLifetime;
         sizeOverLife.enabled = true;
         sizeOverLife.size = new ParticleSystem.MinMaxCurve(1f,
-            AnimationCurve.EaseInOut(0f, 0.5f, 1f, 0f));
+            new AnimationCurve(
+                new Keyframe(0f, 0.3f),
+                new Keyframe(0.2f, 1f),
+                new Keyframe(1f, 0f)));
 
         var colorOverLife = _wakePS.colorOverLifetime;
         colorOverLife.enabled = true;
         Gradient grad = new Gradient();
         grad.SetKeys(
             new[] {
-                new GradientColorKey(new Color(0.3f, 0.4f, 0.15f), 0f),
-                new GradientColorKey(new Color(0.2f, 0.3f, 0.08f), 1f)
+                new GradientColorKey(new Color(0.25f, 0.35f, 0.1f), 0f),
+                new GradientColorKey(new Color(0.15f, 0.22f, 0.05f), 1f)
             },
             new[] {
-                new GradientAlphaKey(0.5f, 0f),
+                new GradientAlphaKey(0.6f, 0f),
+                new GradientAlphaKey(0.3f, 0.5f),
                 new GradientAlphaKey(0f, 1f)
             });
         colorOverLife.color = grad;
 
         var renderer = go.GetComponent<ParticleSystemRenderer>();
-        renderer.material = MakeParticleMat(new Color(0.25f, 0.35f, 0.1f, 0.5f));
+        renderer.material = MakeParticleMat(new Color(0.2f, 0.3f, 0.08f, 0.55f));
 
         go.SetActive(false);
+    }
+
+    // === ENHANCED WATER INTERACTION PARTICLES ===
+
+    void CreateEntryPlume()
+    {
+        var go = new GameObject("EntryPlume");
+        go.transform.SetParent(transform);
+        _entryPlumePS = go.AddComponent<ParticleSystem>();
+
+        var main = _entryPlumePS.main;
+        main.maxParticles = 100;
+        main.startLifetime = new ParticleSystem.MinMaxCurve(0.5f, 1.2f);
+        main.startSpeed = new ParticleSystem.MinMaxCurve(3f, 8f); // big upward burst
+        main.startSize = new ParticleSystem.MinMaxCurve(0.02f, 0.08f);
+        main.startColor = new ParticleSystem.MinMaxGradient(
+            new Color(0.18f, 0.28f, 0.06f, 0.9f),  // thick murky green
+            new Color(0.25f, 0.35f, 0.1f, 0.7f));
+        main.loop = false;
+        main.playOnAwake = false;
+        main.simulationSpace = ParticleSystemSimulationSpace.World;
+        main.gravityModifier = 2.5f; // heavy - arcs up then comes crashing down
+
+        var emission = _entryPlumePS.emission;
+        emission.rateOverTime = 0;
+
+        // Upward-facing hemisphere burst
+        var shape = _entryPlumePS.shape;
+        shape.shapeType = ParticleSystemShapeType.Hemisphere;
+        shape.radius = 0.25f;
+
+        var sizeOverLife = _entryPlumePS.sizeOverLifetime;
+        sizeOverLife.enabled = true;
+        sizeOverLife.size = new ParticleSystem.MinMaxCurve(1f,
+            new AnimationCurve(
+                new Keyframe(0f, 0.4f),
+                new Keyframe(0.15f, 1f),
+                new Keyframe(0.6f, 0.7f),
+                new Keyframe(1f, 0f)));
+
+        // Stretch along velocity for droplet trails
+        var renderer = go.GetComponent<ParticleSystemRenderer>();
+        renderer.renderMode = ParticleSystemRenderMode.Stretch;
+        renderer.lengthScale = 3f;
+        renderer.velocityScale = 0.1f;
+        renderer.material = MakeParticleMat(new Color(0.15f, 0.25f, 0.05f, 0.85f));
+
+        go.SetActive(false);
+    }
+
+    void CreateExitDrips()
+    {
+        var go = new GameObject("ExitDrips");
+        go.transform.SetParent(transform);
+        _exitDripsPS = go.AddComponent<ParticleSystem>();
+
+        var main = _exitDripsPS.main;
+        main.maxParticles = 40;
+        main.startLifetime = new ParticleSystem.MinMaxCurve(0.3f, 0.8f);
+        main.startSpeed = new ParticleSystem.MinMaxCurve(0.1f, 0.5f);
+        main.startSize = new ParticleSystem.MinMaxCurve(0.01f, 0.03f);
+        main.startColor = new ParticleSystem.MinMaxGradient(
+            new Color(0.2f, 0.3f, 0.08f, 0.8f),
+            new Color(0.15f, 0.22f, 0.05f, 0.5f));
+        main.loop = true;
+        main.playOnAwake = false;
+        main.simulationSpace = ParticleSystemSimulationSpace.World;
+        main.gravityModifier = 3f; // heavy drips fall fast
+
+        var emission = _exitDripsPS.emission;
+        emission.rateOverTime = 20;
+
+        // Emit from around the player shape
+        var shape = _exitDripsPS.shape;
+        shape.shapeType = ParticleSystemShapeType.Sphere;
+        shape.radius = 0.2f;
+
+        var sizeOverLife = _exitDripsPS.sizeOverLifetime;
+        sizeOverLife.enabled = true;
+        sizeOverLife.size = new ParticleSystem.MinMaxCurve(1f,
+            new AnimationCurve(
+                new Keyframe(0f, 1f),
+                new Keyframe(0.5f, 0.6f),
+                new Keyframe(0.9f, 0.3f),
+                new Keyframe(1f, 0f)));
+
+        // Stretch to look like dripping strands
+        var renderer = go.GetComponent<ParticleSystemRenderer>();
+        renderer.renderMode = ParticleSystemRenderMode.Stretch;
+        renderer.lengthScale = 4f;
+        renderer.velocityScale = 0.15f;
+        renderer.material = MakeParticleMat(new Color(0.18f, 0.25f, 0.06f, 0.7f));
+
+        go.SetActive(false);
+    }
+
+    void CreateRippleRing()
+    {
+        var go = new GameObject("RippleRing");
+        go.transform.SetParent(transform);
+        _rippleRingPS = go.AddComponent<ParticleSystem>();
+
+        var main = _rippleRingPS.main;
+        main.maxParticles = 30;
+        main.startLifetime = new ParticleSystem.MinMaxCurve(0.6f, 1.0f);
+        main.startSpeed = new ParticleSystem.MinMaxCurve(1.5f, 3f); // expand outward
+        main.startSize = new ParticleSystem.MinMaxCurve(0.03f, 0.06f);
+        main.startColor = new ParticleSystem.MinMaxGradient(
+            new Color(0.3f, 0.4f, 0.15f, 0.6f),
+            new Color(0.4f, 0.5f, 0.2f, 0.4f));
+        main.loop = false;
+        main.playOnAwake = false;
+        main.simulationSpace = ParticleSystemSimulationSpace.World;
+        main.gravityModifier = 0f; // stays on water surface
+
+        var emission = _rippleRingPS.emission;
+        emission.rateOverTime = 0;
+
+        // Ring shape - particles expand outward from center
+        var shape = _rippleRingPS.shape;
+        shape.shapeType = ParticleSystemShapeType.Circle;
+        shape.radius = 0.1f;
+        shape.arc = 360f;
+        shape.radiusThickness = 0f; // emit from edge only = ring
+
+        var sizeOverLife = _rippleRingPS.sizeOverLifetime;
+        sizeOverLife.enabled = true;
+        sizeOverLife.size = new ParticleSystem.MinMaxCurve(1f,
+            new AnimationCurve(
+                new Keyframe(0f, 0.5f),
+                new Keyframe(0.3f, 1.2f),
+                new Keyframe(1f, 0f)));
+
+        var colorOverLife = _rippleRingPS.colorOverLifetime;
+        colorOverLife.enabled = true;
+        Gradient grad = new Gradient();
+        grad.SetKeys(
+            new[] {
+                new GradientColorKey(new Color(0.35f, 0.45f, 0.2f), 0f),
+                new GradientColorKey(new Color(0.2f, 0.3f, 0.1f), 1f)
+            },
+            new[] {
+                new GradientAlphaKey(0.6f, 0f),
+                new GradientAlphaKey(0.4f, 0.3f),
+                new GradientAlphaKey(0f, 1f)
+            });
+        colorOverLife.color = grad;
+
+        // Stretch horizontally for ring-like appearance
+        var renderer = go.GetComponent<ParticleSystemRenderer>();
+        renderer.renderMode = ParticleSystemRenderMode.Stretch;
+        renderer.lengthScale = 1.5f;
+        renderer.velocityScale = 0.2f;
+        renderer.material = MakeParticleMat(new Color(0.3f, 0.4f, 0.15f, 0.5f));
+
+        go.SetActive(false);
+    }
+
+    void CreateBowWave()
+    {
+        var go = new GameObject("BowWave");
+        go.transform.SetParent(transform);
+        _bowWavePS = go.AddComponent<ParticleSystem>();
+
+        var main = _bowWavePS.main;
+        main.maxParticles = 60;
+        main.startLifetime = new ParticleSystem.MinMaxCurve(0.3f, 0.6f);
+        main.startSpeed = new ParticleSystem.MinMaxCurve(1f, 2.5f);
+        main.startSize = new ParticleSystem.MinMaxCurve(0.02f, 0.06f);
+        main.startColor = new ParticleSystem.MinMaxGradient(
+            new Color(0.25f, 0.38f, 0.12f, 0.7f),
+            new Color(0.18f, 0.28f, 0.08f, 0.45f));
+        main.loop = true;
+        main.playOnAwake = false;
+        main.simulationSpace = ParticleSystemSimulationSpace.World;
+        main.gravityModifier = 0.8f;
+
+        var emission = _bowWavePS.emission;
+        emission.rateOverTime = 20;
+
+        // Forward-facing wedge shape
+        var shape = _bowWavePS.shape;
+        shape.shapeType = ParticleSystemShapeType.Cone;
+        shape.angle = 55f; // wide V at front
+        shape.radius = 0.08f;
+
+        var sizeOverLife = _bowWavePS.sizeOverLifetime;
+        sizeOverLife.enabled = true;
+        sizeOverLife.size = new ParticleSystem.MinMaxCurve(1f,
+            AnimationCurve.EaseInOut(0f, 0.8f, 1f, 0f));
+
+        var colorOverLife = _bowWavePS.colorOverLifetime;
+        colorOverLife.enabled = true;
+        Gradient grad = new Gradient();
+        grad.SetKeys(
+            new[] {
+                new GradientColorKey(new Color(0.28f, 0.4f, 0.15f), 0f),
+                new GradientColorKey(new Color(0.15f, 0.22f, 0.06f), 1f)
+            },
+            new[] {
+                new GradientAlphaKey(0.7f, 0f),
+                new GradientAlphaKey(0f, 1f)
+            });
+        colorOverLife.color = grad;
+
+        var renderer = go.GetComponent<ParticleSystemRenderer>();
+        renderer.material = MakeParticleMat(new Color(0.22f, 0.35f, 0.1f, 0.6f));
+
+        go.SetActive(false);
+    }
+
+    void CreateSludgeCurtain()
+    {
+        var go = new GameObject("SludgeCurtain");
+        go.transform.SetParent(transform);
+        _sludgeCurtainPS = go.AddComponent<ParticleSystem>();
+
+        var main = _sludgeCurtainPS.main;
+        main.maxParticles = 100;
+        main.startLifetime = new ParticleSystem.MinMaxCurve(0.6f, 1.2f);
+        main.startSpeed = new ParticleSystem.MinMaxCurve(1f, 3f);
+        main.startSize = new ParticleSystem.MinMaxCurve(0.03f, 0.1f);
+        main.startColor = new ParticleSystem.MinMaxGradient(
+            new Color(0.15f, 0.22f, 0.05f, 0.75f),  // thick dark sludge
+            new Color(0.22f, 0.3f, 0.08f, 0.5f));
+        main.loop = true;
+        main.playOnAwake = false;
+        main.simulationSpace = ParticleSystemSimulationSpace.World;
+        main.gravityModifier = 1.5f; // arcs up then falls back
+
+        var emission = _sludgeCurtainPS.emission;
+        emission.rateOverTime = 15; // dynamic - scaled with speed in HandleSplash
+
+        // Fan out behind player
+        var shape = _sludgeCurtainPS.shape;
+        shape.shapeType = ParticleSystemShapeType.Cone;
+        shape.angle = 35f;
+        shape.radius = 0.15f;
+
+        var sizeOverLife = _sludgeCurtainPS.sizeOverLifetime;
+        sizeOverLife.enabled = true;
+        sizeOverLife.size = new ParticleSystem.MinMaxCurve(1f,
+            new AnimationCurve(
+                new Keyframe(0f, 0.5f),
+                new Keyframe(0.2f, 1f),
+                new Keyframe(0.7f, 0.8f),
+                new Keyframe(1f, 0f)));
+
+        var colorOverLife = _sludgeCurtainPS.colorOverLifetime;
+        colorOverLife.enabled = true;
+        Gradient grad = new Gradient();
+        grad.SetKeys(
+            new[] {
+                new GradientColorKey(new Color(0.18f, 0.25f, 0.06f), 0f),
+                new GradientColorKey(new Color(0.1f, 0.15f, 0.03f), 1f)
+            },
+            new[] {
+                new GradientAlphaKey(0.75f, 0f),
+                new GradientAlphaKey(0.4f, 0.4f),
+                new GradientAlphaKey(0f, 1f)
+            });
+        colorOverLife.color = grad;
+
+        // Stretch for sludge spray look
+        var renderer = go.GetComponent<ParticleSystemRenderer>();
+        renderer.renderMode = ParticleSystemRenderMode.Stretch;
+        renderer.lengthScale = 2f;
+        renderer.velocityScale = 0.1f;
+        renderer.material = MakeParticleMat(new Color(0.15f, 0.2f, 0.04f, 0.7f));
+
+        go.SetActive(false);
+    }
+
+    // === FLOATING POOP BUDDIES ===
+
+    void CreatePoopBuddyMaterials()
+    {
+        Shader toonLit = Shader.Find("Custom/ToonLit");
+        Shader lit = toonLit != null ? toonLit : Shader.Find("Universal Render Pipeline/Lit");
+        if (lit == null) lit = Shader.Find("Standard");
+
+        _poopBodyMat = new Material(lit);
+        _poopBodyMat.SetColor("_BaseColor", new Color(0.4f, 0.25f, 0.1f));
+        _poopBodyMat.SetFloat("_Smoothness", 0.65f);
+        _poopBodyMat.SetFloat("_Metallic", 0.05f);
+
+        _poopEyeWhiteMat = new Material(lit);
+        _poopEyeWhiteMat.SetColor("_BaseColor", new Color(0.95f, 0.95f, 0.92f));
+        _poopEyeWhiteMat.SetFloat("_Smoothness", 0.8f);
+
+        _poopPupilMat = new Material(lit);
+        _poopPupilMat.SetColor("_BaseColor", new Color(0.05f, 0.05f, 0.05f));
+        _poopPupilMat.SetFloat("_Smoothness", 0.9f);
+    }
+
+    void UpdateFloatingPoops()
+    {
+        if (_tc == null || _pipeGen == null) return;
+        if (GameManager.Instance != null && !GameManager.Instance.isPlaying) return;
+
+        float playerDist = _tc.DistanceTraveled;
+        float pipeRadius = _pipeGen.pipeRadius;
+
+        // Spawn new poop buddies
+        _poopSpawnTimer -= Time.deltaTime;
+        if (_poopSpawnTimer <= 0f && _floatingPoops.Count < maxFloatingPoops)
+        {
+            _poopSpawnTimer = poopSpawnInterval + Random.Range(-0.5f, 1f);
+            SpawnFloatingPoop(playerDist);
+        }
+
+        // Update existing poop buddies
+        for (int i = _floatingPoops.Count - 1; i >= 0; i--)
+        {
+            var fp = _floatingPoops[i];
+            if (fp.obj == null) { _floatingPoops.RemoveAt(i); continue; }
+
+            // Drift forward
+            fp.pathDist += poopDriftSpeed * Time.deltaTime;
+
+            // Get pipe position
+            Vector3 center, forward, right, up;
+            _pipeGen.GetPathFrame(fp.pathDist, out center, out forward, out right, out up);
+
+            float waterHeight = -pipeRadius * 0.82f;
+            Vector3 waterCenter = center + up * waterHeight;
+            float waterWidth = pipeRadius * 0.65f;
+
+            Vector3 pos = waterCenter + right * fp.lateralOffset * waterWidth;
+
+            // Bob with waves + unique phase
+            float wave = Mathf.Sin(pos.x * waveFrequency + _time * waveSpeed * 2f + fp.bobPhase) * waveAmplitude;
+            wave += Mathf.Sin(pos.z * secondaryWaveFreq + _time * waveSpeed * 3.5f + fp.bobPhase) * secondaryWaveAmp;
+            pos.y += wave + 0.04f; // float on surface
+
+            fp.obj.transform.position = pos;
+
+            // Organic wobble rotation - each poop wobbles differently
+            float wobbleX = Mathf.Sin(_time * fp.wobbleSpeed + fp.bobPhase) * 8f;
+            float wobbleZ = Mathf.Sin(_time * fp.wobbleSpeed * 0.7f + fp.bobPhase * 1.3f) * 6f;
+            float driftYaw = Mathf.Sin(_time * 0.5f + fp.bobPhase) * 20f;
+            fp.obj.transform.rotation = Quaternion.LookRotation(forward, Vector3.up)
+                * Quaternion.Euler(wobbleX, driftYaw, wobbleZ);
+
+            // Animate eyes - look around randomly, blink occasionally
+            AnimatePoopFace(fp);
+
+            _floatingPoops[i] = fp;
+
+            // Cleanup
+            if (Time.time - fp.spawnTime > poopLifetime || fp.pathDist < playerDist - 25f)
+            {
+                Destroy(fp.obj);
+                _floatingPoops.RemoveAt(i);
+            }
+        }
+    }
+
+    void SpawnFloatingPoop(float playerDist)
+    {
+        float spawnDist = playerDist + Random.Range(20f, 45f);
+        float lateral = Random.Range(-0.6f, 0.6f);
+        int faceType = Random.Range(0, 4);
+
+        GameObject poop = CreatePoopBuddyMesh(faceType);
+        if (poop == null) return;
+        poop.transform.SetParent(transform);
+
+        // Find eye transforms
+        Transform leftEye = poop.transform.Find("LeftEye");
+        Transform rightEye = poop.transform.Find("RightEye");
+        Transform mouth = poop.transform.Find("Mouth");
+
+        _floatingPoops.Add(new FloatingPoop
+        {
+            obj = poop,
+            leftEye = leftEye,
+            rightEye = rightEye,
+            mouth = mouth,
+            pathDist = spawnDist,
+            lateralOffset = lateral,
+            spawnTime = Time.time,
+            bobPhase = Random.Range(0f, Mathf.PI * 2f),
+            wobbleSpeed = Random.Range(1.5f, 3f),
+            faceType = faceType
+        });
+    }
+
+    GameObject CreatePoopBuddyMesh(int faceType)
+    {
+        var root = new GameObject("PoopBuddy");
+
+        // Poop body - stacked spheres like classic poop emoji
+        float scale = Random.Range(0.06f, 0.1f);
+
+        // Bottom blob (widest)
+        var bottom = GameObject.CreatePrimitive(PrimitiveType.Sphere);
+        bottom.name = "Bottom";
+        bottom.transform.SetParent(root.transform);
+        bottom.transform.localPosition = Vector3.zero;
+        bottom.transform.localScale = new Vector3(scale, scale * 0.55f, scale);
+        bottom.GetComponent<Renderer>().material = _poopBodyMat;
+        Object.Destroy(bottom.GetComponent<Collider>());
+
+        // Middle blob
+        var middle = GameObject.CreatePrimitive(PrimitiveType.Sphere);
+        middle.name = "Middle";
+        middle.transform.SetParent(root.transform);
+        middle.transform.localPosition = new Vector3(scale * 0.05f, scale * 0.35f, 0);
+        middle.transform.localScale = new Vector3(scale * 0.8f, scale * 0.45f, scale * 0.8f);
+        middle.GetComponent<Renderer>().material = _poopBodyMat;
+        Object.Destroy(middle.GetComponent<Collider>());
+
+        // Top blob (smallest, offset)
+        var top = GameObject.CreatePrimitive(PrimitiveType.Sphere);
+        top.name = "Top";
+        top.transform.SetParent(root.transform);
+        top.transform.localPosition = new Vector3(-scale * 0.05f, scale * 0.6f, 0);
+        top.transform.localScale = new Vector3(scale * 0.55f, scale * 0.4f, scale * 0.55f);
+        top.GetComponent<Renderer>().material = _poopBodyMat;
+        Object.Destroy(top.GetComponent<Collider>());
+
+        // Tip (curly)
+        var tip = GameObject.CreatePrimitive(PrimitiveType.Sphere);
+        tip.name = "Tip";
+        tip.transform.SetParent(root.transform);
+        tip.transform.localPosition = new Vector3(-scale * 0.12f, scale * 0.82f, scale * 0.02f);
+        tip.transform.localScale = new Vector3(scale * 0.3f, scale * 0.25f, scale * 0.3f);
+        tip.transform.localRotation = Quaternion.Euler(0, 0, 20f);
+        tip.GetComponent<Renderer>().material = _poopBodyMat;
+        Object.Destroy(tip.GetComponent<Collider>());
+
+        // === EYES ===
+        float eyeSize = scale * 0.22f;
+        float eyeHeight = scale * 0.45f;
+        float eyeSpread = scale * 0.22f;
+        float eyeForward = scale * 0.38f;
+
+        // Left eye
+        var leftEyeObj = new GameObject("LeftEye");
+        leftEyeObj.transform.SetParent(root.transform);
+        leftEyeObj.transform.localPosition = new Vector3(-eyeSpread, eyeHeight, eyeForward);
+
+        var leftWhite = GameObject.CreatePrimitive(PrimitiveType.Sphere);
+        leftWhite.name = "White";
+        leftWhite.transform.SetParent(leftEyeObj.transform);
+        leftWhite.transform.localPosition = Vector3.zero;
+        leftWhite.transform.localScale = Vector3.one * eyeSize;
+        leftWhite.GetComponent<Renderer>().material = _poopEyeWhiteMat;
+        Object.Destroy(leftWhite.GetComponent<Collider>());
+
+        var leftPupil = GameObject.CreatePrimitive(PrimitiveType.Sphere);
+        leftPupil.name = "Pupil";
+        leftPupil.transform.SetParent(leftEyeObj.transform);
+        leftPupil.transform.localPosition = new Vector3(0, 0, eyeSize * 0.35f);
+        leftPupil.transform.localScale = Vector3.one * eyeSize * 0.55f;
+        leftPupil.GetComponent<Renderer>().material = _poopPupilMat;
+        Object.Destroy(leftPupil.GetComponent<Collider>());
+
+        // Right eye
+        var rightEyeObj = new GameObject("RightEye");
+        rightEyeObj.transform.SetParent(root.transform);
+        rightEyeObj.transform.localPosition = new Vector3(eyeSpread, eyeHeight, eyeForward);
+
+        var rightWhite = GameObject.CreatePrimitive(PrimitiveType.Sphere);
+        rightWhite.name = "White";
+        rightWhite.transform.SetParent(rightEyeObj.transform);
+        rightWhite.transform.localPosition = Vector3.zero;
+        rightWhite.transform.localScale = Vector3.one * eyeSize;
+        rightWhite.GetComponent<Renderer>().material = _poopEyeWhiteMat;
+        Object.Destroy(rightWhite.GetComponent<Collider>());
+
+        var rightPupil = GameObject.CreatePrimitive(PrimitiveType.Sphere);
+        rightPupil.name = "Pupil";
+        rightPupil.transform.SetParent(rightEyeObj.transform);
+        rightPupil.transform.localPosition = new Vector3(0, 0, eyeSize * 0.35f);
+        rightPupil.transform.localScale = Vector3.one * eyeSize * 0.55f;
+        rightPupil.GetComponent<Renderer>().material = _poopPupilMat;
+        Object.Destroy(rightPupil.GetComponent<Collider>());
+
+        // Face type variations: adjust eye size/position
+        switch (faceType)
+        {
+            case 1: // Derp - one eye bigger, cross-eyed
+                leftWhite.transform.localScale = Vector3.one * eyeSize * 1.3f;
+                leftPupil.transform.localPosition = new Vector3(eyeSize * 0.15f, -eyeSize * 0.1f, eyeSize * 0.4f);
+                rightPupil.transform.localPosition = new Vector3(-eyeSize * 0.2f, eyeSize * 0.05f, eyeSize * 0.4f);
+                break;
+            case 2: // Worried - eyes slightly higher, tilted
+                leftEyeObj.transform.localPosition += Vector3.up * scale * 0.05f;
+                rightEyeObj.transform.localPosition += Vector3.up * scale * 0.05f;
+                leftEyeObj.transform.localRotation = Quaternion.Euler(0, 0, 15f);
+                rightEyeObj.transform.localRotation = Quaternion.Euler(0, 0, -15f);
+                break;
+            case 3: // Sleeping - squished eyes (nearly closed)
+                leftWhite.transform.localScale = new Vector3(eyeSize, eyeSize * 0.3f, eyeSize);
+                rightWhite.transform.localScale = new Vector3(eyeSize, eyeSize * 0.3f, eyeSize);
+                leftPupil.transform.localScale = Vector3.one * eyeSize * 0.15f;
+                rightPupil.transform.localScale = Vector3.one * eyeSize * 0.15f;
+                break;
+        }
+
+        // === MOUTH ===
+        var mouthObj = new GameObject("Mouth");
+        mouthObj.transform.SetParent(root.transform);
+        mouthObj.transform.localPosition = new Vector3(0, eyeHeight - scale * 0.15f, eyeForward + scale * 0.02f);
+
+        var mouthMesh = GameObject.CreatePrimitive(PrimitiveType.Cube);
+        mouthMesh.name = "MouthShape";
+        mouthMesh.transform.SetParent(mouthObj.transform);
+
+        switch (faceType)
+        {
+            case 0: // Happy - wide smile
+                mouthMesh.transform.localScale = new Vector3(scale * 0.25f, scale * 0.04f, scale * 0.04f);
+                mouthMesh.transform.localRotation = Quaternion.Euler(0, 0, 0);
+                break;
+            case 1: // Derp - open O mouth
+                Object.Destroy(mouthMesh);
+                var oMouth = GameObject.CreatePrimitive(PrimitiveType.Sphere);
+                oMouth.name = "MouthShape";
+                oMouth.transform.SetParent(mouthObj.transform);
+                oMouth.transform.localPosition = Vector3.zero;
+                oMouth.transform.localScale = new Vector3(scale * 0.1f, scale * 0.12f, scale * 0.06f);
+                oMouth.GetComponent<Renderer>().material = _poopPupilMat;
+                Object.Destroy(oMouth.GetComponent<Collider>());
+                break;
+            case 2: // Worried - wavy line
+                mouthMesh.transform.localScale = new Vector3(scale * 0.2f, scale * 0.03f, scale * 0.03f);
+                mouthMesh.transform.localRotation = Quaternion.Euler(0, 0, 8f);
+                break;
+            case 3: // Sleeping - tiny peaceful line
+                mouthMesh.transform.localScale = new Vector3(scale * 0.12f, scale * 0.02f, scale * 0.03f);
+                break;
+        }
+
+        if (mouthMesh != null)
+        {
+            var mouthRend = mouthMesh.GetComponent<Renderer>();
+            if (mouthRend != null) mouthRend.material = _poopPupilMat;
+            var mouthCol = mouthMesh.GetComponent<Collider>();
+            if (mouthCol != null) Object.Destroy(mouthCol);
+        }
+
+        // Add pickup collider so player can collect this buddy
+        var pickupCol = root.AddComponent<SphereCollider>();
+        pickupCol.radius = scale * 2f; // generous pickup radius
+        pickupCol.isTrigger = true;
+        root.AddComponent<PoopBuddyPickup>();
+
+        return root;
+    }
+
+    void AnimatePoopFace(FloatingPoop fp)
+    {
+        if (fp.leftEye == null || fp.rightEye == null) return;
+
+        // Pupil look direction - slowly drift around
+        float lookX = Mathf.Sin(_time * 1.2f + fp.bobPhase) * 0.002f;
+        float lookY = Mathf.Sin(_time * 0.8f + fp.bobPhase * 1.5f) * 0.001f;
+        Vector3 lookOffset = new Vector3(lookX, lookY, 0);
+
+        // Blink every 3-6 seconds
+        float blinkCycle = Mathf.Repeat(_time + fp.bobPhase * 2f, Random.Range(3f, 6f));
+        float blinkScale = 1f;
+        if (blinkCycle < 0.15f)
+            blinkScale = Mathf.Abs(Mathf.Sin(blinkCycle / 0.15f * Mathf.PI));
+
+        // Apply to pupils
+        Transform leftPupil = fp.leftEye.Find("Pupil");
+        Transform rightPupil = fp.rightEye.Find("Pupil");
+        if (leftPupil != null)
+        {
+            Vector3 basePos = leftPupil.localPosition;
+            basePos.x = lookOffset.x;
+            basePos.y = lookOffset.y;
+            leftPupil.localPosition = basePos;
+        }
+        if (rightPupil != null)
+        {
+            Vector3 basePos = rightPupil.localPosition;
+            basePos.x = lookOffset.x;
+            basePos.y = lookOffset.y;
+            rightPupil.localPosition = basePos;
+        }
+
+        // Blink by squishing eye whites
+        Transform leftWhite = fp.leftEye.Find("White");
+        Transform rightWhite = fp.rightEye.Find("White");
+        if (leftWhite != null && fp.faceType != 3) // sleeping don't blink
+        {
+            Vector3 s = leftWhite.localScale;
+            s.y = s.x * blinkScale;
+            leftWhite.localScale = s;
+        }
+        if (rightWhite != null && fp.faceType != 3)
+        {
+            Vector3 s = rightWhite.localScale;
+            s.y = s.x * blinkScale;
+            rightWhite.localScale = s;
+        }
     }
 
     Material MakeParticleMat(Color color)
@@ -773,6 +1537,18 @@ public class WaterAnimator : MonoBehaviour
         Material mat = new Material(shader);
         mat.SetColor("_BaseColor", color);
         mat.SetColor("_Color", color);
+
+        // Enable alpha blending so particles fade properly instead of rendering as solid stars
+        mat.SetFloat("_Surface", 1); // 0=Opaque, 1=Transparent
+        mat.SetFloat("_Blend", 0);   // Alpha blend
+        mat.SetFloat("_ZWrite", 0);
+        mat.SetFloat("_Cull", 0);    // No culling
+        mat.SetInt("_SrcBlend", (int)UnityEngine.Rendering.BlendMode.SrcAlpha);
+        mat.SetInt("_DstBlend", (int)UnityEngine.Rendering.BlendMode.OneMinusSrcAlpha);
+        mat.EnableKeyword("_SURFACE_TYPE_TRANSPARENT");
+        mat.EnableKeyword("_ALPHABLEND_ON");
+        mat.SetOverrideTag("RenderType", "Transparent");
+        mat.renderQueue = 3000;
         return mat;
     }
 }

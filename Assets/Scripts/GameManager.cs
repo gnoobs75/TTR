@@ -12,6 +12,7 @@ public class GameManager : MonoBehaviour
 
     [Header("Game State")]
     public bool isPlaying = false;
+    public bool isTourMode = false;
     public int score = 0;
     public float distanceTraveled = 0f;
 
@@ -77,6 +78,33 @@ public class GameManager : MonoBehaviour
             return;
         }
         ActuallyStartGame();
+    }
+
+    public void StartSewerTour()
+    {
+        isTourMode = true;
+        isPlaying = true;
+        _isGameOver = false;
+        score = 0;
+        distanceTraveled = 0f;
+
+        // Hide start panel
+        if (gameUI != null)
+        {
+            gameUI.ShowHUD();
+            // Hide scoring HUD elements in tour mode
+            if (gameUI.scoreText != null) gameUI.scoreText.gameObject.SetActive(false);
+            if (gameUI.multiplierText != null) gameUI.multiplierText.gameObject.SetActive(false);
+            if (gameUI.coinCountText != null) gameUI.coinCountText.gameObject.SetActive(false);
+        }
+
+        // Hide overlays that don't apply
+        if (ComboSystem.Instance != null) ComboSystem.Instance.enabled = false;
+        if (CheerOverlay.Instance != null) CheerOverlay.Instance.gameObject.SetActive(false);
+
+        // Start the tour
+        if (SewerTour.Instance != null)
+            SewerTour.Instance.StartTour();
     }
 
     void ActuallyStartGame()
@@ -227,6 +255,7 @@ public class GameManager : MonoBehaviour
 
     public void GameOver()
     {
+        if (isTourMode) return; // Tour mode: no game over
         isPlaying = false;
         _isGameOver = true;
         _gameOverTime = Time.time;

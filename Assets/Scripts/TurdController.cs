@@ -452,6 +452,10 @@ public class TurdController : MonoBehaviour
         if (GameManager.Instance != null)
             GameManager.Instance.OnPlayerHit();
 
+        // Scatter skiing poop buddies on hit!
+        if (PoopBuddyChain.Instance != null && PoopBuddyChain.Instance.BuddyCount > 0)
+            PoopBuddyChain.Instance.ScatterAll();
+
         _stunCoroutine = StartCoroutine(StunCoroutine());
     }
 
