@@ -174,7 +174,8 @@ public class ScorePopup : MonoBehaviour
     {
         string[] nearWords = { "CLOSE!", "WHEW!", "YIKES!", "SCARY!", "ALMOST!" };
         string word = nearWords[Random.Range(0, nearWords.Length)];
-        Show($"+{bonus} {word}", pos, PopupType.NearMiss, 1.0f);
+        string msg = bonus > 0 ? $"+{bonus} {word}" : word;
+        Show(msg, pos, PopupType.NearMiss, 1.0f);
     }
 
     public void ShowMilestone(Vector3 pos, string name)

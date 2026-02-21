@@ -278,6 +278,15 @@ public class RacerAI : MonoBehaviour
                     ComboSystem.Instance.RegisterEvent(ComboSystem.EventType.NearMiss);
                 if (ParticleManager.Instance != null)
                     ParticleManager.Instance.PlayNearMissStreak(transform.position);
+                // Show popup with racer name
+                if (ScorePopup.Instance != null)
+                {
+                    string[] closeCallWords = { "CLOSE CALL!", "WHOA!", "YIKES!", "WATCH IT!", "TOO CLOSE!" };
+                    string word = closeCallWords[Random.Range(0, closeCallWords.Length)];
+                    ScorePopup.Instance.ShowNearMiss(transform.position, 0);
+                }
+                if (ProceduralAudio.Instance != null)
+                    ProceduralAudio.Instance.PlayNearMiss();
                 HapticManager.LightTap();
             }
             else if (distToPlayer > NEAR_MISS_DIST * 2f)

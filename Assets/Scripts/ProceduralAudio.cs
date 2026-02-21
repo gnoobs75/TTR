@@ -74,6 +74,10 @@ public class ProceduralAudio : MonoBehaviour
     // Music
     private AudioClip _bgmLoop;
     private bool _musicPlaying;
+    private float _targetPitch = 1f;
+    private float _currentPitch = 1f;
+    private float _targetMusicVol = 1f;
+    private float _currentMusicVol = 1f;
 
     const int SAMPLE_RATE = 44100;
 
@@ -682,9 +686,48 @@ public class ProceduralAudio : MonoBehaviour
         _musicPlaying = false;
     }
 
+    /// <summary>
+    /// Updates BGM pitch based on player speed. Call externally or auto-polls TurdController.
+    /// Speed 6 m/s (base) = pitch 0.92, speed 14 m/s (max) = pitch 1.18.
+    /// </summary>
+    public void SetSpeedIntensity(float speed, float minSpeed = 6f, float maxSpeed = 14f)
+    {
+        float t = Mathf.InverseLerp(minSpeed, maxSpeed, speed);
+        _targetPitch = Mathf.Lerp(0.92f, 1.18f, t);
+        // Volume slightly louder when going fast (builds excitement)
+        _targetMusicVol = Mathf.Lerp(0.85f, 1.1f, t);
+    }
+
     void Update()
     {
         if (_musicSource != null && _musicPlaying)
-            _musicSource.volume = masterVolume * musicVolume;
+        {
+            // Auto-poll player speed if available
+            if (RaceManager.Instance != null && RaceManager.Instance.PlayerController != null
+                && RaceManager.Instance.RaceState == RaceManager.State.Racing)
+            {
+                float playerSpeed = RaceManager.Instance.PlayerController.CurrentSpeed;
+                float playerDist = RaceManager.Instance.PlayerController.DistanceTraveled;
+                float raceDist = RaceManager.Instance.RaceDistance;
+
+                SetSpeedIntensity(playerSpeed);
+
+                // Final stretch tension: pitch up in last 200m of race
+                float distToFinish = raceDist - playerDist;
+                if (distToFinish < 200f && distToFinish > 0f)
+                {
+                    float finaleT = 1f - (distToFinish / 200f); // 0 at 200m out, 1 at finish
+                    _targetPitch += finaleT * 0.08f; // up to +8% extra pitch at the line
+                    _targetMusicVol += finaleT * 0.1f; // slightly louder too
+                }
+            }
+
+            // Smooth pitch interpolation (avoids jarring jumps)
+            _currentPitch = Mathf.Lerp(_currentPitch, _targetPitch, Time.deltaTime * 3f);
+            _currentMusicVol = Mathf.Lerp(_currentMusicVol, _targetMusicVol, Time.deltaTime * 3f);
+
+            _musicSource.pitch = _currentPitch;
+            _musicSource.volume = masterVolume * musicVolume * _currentMusicVol;
+        }
     }
 }

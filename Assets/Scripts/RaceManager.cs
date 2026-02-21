@@ -1,4 +1,5 @@
 using UnityEngine;
+using UnityEngine.UI;
 using System.Collections;
 using System.Collections.Generic;
 
@@ -53,6 +54,34 @@ public class RaceManager : MonoBehaviour
     // Position change tracking
     private int _lastPlayerPosition = 0;
 
+    // === COUNTDOWN UI ===
+    private Text _countdownText;
+    private Outline _countdownOutline;
+    private int _lastCountdownNumber = -1;
+    private float _countdownPunchTime;
+
+    // === RACE POSITION HUD ===
+    private Text _positionHudText;
+    private Outline _positionHudOutline;
+    private float _positionHudPunchTime;
+    private int _lastHudPosition = -1;
+
+    // === RACE TIMER HUD ===
+    private Text _raceTimerText;
+
+    // === RACE PROGRESS BAR ===
+    private RectTransform _progressBarBg;
+    private RectTransform _progressBarFill;
+    private Image _progressFillImage;
+    private RectTransform[] _racerDots;
+    private Image[] _racerDotImages;
+    private Text _progressLabel;
+
+    // === FINAL STRETCH ===
+    private bool _finalStretchTriggered;
+    private float _finalStretchStart;
+    private const float FINAL_STRETCH_DISTANCE = 100f; // last 100m
+
     public State RaceState => _state;
     public float LeaderDistance => _leaderDistance;
     public float RaceTime => _state >= State.Racing ? Time.time - _raceStartTime : 0f;
@@ -85,6 +114,10 @@ public class RaceManager : MonoBehaviour
     void Start()
     {
         BuildEntries();
+        CreateCountdownUI();
+        CreatePositionHUD();
+        CreateRaceTimerHUD();
+        CreateProgressBar();
     }
 
     void BuildEntries()
@@ -117,6 +150,187 @@ public class RaceManager : MonoBehaviour
                 });
             }
         }
+    }
+
+    void CreateCountdownUI()
+    {
+        // Find or create a canvas for the countdown overlay
+        Canvas canvas = FindOverlayCanvas();
+        if (canvas == null) return;
+
+        Font font = Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
+        if (font == null) font = Font.CreateDynamicFontFromOSFont("Arial", 14);
+
+        // Big center-screen countdown number
+        GameObject countObj = new GameObject("RaceCountdown");
+        RectTransform rt = countObj.AddComponent<RectTransform>();
+        rt.SetParent(canvas.transform, false);
+        rt.anchorMin = new Vector2(0.3f, 0.35f);
+        rt.anchorMax = new Vector2(0.7f, 0.7f);
+        rt.offsetMin = Vector2.zero;
+        rt.offsetMax = Vector2.zero;
+
+        _countdownText = countObj.AddComponent<Text>();
+        _countdownText.font = font;
+        _countdownText.fontSize = 120;
+        _countdownText.fontStyle = FontStyle.Bold;
+        _countdownText.alignment = TextAnchor.MiddleCenter;
+        _countdownText.color = new Color(1f, 0.92f, 0.15f);
+        _countdownText.text = "";
+        _countdownText.horizontalOverflow = HorizontalWrapMode.Overflow;
+        _countdownText.verticalOverflow = VerticalWrapMode.Overflow;
+
+        _countdownOutline = countObj.AddComponent<Outline>();
+        _countdownOutline.effectColor = new Color(0, 0, 0, 1f);
+        _countdownOutline.effectDistance = new Vector2(4, -4);
+
+        // Second outline for extra punch
+        Outline outline2 = countObj.AddComponent<Outline>();
+        outline2.effectColor = new Color(0.3f, 0.15f, 0f, 0.8f);
+        outline2.effectDistance = new Vector2(-2, 2);
+
+        countObj.SetActive(false);
+    }
+
+    void CreatePositionHUD()
+    {
+        Canvas canvas = FindOverlayCanvas();
+        if (canvas == null) return;
+
+        Font font = Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
+        if (font == null) font = Font.CreateDynamicFontFromOSFont("Arial", 14);
+
+        // Big position indicator top-right
+        GameObject posObj = new GameObject("RacePositionHUD");
+        RectTransform rt = posObj.AddComponent<RectTransform>();
+        rt.SetParent(canvas.transform, false);
+        rt.anchorMin = new Vector2(0.78f, 0.82f);
+        rt.anchorMax = new Vector2(0.98f, 0.98f);
+        rt.offsetMin = Vector2.zero;
+        rt.offsetMax = Vector2.zero;
+
+        // Dark background for readability
+        Image bg = posObj.AddComponent<Image>();
+        bg.color = new Color(0.05f, 0.04f, 0.02f, 0.65f);
+
+        // Position text
+        GameObject textObj = new GameObject("PosText");
+        RectTransform textRt = textObj.AddComponent<RectTransform>();
+        textRt.SetParent(rt, false);
+        textRt.anchorMin = Vector2.zero;
+        textRt.anchorMax = Vector2.one;
+        textRt.offsetMin = Vector2.zero;
+        textRt.offsetMax = Vector2.zero;
+
+        _positionHudText = textObj.AddComponent<Text>();
+        _positionHudText.font = font;
+        _positionHudText.fontSize = 52;
+        _positionHudText.fontStyle = FontStyle.Bold;
+        _positionHudText.alignment = TextAnchor.MiddleCenter;
+        _positionHudText.color = new Color(1f, 0.85f, 0.1f);
+        _positionHudText.text = "";
+        _positionHudText.horizontalOverflow = HorizontalWrapMode.Overflow;
+        _positionHudText.verticalOverflow = VerticalWrapMode.Overflow;
+
+        _positionHudOutline = textObj.AddComponent<Outline>();
+        _positionHudOutline.effectColor = new Color(0, 0, 0, 1f);
+        _positionHudOutline.effectDistance = new Vector2(2, -2);
+
+        posObj.SetActive(false);
+    }
+
+    void CreateRaceTimerHUD()
+    {
+        Canvas canvas = FindOverlayCanvas();
+        if (canvas == null) return;
+
+        Font font = Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
+        if (font == null) font = Font.CreateDynamicFontFromOSFont("Arial", 14);
+
+        // Race timer below position HUD
+        GameObject timerObj = new GameObject("RaceTimer");
+        RectTransform rt = timerObj.AddComponent<RectTransform>();
+        rt.SetParent(canvas.transform, false);
+        rt.anchorMin = new Vector2(0.78f, 0.76f);
+        rt.anchorMax = new Vector2(0.98f, 0.83f);
+        rt.offsetMin = Vector2.zero;
+        rt.offsetMax = Vector2.zero;
+
+        _raceTimerText = timerObj.AddComponent<Text>();
+        _raceTimerText.font = font;
+        _raceTimerText.fontSize = 22;
+        _raceTimerText.alignment = TextAnchor.MiddleCenter;
+        _raceTimerText.color = new Color(0.8f, 0.8f, 0.75f);
+        _raceTimerText.text = "";
+
+        Outline timerOutline = timerObj.AddComponent<Outline>();
+        timerOutline.effectColor = new Color(0, 0, 0, 0.9f);
+        timerOutline.effectDistance = new Vector2(1, -1);
+
+        timerObj.SetActive(false);
+    }
+
+    void UpdateProgressBar()
+    {
+        if (_progressBarBg == null || !_progressBarBg.gameObject.activeSelf) return;
+
+        // Update fill based on player distance
+        float playerDist = playerController != null ? playerController.DistanceTraveled : 0f;
+        float progress = Mathf.Clamp01(playerDist / raceDistance);
+        _progressBarFill.anchorMax = new Vector2(progress, 1f);
+
+        // Color shifts from green to gold as you approach the finish
+        Color fillColor = Color.Lerp(
+            new Color(0.3f, 0.8f, 0.2f, 0.8f),
+            new Color(1f, 0.85f, 0.1f, 0.9f),
+            progress);
+        _progressFillImage.color = fillColor;
+
+        // Update racer dots
+        for (int i = 0; i < _entries.Count && i < _racerDots.Length; i++)
+        {
+            var entry = _entries[i];
+            float racerProgress = Mathf.Clamp01(entry.distance / raceDistance);
+
+            _racerDots[i].gameObject.SetActive(true);
+            _racerDots[i].anchorMin = new Vector2(racerProgress, 0.5f);
+            _racerDots[i].anchorMax = new Vector2(racerProgress, 0.5f);
+            _racerDots[i].anchoredPosition = Vector2.zero;
+
+            // Player dot is bright gold, AI uses their racer color
+            _racerDotImages[i].color = entry.isPlayer
+                ? new Color(1f, 0.92f, 0.15f)
+                : entry.color;
+
+            _racerDots[i].sizeDelta = entry.isPlayer
+                ? new Vector2(14, 14) : new Vector2(8, 8);
+        }
+
+        // Distance label
+        if (_progressLabel != null)
+        {
+            int remaining = Mathf.Max(0, Mathf.CeilToInt(raceDistance - playerDist));
+            _progressLabel.text = remaining > 0
+                ? $"{remaining}m to Brown Town"
+                : "BROWN TOWN!";
+        }
+    }
+
+    Canvas FindOverlayCanvas()
+    {
+        // Find existing UI canvas (ScreenEffects sits on one)
+        if (ScreenEffects.Instance != null)
+        {
+            Canvas c = ScreenEffects.Instance.GetComponentInParent<Canvas>();
+            if (c != null) return c;
+        }
+        // Try finding any screen-space canvas
+        foreach (var c in Object.FindObjectsByType<Canvas>(FindObjectsSortMode.None))
+        {
+            if (c.renderMode == RenderMode.ScreenSpaceOverlay)
+                return c;
+        }
+        return null;
     }
 
     void Update()
@@ -167,11 +381,93 @@ public class RaceManager : MonoBehaviour
     void UpdateCountdown()
     {
         _countdownTimer -= Time.deltaTime;
+
+        // Show countdown numbers (3, 2, 1, GO!)
+        int displayNum = Mathf.CeilToInt(_countdownTimer);
+        if (displayNum != _lastCountdownNumber && displayNum >= 0)
+        {
+            _lastCountdownNumber = displayNum;
+            _countdownPunchTime = Time.time;
+
+            if (_countdownText != null)
+            {
+                _countdownText.gameObject.SetActive(true);
+
+                if (displayNum > 0)
+                {
+                    _countdownText.text = displayNum.ToString();
+                    _countdownText.color = displayNum == 1
+                        ? new Color(1f, 0.3f, 0.15f) // red for 1
+                        : displayNum == 2
+                            ? new Color(1f, 0.85f, 0.1f) // yellow for 2
+                            : new Color(0.3f, 1f, 0.4f); // green for 3
+                    _countdownText.fontSize = 140;
+                }
+                else
+                {
+                    _countdownText.text = "GO!";
+                    _countdownText.color = new Color(0.1f, 1f, 0.3f);
+                    _countdownText.fontSize = 160;
+                }
+            }
+
+            // Audio tick
+            if (ProceduralAudio.Instance != null)
+                ProceduralAudio.Instance.PlayCountdownTick();
+
+            // Camera shake escalates
+            if (PipeCamera.Instance != null)
+                PipeCamera.Instance.Shake(0.1f + (3 - displayNum) * 0.05f);
+
+            HapticManager.MediumTap();
+        }
+
+        // Animate countdown text - punch scale then decay
+        if (_countdownText != null && _countdownText.gameObject.activeSelf)
+        {
+            float since = Time.time - _countdownPunchTime;
+            float scale;
+            if (since < 0.1f)
+                scale = Mathf.Lerp(2.5f, 0.9f, since / 0.1f);
+            else if (since < 0.2f)
+                scale = Mathf.Lerp(0.9f, 1.05f, (since - 0.1f) / 0.1f);
+            else
+                scale = Mathf.Lerp(1.05f, 1f, (since - 0.2f) / 0.1f);
+            _countdownText.transform.localScale = Vector3.one * Mathf.Max(scale, 1f);
+        }
+
         if (_countdownTimer <= 0f)
         {
             _state = State.Racing;
             _raceStartTime = Time.time;
+
+            // Show "GO!" briefly then hide
+            StartCoroutine(HideCountdownAfterDelay(0.6f));
+
+            // Show position HUD, race timer, and progress bar
+            if (_positionHudText != null)
+                _positionHudText.transform.parent.gameObject.SetActive(true);
+            if (_raceTimerText != null)
+                _raceTimerText.gameObject.SetActive(true);
+            if (_progressBarBg != null)
+                _progressBarBg.gameObject.SetActive(true);
+
+            // Play game start sound for emphasis
+            if (ProceduralAudio.Instance != null)
+                ProceduralAudio.Instance.PlayGameStart();
+
+            if (PipeCamera.Instance != null)
+                PipeCamera.Instance.PunchFOV(6f);
+
+            HapticManager.HeavyTap();
         }
+    }
+
+    IEnumerator HideCountdownAfterDelay(float delay)
+    {
+        yield return new WaitForSeconds(delay);
+        if (_countdownText != null)
+            _countdownText.gameObject.SetActive(false);
     }
 
     void UpdateRace()
@@ -248,16 +544,25 @@ public class RaceManager : MonoBehaviour
                         // Player moved UP in position
                         if (ScorePopup.Instance != null && playerController != null)
                             ScorePopup.Instance.ShowMilestone(
-                                playerController.transform.position + Vector3.up * 2f, posStr + "!");
+                                playerController.transform.position + Vector3.up * 2f, posStr + " PLACE!");
                         if (PipeCamera.Instance != null)
                             PipeCamera.Instance.PunchFOV(3f);
+                        if (ProceduralAudio.Instance != null)
+                            ProceduralAudio.Instance.PlayCelebration();
                         HapticManager.MediumTap();
                     }
                     else
                     {
-                        // Player dropped position
+                        // Player dropped position - show who passed them
+                        string passerName = GetRacerNameAtPosition(e.position - 1);
+                        if (ScorePopup.Instance != null && playerController != null && passerName.Length > 0)
+                            ScorePopup.Instance.ShowMilestone(
+                                playerController.transform.position + Vector3.up * 2f,
+                                passerName + " PASSES YOU!");
                         if (PipeCamera.Instance != null)
                             PipeCamera.Instance.Shake(0.15f);
+                        if (ProceduralAudio.Instance != null)
+                            ProceduralAudio.Instance.PlayAITaunt();
                         HapticManager.LightTap();
                     }
                 }
@@ -268,6 +573,26 @@ public class RaceManager : MonoBehaviour
 
         if (leaderboard != null)
             leaderboard.UpdatePositions(_entries);
+
+        // === UPDATE POSITION HUD ===
+        UpdatePositionHUD();
+
+        // === UPDATE PROGRESS BAR ===
+        UpdateProgressBar();
+
+        // === UPDATE RACE TIMER ===
+        if (_raceTimerText != null && _raceTimerText.gameObject.activeSelf)
+        {
+            float t = raceTime;
+            int mins = (int)(t / 60f);
+            float secs = t % 60f;
+            _raceTimerText.text = mins > 0
+                ? $"{mins}:{secs:00.0}"
+                : $"{secs:F1}s";
+        }
+
+        // === FINAL STRETCH CHECK ===
+        CheckFinalStretch();
 
         // Check if all racers finished
         bool allFinished = true;
@@ -288,6 +613,14 @@ public class RaceManager : MonoBehaviour
         // Stop player movement
         if (playerController != null)
             playerController.enabled = false;
+
+        // Hide race HUD (position + timer + progress) since the finish banner takes over
+        if (_positionHudText != null)
+            _positionHudText.transform.parent.gameObject.SetActive(false);
+        if (_raceTimerText != null)
+            _raceTimerText.gameObject.SetActive(false);
+        if (_progressBarBg != null)
+            _progressBarBg.gameObject.SetActive(false);
 
         // Start camera orbit around player
         StartCameraOrbit();
@@ -520,11 +853,70 @@ public class RaceManager : MonoBehaviour
         OnRaceComplete();
     }
 
+    void UpdatePositionHUD()
+    {
+        if (_positionHudText == null) return;
+
+        int playerPos = GetPlayerPosition();
+        string ordinal = GetOrdinal(playerPos);
+        string posStr = playerPos + ordinal;
+
+        _positionHudText.text = posStr;
+
+        // Color by position
+        Color posColor;
+        switch (playerPos)
+        {
+            case 1: posColor = new Color(1f, 0.85f, 0.1f); break;     // gold
+            case 2: posColor = new Color(0.75f, 0.75f, 0.82f); break; // silver
+            case 3: posColor = new Color(0.72f, 0.45f, 0.2f); break;  // bronze
+            default: posColor = new Color(0.5f, 0.5f, 0.45f); break;  // gray
+        }
+        _positionHudText.color = posColor;
+
+        // Punch animation on position change
+        if (playerPos != _lastHudPosition && _lastHudPosition >= 0)
+        {
+            _positionHudPunchTime = Time.time;
+            _lastHudPosition = playerPos;
+        }
+        if (_lastHudPosition < 0) _lastHudPosition = playerPos;
+
+        // Animate punch
+        float since = Time.time - _positionHudPunchTime;
+        if (since < 0.3f)
+        {
+            float punch = 1f + (1f - since / 0.3f) * 0.4f;
+            _positionHudText.transform.localScale = Vector3.one * punch;
+        }
+        else
+        {
+            _positionHudText.transform.localScale = Vector3.one;
+        }
+    }
+
+    /// <summary>Get player's current race position (1-based).</summary>
     public int GetPlayerPosition()
     {
         foreach (var e in _entries)
             if (e.isPlayer) return e.position;
         return 5;
+    }
+
+    /// <summary>Get player's finish place (0 if not finished).</summary>
+    public int GetPlayerFinishPlace()
+    {
+        foreach (var e in _entries)
+            if (e.isPlayer) return e.finishPlace;
+        return 0;
+    }
+
+    /// <summary>Get the name of the racer who just passed the player.</summary>
+    public string GetRacerNameAtPosition(int pos)
+    {
+        foreach (var e in _entries)
+            if (e.position == pos) return e.name;
+        return "";
     }
 
     static string GetOrdinal(int n)

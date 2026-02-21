@@ -307,6 +307,24 @@ public class GameUI : MonoBehaviour
             startWalletText.text = coinStr + " Fartcoins";
     }
 
+    static readonly string[] RaceWinQuips = {
+        "NUMBER ONE! Literally!", "WINNER WINNER SEWER DINNER!",
+        "GOLD MEDAL TURD!", "KING OF THE PIPES!", "UNSTOPPABLE!",
+        "TOP OF THE BOWL!", "CHAMPION FLOATER!", "FLUSH ROYALE!"
+    };
+
+    static readonly string[] RacePodiumQuips = {
+        "Not bad for a turd!", "Podium finish!", "Almost the best!",
+        "Close but no cigar!", "The silver lining!", "Bronze and proud!",
+        "Respectable flush!", "Solid performance!"
+    };
+
+    static readonly string[] RaceLoseQuips = {
+        "Back of the pack!", "Clogged up!", "Log jammed again!",
+        "You stink at racing!", "Dead last... fitting!", "Brown town shutdown!",
+        "Did not finish!", "Try again, floater!", "Sewer surfing fail!"
+    };
+
     static readonly string[] DeathQuips = {
         "You got FLUSHED!", "Down the drain!", "CLOGGED!", "Totally wiped out!",
         "Splashdown!", "What a dump!", "Sewer surfing fail!", "Brown out!",
@@ -371,16 +389,45 @@ public class GameUI : MonoBehaviour
             string stats = $"{Mathf.FloorToInt(distance)}m  |  {coins} Fartcoins";
             if (nearMisses > 0) stats += $"  |  {nearMisses} close calls";
             if (bestCombo > 1) stats += $"  |  {bestCombo}x combo";
+
+            // Add race position if in a race
+            if (RaceManager.Instance != null)
+            {
+                int place = RaceManager.Instance.GetPlayerFinishPlace();
+                if (place > 0)
+                    stats += $"  |  {place}{GetOrdinalUpper(place)} Place";
+                else
+                {
+                    int pos = RaceManager.Instance.GetPlayerPosition();
+                    stats += $"  |  {pos}{GetOrdinalUpper(pos)} (DNF)";
+                }
+            }
+
             runStatsText.text = stats;
         }
 
-        // Set random death quip as title
+        // Set title: race-themed quip if in race, else random death quip
         Transform goTitle = gameOverPanel.transform.Find("GOTitle");
         if (goTitle != null)
         {
             Text titleText = goTitle.GetComponent<Text>();
             if (titleText != null)
-                titleText.text = DeathQuips[Random.Range(0, DeathQuips.Length)];
+            {
+                if (RaceManager.Instance != null)
+                {
+                    int place = RaceManager.Instance.GetPlayerFinishPlace();
+                    if (place == 1)
+                        titleText.text = RaceWinQuips[Random.Range(0, RaceWinQuips.Length)];
+                    else if (place > 0 && place <= 3)
+                        titleText.text = RacePodiumQuips[Random.Range(0, RacePodiumQuips.Length)];
+                    else
+                        titleText.text = RaceLoseQuips[Random.Range(0, RaceLoseQuips.Length)];
+                }
+                else
+                {
+                    titleText.text = DeathQuips[Random.Range(0, DeathQuips.Length)];
+                }
+            }
         }
 
         UpdateWallet();
@@ -528,5 +575,13 @@ public class GameUI : MonoBehaviour
         for (int i = shopContent.childCount - 1; i >= 0; i--)
             Destroy(shopContent.GetChild(i).gameObject);
         BuildShopItems();
+    }
+
+    static string GetOrdinalUpper(int n)
+    {
+        if (n == 1) return "ST";
+        if (n == 2) return "ND";
+        if (n == 3) return "RD";
+        return "TH";
     }
 }
