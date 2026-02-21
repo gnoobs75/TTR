@@ -154,14 +154,24 @@ public class TurdController : MonoBehaviour
         _steerInput = Mathf.Lerp(_steerInput, rawInput, Time.deltaTime * 18f);
 
         // === TRICK INPUT (during jumps only) ===
-        if (_isJumping && _hitState != HitState.Stunned && Keyboard.current != null)
+        if (_isJumping && _hitState != HitState.Stunned)
         {
             if (_trickDirection == 0)
             {
-                if (Keyboard.current.upArrowKey.wasPressedThisFrame || Keyboard.current.wKey.wasPressedThisFrame)
-                    _trickDirection = 1;  // front flip
-                else if (Keyboard.current.downArrowKey.wasPressedThisFrame || Keyboard.current.sKey.wasPressedThisFrame)
-                    _trickDirection = -1; // backflip
+                // Touch: swipe up = front flip, swipe down = backflip
+                if (TouchInput.Instance != null)
+                {
+                    if (TouchInput.Instance.SwipeUp) _trickDirection = 1;
+                    else if (TouchInput.Instance.SwipeDown) _trickDirection = -1;
+                }
+                // Keyboard fallback
+                if (_trickDirection == 0 && Keyboard.current != null)
+                {
+                    if (Keyboard.current.upArrowKey.wasPressedThisFrame || Keyboard.current.wKey.wasPressedThisFrame)
+                        _trickDirection = 1;  // front flip
+                    else if (Keyboard.current.downArrowKey.wasPressedThisFrame || Keyboard.current.sKey.wasPressedThisFrame)
+                        _trickDirection = -1; // backflip
+                }
             }
 
             if (_trickDirection != 0)
@@ -740,26 +750,25 @@ public class TurdController : MonoBehaviour
 
         float progress = Mathf.Clamp01(_dropTimer / _dropDuration);
 
-        // 2D movement input (arrow keys / touch move freely within pipe cross-section)
+        // 2D movement input (touch + keyboard for pipe cross-section)
         float inputX = 0f, inputY = 0f;
 
         if (TouchInput.Instance != null)
         {
-            inputX = TouchInput.Instance.SteerInput; // left/right (positive = right)
+            inputX = TouchInput.Instance.SteerInput;
+            inputY = TouchInput.Instance.VerticalInput; // touch Y for swimming up/down
         }
 
-        // Always check keyboard — touch only provides X axis, keyboard provides Y (up/down)
+        // Keyboard input (fallback for X, additive for Y)
         if (Keyboard.current != null)
         {
             if (TouchInput.Instance == null)
             {
-                // Only use keyboard for X if no touch input available
                 if (Keyboard.current.leftArrowKey.isPressed || Keyboard.current.aKey.isPressed)
                     inputX -= 1f;
                 if (Keyboard.current.rightArrowKey.isPressed || Keyboard.current.dKey.isPressed)
                     inputX += 1f;
             }
-            // Y axis always from keyboard (up/down arrows or W/S)
             if (Keyboard.current.upArrowKey.isPressed || Keyboard.current.wKey.isPressed)
                 inputY += 1f;
             if (Keyboard.current.downArrowKey.isPressed || Keyboard.current.sKey.isPressed)

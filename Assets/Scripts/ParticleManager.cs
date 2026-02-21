@@ -38,6 +38,10 @@ public class ParticleManager : MonoBehaviour
     private ParticleSystem _underwaterBubbles;
     private ParticleSystem _underwaterDebris;
 
+    // Signature poop effects
+    private ParticleSystem _stinkCloud;
+    private ParticleSystem _sewerFlies;
+
     void Awake()
     {
         if (Instance == null) Instance = this;
@@ -135,6 +139,10 @@ public class ParticleManager : MonoBehaviour
         // === UNDERWATER DIVE EFFECTS ===
         _underwaterBubbles = CreateUnderwaterBubbles();
         _underwaterDebris = CreateUnderwaterDebris();
+
+        // === SIGNATURE POOP EFFECTS ===
+        _stinkCloud = CreateStinkCloud();
+        _sewerFlies = CreateSewerFlies();
     }
 
     ParticleSystem CreateDustMotes()
@@ -617,5 +625,148 @@ public class ParticleManager : MonoBehaviour
             _underwaterDebris.Stop();
             _underwaterDebris.transform.SetParent(transform);
         }
+    }
+
+    // === SIGNATURE POOP EFFECTS ===
+
+    ParticleSystem CreateStinkCloud()
+    {
+        var go = new GameObject("StinkCloud");
+        go.transform.SetParent(transform);
+        var ps = go.AddComponent<ParticleSystem>();
+
+        var main = ps.main;
+        main.maxParticles = 60;
+        main.startLifetime = new ParticleSystem.MinMaxCurve(1.0f, 2.5f);
+        main.startSpeed = new ParticleSystem.MinMaxCurve(0.2f, 0.8f);
+        main.startSize = new ParticleSystem.MinMaxCurve(0.15f, 0.5f);
+        main.startColor = new ParticleSystem.MinMaxGradient(
+            new Color(0.35f, 0.55f, 0.1f, 0.25f),   // sickly yellow-green
+            new Color(0.5f, 0.6f, 0.15f, 0.12f));    // lighter pea-soup green
+        main.loop = true;
+        main.playOnAwake = false;
+        main.simulationSpace = ParticleSystemSimulationSpace.World;
+        main.gravityModifier = -0.08f; // stink rises
+        main.startRotation = new ParticleSystem.MinMaxCurve(0f, Mathf.PI * 2f);
+
+        var emission = ps.emission;
+        emission.rateOverTime = 12;
+
+        var shape = ps.shape;
+        shape.shapeType = ParticleSystemShapeType.Sphere;
+        shape.radius = 0.3f;
+
+        // Grow then fade
+        var sizeOverLife = ps.sizeOverLifetime;
+        sizeOverLife.enabled = true;
+        sizeOverLife.size = new ParticleSystem.MinMaxCurve(1f,
+            new AnimationCurve(
+                new Keyframe(0f, 0.3f),
+                new Keyframe(0.3f, 1.0f),
+                new Keyframe(1f, 0.6f)));
+
+        // Fade out over lifetime
+        var colorOverLife = ps.colorOverLifetime;
+        colorOverLife.enabled = true;
+        Gradient grad = new Gradient();
+        grad.SetKeys(
+            new[] {
+                new GradientColorKey(new Color(0.4f, 0.55f, 0.12f), 0f),
+                new GradientColorKey(new Color(0.5f, 0.6f, 0.18f), 0.4f),
+                new GradientColorKey(new Color(0.35f, 0.45f, 0.1f), 1f)
+            },
+            new[] {
+                new GradientAlphaKey(0.0f, 0f),
+                new GradientAlphaKey(0.25f, 0.15f),
+                new GradientAlphaKey(0.2f, 0.6f),
+                new GradientAlphaKey(0f, 1f)
+            });
+        colorOverLife.color = grad;
+
+        // Gentle swirl
+        var rotOverLife = ps.rotationOverLifetime;
+        rotOverLife.enabled = true;
+        rotOverLife.z = new ParticleSystem.MinMaxCurve(-0.5f, 0.5f);
+
+        var renderer = go.GetComponent<ParticleSystemRenderer>();
+        renderer.material = GetParticleMaterial(new Color(0.4f, 0.55f, 0.12f, 0.2f));
+
+        go.SetActive(false);
+        return ps;
+    }
+
+    ParticleSystem CreateSewerFlies()
+    {
+        var go = new GameObject("SewerFlies");
+        go.transform.SetParent(transform);
+        var ps = go.AddComponent<ParticleSystem>();
+
+        var main = ps.main;
+        main.maxParticles = 20;
+        main.startLifetime = new ParticleSystem.MinMaxCurve(2f, 5f);
+        main.startSpeed = new ParticleSystem.MinMaxCurve(0.5f, 1.5f);
+        main.startSize = new ParticleSystem.MinMaxCurve(0.015f, 0.03f);
+        main.startColor = new Color(0.05f, 0.05f, 0.02f, 0.9f); // tiny dark specks
+        main.loop = true;
+        main.playOnAwake = false;
+        main.simulationSpace = ParticleSystemSimulationSpace.World;
+        main.gravityModifier = 0f;
+
+        var emission = ps.emission;
+        emission.rateOverTime = 3;
+
+        var shape = ps.shape;
+        shape.shapeType = ParticleSystemShapeType.Sphere;
+        shape.radius = 3f; // around the player area
+
+        // Erratic buzzing motion
+        var noise = ps.noise;
+        noise.enabled = true;
+        noise.strength = new ParticleSystem.MinMaxCurve(1.5f, 3f);
+        noise.frequency = 4f;
+        noise.scrollSpeed = 2f;
+        noise.octaveCount = 2;
+
+        var renderer = go.GetComponent<ParticleSystemRenderer>();
+        renderer.material = GetParticleMaterial(new Color(0.05f, 0.05f, 0.02f, 0.9f));
+
+        go.SetActive(false);
+        return ps;
+    }
+
+    /// <summary>Start the stink cloud trail behind the turd.</summary>
+    public void StartStinkCloud(Transform player)
+    {
+        if (_stinkCloud == null) return;
+        _stinkCloud.gameObject.SetActive(true);
+        _stinkCloud.transform.SetParent(player);
+        _stinkCloud.transform.localPosition = Vector3.back * 0.4f;
+        _stinkCloud.Play();
+    }
+
+    /// <summary>Update stink intensity based on speed (more speed = more stink).</summary>
+    public void UpdateStinkIntensity(float speed)
+    {
+        if (_stinkCloud == null) return;
+        var emission = _stinkCloud.emission;
+        float intensity = Mathf.Lerp(5f, 25f, Mathf.Clamp01((speed - 4f) / 10f));
+        emission.rateOverTime = intensity;
+    }
+
+    /// <summary>Start ambient sewer flies around the player.</summary>
+    public void StartSewerFlies(Transform player)
+    {
+        if (_sewerFlies == null) return;
+        _sewerFlies.gameObject.SetActive(true);
+        _sewerFlies.transform.SetParent(player);
+        _sewerFlies.transform.localPosition = Vector3.zero;
+        _sewerFlies.Play();
+    }
+
+    public void StopStinkCloud()
+    {
+        if (_stinkCloud == null) return;
+        _stinkCloud.Stop();
+        _stinkCloud.transform.SetParent(transform);
     }
 }

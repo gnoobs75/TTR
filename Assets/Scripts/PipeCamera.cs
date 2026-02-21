@@ -27,7 +27,7 @@ public class PipeCamera : MonoBehaviour
 
     [Header("FOV")]
     public float baseFOV = 68f;
-    public float speedFOVBoost = 8f;
+    public float speedFOVBoost = 12f;
 
     // kept for API compatibility with SceneDiagnostics
     [HideInInspector] public float heightAbovePlayer = 1.2f;
@@ -38,12 +38,13 @@ public class PipeCamera : MonoBehaviour
     private Camera _cam;
     private Vector3 _velocity;
     private bool _initialized = false;
-    private float _debugTimer = 0f;
 
     // Juice
     private float _shakeIntensity;
     private float _fovPunch;
     private float _smoothCamBlend; // smoothed fork blend for camera (avoids jerky transitions)
+    private float _steerTilt;      // smoothed camera roll tilt from steering
+    private float _breathePhase;   // subtle organic camera breathing
 
     void Awake()
     {
@@ -118,7 +119,9 @@ public class PipeCamera : MonoBehaviour
             Vector3 desiredPos = camCenter + playerOffset * (1f - centerPull);
 
             // === LOOK TARGET: Ahead of the turd, at the turd's level ===
-            Vector3 lookTarget = target.position + camFwd * lookAhead;
+            // Dynamic look-ahead: further ahead at higher speeds
+            float dynLookAhead = lookAhead + Mathf.InverseLerp(6f, 14f, _tc.CurrentSpeed) * 4f;
+            Vector3 lookTarget = target.position + camFwd * dynLookAhead;
 
             // === WORLD UP ===
             Vector3 upDir = Vector3.up;
@@ -150,6 +153,16 @@ public class PipeCamera : MonoBehaviour
                     transform.rotation, targetRot, Time.deltaTime * rotationSmooth);
             }
 
+            // Steer tilt: bank camera when player turns for dynamic feel
+            if (_tc != null)
+            {
+                float targetTilt = -_tc.AngularVelocity * 0.04f;
+                targetTilt = Mathf.Clamp(targetTilt, -8f, 8f);
+                _steerTilt = Mathf.Lerp(_steerTilt, targetTilt, Time.deltaTime * 6f);
+                if (Mathf.Abs(_steerTilt) > 0.1f)
+                    transform.rotation *= Quaternion.Euler(0, 0, _steerTilt);
+            }
+
             // Speed-based FOV
             if (_cam != null)
             {
@@ -159,16 +172,13 @@ public class PipeCamera : MonoBehaviour
                 _cam.fieldOfView = Mathf.Lerp(_cam.fieldOfView, targetFOV, Time.deltaTime * 5f);
             }
 
-            // Debug: log positions periodically so we can verify
-            _debugTimer += Time.deltaTime;
-            if (_debugTimer > 3f)
-            {
-                _debugTimer = 0f;
-                Debug.Log($"[PipeCamera] playerDist={playerDist:F1} camDist={camDist:F1} " +
-                    $"camPos={transform.position} playerPos={target.position} " +
-                    $"camZ={transform.position.z:F1} playerZ={target.position.z:F1} " +
-                    $"delta={target.position.z - transform.position.z:F1}(+ahead/-behind)");
-            }
+            // Subtle camera breathing - organic feel, more pronounced at low speed
+            _breathePhase += Time.deltaTime;
+            float breatheSpeed = Mathf.Lerp(1.8f, 0.8f, Mathf.Clamp01((_tc.CurrentSpeed - 4f) / 10f));
+            float breatheAmp = Mathf.Lerp(0.02f, 0.005f, Mathf.Clamp01((_tc.CurrentSpeed - 4f) / 10f));
+            Vector3 breatheOffset = camUp * Mathf.Sin(_breathePhase * breatheSpeed) * breatheAmp
+                                  + camRight * Mathf.Sin(_breathePhase * breatheSpeed * 0.7f) * breatheAmp * 0.5f;
+            transform.position += breatheOffset;
         }
         else
         {

@@ -40,6 +40,19 @@ public class GameUI : MonoBehaviour
     public Transform shopContent;
     public Button shopCloseButton;
 
+    // Mobile-responsive UI scale factor
+    private float _uiScale = 1f;
+
+    void Awake()
+    {
+        // DPI-based scale for mobile devices (reference: 160 DPI desktop)
+        float dpi = Screen.dpi > 0 ? Screen.dpi : 160f;
+        _uiScale = Mathf.Clamp(dpi / 160f, 1f, 2.5f);
+#if UNITY_IOS || UNITY_ANDROID
+        _uiScale = Mathf.Max(_uiScale, 1.4f); // minimum 1.4x on mobile for readability
+#endif
+    }
+
     void Start()
     {
         if (gameOverPanel != null)
@@ -399,7 +412,7 @@ public class GameUI : MonoBehaviour
         item.transform.SetParent(shopContent, false);
 
         RectTransform rt = item.AddComponent<RectTransform>();
-        rt.sizeDelta = new Vector2(0, 70);
+        rt.sizeDelta = new Vector2(0, Mathf.RoundToInt(70 * _uiScale));
 
         // Background
         Image bg = item.AddComponent<Image>();
@@ -431,10 +444,10 @@ public class GameUI : MonoBehaviour
         Text nameText = nameObj.AddComponent<Text>();
         nameText.text = skin.name;
         if (!owned && skin.cost > 0)
-            nameText.text += $"\n<size=18>{skin.cost} Fartcoins</size>";
+            nameText.text += $"\n<size={Mathf.RoundToInt(18 * _uiScale)}>{skin.cost} Fartcoins</size>";
         nameText.font = Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
         if (nameText.font == null) nameText.font = Font.CreateDynamicFontFromOSFont("Arial", 14);
-        nameText.fontSize = 24;
+        nameText.fontSize = Mathf.RoundToInt(24 * _uiScale);
         nameText.color = Color.white;
         nameText.alignment = TextAnchor.MiddleLeft;
         nameText.horizontalOverflow = HorizontalWrapMode.Overflow;
@@ -461,7 +474,7 @@ public class GameUI : MonoBehaviour
         btnTextRt.offsetMax = Vector2.zero;
         Text btnText = btnTextObj.AddComponent<Text>();
         btnText.font = nameText.font;
-        btnText.fontSize = 20;
+        btnText.fontSize = Mathf.RoundToInt(20 * _uiScale);
         btnText.alignment = TextAnchor.MiddleCenter;
 
         if (selected)

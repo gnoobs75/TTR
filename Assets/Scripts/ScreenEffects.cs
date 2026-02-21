@@ -18,12 +18,17 @@ public class ScreenEffects : MonoBehaviour
     // Underwater overlay
     private Image _underwaterTint;
 
+    // Zone vignette (atmospheric colored edges per zone)
+    private Image _zoneVignette;
+
     // State
     private float _hitFlashAlpha;
     private float _vignetteIntensity;
     private float _dangerAlpha;
     private float _speedIntensity;
     private float _underwaterIntensity;
+    private Color _zoneVignetteColor = Color.clear;
+    private float _zoneVignetteAlpha;
 
     // Hit flash config
     private Color _hitFlashColor = new Color(1f, 0.15f, 0.05f, 0.6f);
@@ -32,6 +37,11 @@ public class ScreenEffects : MonoBehaviour
     // Speed overlay
     private float _speedThreshold = 12f;
     private float _maxSpeedOverlay = 0.15f;
+
+    // Hit chromatic aberration (color-shifted overlays)
+    private Image _chromaticLeft;
+    private Image _chromaticRight;
+    private float _chromaticIntensity;
 
     void Awake()
     {
@@ -48,8 +58,26 @@ public class ScreenEffects : MonoBehaviour
         // Hit flash - full screen red tint
         _hitFlash = CreateOverlay("HitFlash", new Color(1f, 0.15f, 0.05f, 0f));
 
-        // Vignette - darkened edges (uses a gradient texture or just solid with alpha)
+        // Vignette - darkened edges with procedural radial gradient
         _vignetteOverlay = CreateOverlay("Vignette", new Color(0, 0, 0, 0));
+        ApplyVignetteTexture(_vignetteOverlay);
+
+        // Chromatic aberration overlays (red/cyan fringing on hit)
+        _chromaticLeft = CreateOverlay("ChromaticL", new Color(1f, 0f, 0f, 0f));
+        _chromaticRight = CreateOverlay("ChromaticR", new Color(0f, 0.8f, 1f, 0f));
+        // Offset them slightly for the fringe effect
+        if (_chromaticLeft != null)
+        {
+            RectTransform rt = _chromaticLeft.GetComponent<RectTransform>();
+            rt.offsetMin = new Vector2(-4, 0);
+            rt.offsetMax = new Vector2(-4, 0);
+        }
+        if (_chromaticRight != null)
+        {
+            RectTransform rt = _chromaticRight.GetComponent<RectTransform>();
+            rt.offsetMin = new Vector2(4, 0);
+            rt.offsetMax = new Vector2(4, 0);
+        }
 
         // Danger pulse - low health warning
         _dangerPulse = CreateOverlay("DangerPulse", new Color(0.8f, 0f, 0f, 0));
@@ -59,6 +87,34 @@ public class ScreenEffects : MonoBehaviour
 
         // Underwater tint - murky green for drop sections
         _underwaterTint = CreateOverlay("UnderwaterTint", new Color(0.02f, 0.12f, 0.06f, 0));
+
+        // Zone vignette - atmospheric colored tint per zone
+        _zoneVignette = CreateOverlay("ZoneVignette", new Color(0, 0, 0, 0));
+    }
+
+    void ApplyVignetteTexture(Image img)
+    {
+        if (img == null) return;
+        int size = 256;
+        Texture2D tex = new Texture2D(size, size, TextureFormat.RGBA32, false);
+        float half = size * 0.5f;
+        for (int y = 0; y < size; y++)
+        {
+            for (int x = 0; x < size; x++)
+            {
+                float dx = (x - half) / half;
+                float dy = (y - half) / half;
+                float dist = Mathf.Sqrt(dx * dx + dy * dy);
+                float alpha = Mathf.Clamp01((dist - 0.35f) / 0.65f);
+                alpha = alpha * alpha; // quadratic falloff for natural vignette
+                tex.SetPixel(x, y, new Color(0, 0, 0, alpha));
+            }
+        }
+        tex.Apply();
+        Sprite spr = Sprite.Create(tex, new Rect(0, 0, size, size), new Vector2(0.5f, 0.5f));
+        img.sprite = spr;
+        img.type = Image.Type.Simple;
+        img.preserveAspect = false;
     }
 
     Image CreateOverlay(string name, Color color)
@@ -116,6 +172,46 @@ public class ScreenEffects : MonoBehaviour
             _speedOverlay.color = new Color(0.05f, 0.1f, 0.25f, 0f);
         }
 
+        // Vignette overlay - darkened edges at speed or after hit
+        if (_vignetteIntensity > 0.001f)
+        {
+            if (_vignetteOverlay != null)
+                _vignetteOverlay.color = new Color(1f, 1f, 1f, _vignetteIntensity);
+            _vignetteIntensity = Mathf.Lerp(_vignetteIntensity, 0f, dt * 2f);
+        }
+        else if (_vignetteOverlay != null)
+        {
+            _vignetteOverlay.color = new Color(1f, 1f, 1f, 0f);
+        }
+
+        // Chromatic aberration - red/cyan fringe on hit
+        if (_chromaticIntensity > 0.005f)
+        {
+            float a = _chromaticIntensity * 0.12f;
+            if (_chromaticLeft != null) _chromaticLeft.color = new Color(1f, 0f, 0f, a);
+            if (_chromaticRight != null) _chromaticRight.color = new Color(0f, 0.8f, 1f, a);
+            _chromaticIntensity = Mathf.Lerp(_chromaticIntensity, 0f, dt * 8f);
+        }
+        else
+        {
+            _chromaticIntensity = 0f;
+            if (_chromaticLeft != null) _chromaticLeft.color = new Color(1f, 0f, 0f, 0f);
+            if (_chromaticRight != null) _chromaticRight.color = new Color(0f, 0.8f, 1f, 0f);
+        }
+
+        // Zone vignette - atmospheric colored tint at screen edges
+        if (_zoneVignetteAlpha > 0.001f && _zoneVignette != null)
+        {
+            float pulse = 1f + Mathf.Sin(Time.time * 0.7f) * 0.15f; // slow atmospheric pulse
+            Color zc = _zoneVignetteColor;
+            zc.a = _zoneVignetteAlpha * 0.08f * pulse; // very subtle
+            _zoneVignette.color = zc;
+        }
+        else if (_zoneVignette != null)
+        {
+            _zoneVignette.color = Color.clear;
+        }
+
         // Underwater tint - murky green with caustic ripple
         if (_underwaterIntensity > 0.001f)
         {
@@ -134,11 +230,13 @@ public class ScreenEffects : MonoBehaviour
 
     // === PUBLIC API ===
 
-    /// <summary>Flash red on hit/stun.</summary>
+    /// <summary>Flash red on hit/stun with chromatic aberration.</summary>
     public void TriggerHitFlash()
     {
         _hitFlashAlpha = 0.5f;
         _dangerAlpha = 1f;
+        _chromaticIntensity = 1f;  // chromatic fringe on hit
+        _vignetteIntensity = Mathf.Max(_vignetteIntensity, 0.6f); // darken edges on hit
     }
 
     /// <summary>Brief yellow flash for invincibility end.</summary>
@@ -160,6 +258,9 @@ public class ScreenEffects : MonoBehaviour
     {
         float t = Mathf.Clamp01((currentSpeed - _speedThreshold) / 8f);
         _speedIntensity = Mathf.Lerp(_speedIntensity, t, Time.deltaTime * 3f);
+        // Speed vignette: tunnel vision at high speed
+        float vigTarget = t * 0.35f;
+        _vignetteIntensity = Mathf.Max(_vignetteIntensity, vigTarget);
     }
 
     /// <summary>Green flash for power-up pickup.</summary>
@@ -178,6 +279,15 @@ public class ScreenEffects : MonoBehaviour
         Invoke(nameof(ResetFlashColor), 0.4f);
     }
 
+    /// <summary>Zone-colored flash for zone transitions.</summary>
+    public void TriggerZoneFlash(Color zoneColor)
+    {
+        _hitFlashAlpha = 0.3f;
+        _hitFlashColor = new Color(zoneColor.r, zoneColor.g, zoneColor.b, 0.4f);
+        _vignetteIntensity = Mathf.Max(_vignetteIntensity, 0.4f);
+        Invoke(nameof(ResetFlashColor), 0.5f);
+    }
+
     /// <summary>Enable/disable underwater tint for vertical drop sections.</summary>
     public void SetUnderwater(bool active)
     {
@@ -188,5 +298,12 @@ public class ScreenEffects : MonoBehaviour
     public void UpdateUnderwaterIntensity(float target)
     {
         _underwaterIntensity = Mathf.Lerp(_underwaterIntensity, target, Time.deltaTime * 3f);
+    }
+
+    /// <summary>Set zone atmosphere vignette color. Called by PipeZoneSystem.</summary>
+    public void UpdateZoneVignette(Color zoneColor, float intensity)
+    {
+        _zoneVignetteColor = zoneColor;
+        _zoneVignetteAlpha = Mathf.Lerp(_zoneVignetteAlpha, intensity, Time.deltaTime * 2f);
     }
 }

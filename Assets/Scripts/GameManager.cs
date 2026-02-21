@@ -136,6 +136,13 @@ public class GameManager : MonoBehaviour
             TutorialOverlay.Instance.ResetForNewRun();
         if (AnalyticsManager.Instance != null)
             AnalyticsManager.Instance.LogRunStart();
+
+        // Start signature poop effects
+        if (ParticleManager.Instance != null && player != null)
+        {
+            ParticleManager.Instance.StartStinkCloud(player.transform);
+            ParticleManager.Instance.StartSewerFlies(player.transform);
+        }
     }
 
     void Update()
@@ -230,6 +237,7 @@ public class GameManager : MonoBehaviour
             ParticleManager.Instance.UpdateDustMotes(player.transform.position);
             ParticleManager.Instance.UpdateSewerBubbles(
                 player.transform.position + Vector3.down * 2.5f);
+            ParticleManager.Instance.UpdateStinkIntensity(player.CurrentSpeed);
         }
 
         if (gameUI != null)

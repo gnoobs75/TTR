@@ -23,10 +23,24 @@ public class TouchInput : MonoBehaviour
     /// <summary>True the frame the player taps/presses to start or restart.</summary>
     public bool ActionPressed { get; private set; }
 
+    /// <summary>Vertical input from -1 (down) to +1 (up). For drops/swimming.</summary>
+    public float VerticalInput { get; private set; }
+
+    /// <summary>True the frame the player swipes up (trick initiation).</summary>
+    public bool SwipeUp { get; private set; }
+
+    /// <summary>True the frame the player swipes down (trick initiation).</summary>
+    public bool SwipeDown { get; private set; }
+
     // Swipe tracking
     private Vector2 _swipeStart;
     private bool _isSwiping;
     private float _swipeSteer;
+
+    // Swipe gesture detection for tricks
+    private Vector2[] _touchStartPos = new Vector2[5];
+    private bool[] _swipeConsumed = new bool[5];
+    private const float SWIPE_THRESHOLD_PX = 60f;
 
     void Awake()
     {
@@ -45,6 +59,9 @@ public class TouchInput : MonoBehaviour
     {
         ActionPressed = false;
         SteerInput = 0f;
+        SwipeUp = false;
+        SwipeDown = false;
+        VerticalInput = 0f;
 
         switch (controlScheme)
         {
@@ -83,26 +100,44 @@ public class TouchInput : MonoBehaviour
         if (Touchscreen.current == null) return;
 
         var touches = Touchscreen.current.touches;
-        bool anyTouch = false;
 
-        for (int i = 0; i < touches.Count; i++)
+        for (int i = 0; i < touches.Count && i < _touchStartPos.Length; i++)
         {
             var touch = touches[i];
             if (!touch.press.isPressed) continue;
-            anyTouch = true;
 
             Vector2 pos = touch.position.ReadValue();
             float screenHalf = Screen.width * 0.5f;
 
             // Left half = steer left, right half = steer right
             if (pos.x < screenHalf)
-                SteerInput += 1f; // Left (increases angle = visual left)
+                SteerInput += 1f;
             else
-                SteerInput -= 1f; // Right
+                SteerInput -= 1f;
 
-            // Tap detection for action
+            // Track start position for swipe detection
             if (touch.press.wasPressedThisFrame)
+            {
                 ActionPressed = true;
+                _touchStartPos[i] = pos;
+                _swipeConsumed[i] = false;
+            }
+
+            // Swipe gesture detection (for tricks: swipe up/down)
+            if (!_swipeConsumed[i])
+            {
+                float deltaY = pos.y - _touchStartPos[i].y;
+                if (Mathf.Abs(deltaY) > SWIPE_THRESHOLD_PX)
+                {
+                    if (deltaY > 0) SwipeUp = true;
+                    else SwipeDown = true;
+                    _swipeConsumed[i] = true;
+                }
+            }
+
+            // Vertical input: touch Y position relative to screen center (for drops/swimming)
+            float yNorm = (pos.y - Screen.height * 0.5f) / (Screen.height * 0.35f);
+            VerticalInput = Mathf.Clamp(yNorm, -1f, 1f);
         }
 
         SteerInput = Mathf.Clamp(SteerInput, -1f, 1f);
@@ -158,6 +193,12 @@ public class TouchInput : MonoBehaviour
 
         // Negative tilt (tilt left) = steer left = positive input
         SteerInput = Mathf.Clamp(-tilt * tiltSensitivity, -1f, 1f);
+
+        // Forward/back tilt for vertical input (drops/swimming)
+        float tiltY = accel.y;
+        if (Mathf.Abs(tiltY) < tiltDeadZone) tiltY = 0f;
+        else tiltY = (tiltY - Mathf.Sign(tiltY) * tiltDeadZone) / (1f - tiltDeadZone);
+        VerticalInput = Mathf.Clamp(tiltY * tiltSensitivity, -1f, 1f);
 
         // Any screen tap = action
         if (Touchscreen.current != null && Touchscreen.current.primaryTouch.press.wasPressedThisFrame)

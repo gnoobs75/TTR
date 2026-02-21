@@ -108,6 +108,33 @@ public class SceneBootstrapper
         return null;
     }
 
+    /// <summary>Configure a TextMesh for URP rendering: set font and ensure render queue above haze.</summary>
+    static void ConfigureSignText(TextMesh tm)
+    {
+        if (_font != null) tm.font = _font;
+        MeshRenderer mr = tm.GetComponent<MeshRenderer>();
+        if (mr != null)
+        {
+            // Default font shader often invisible in URP. Use Sprites/Default
+            // which handles alpha-textured meshes in all render pipelines.
+            Shader spriteShader = Shader.Find("Sprites/Default");
+            Material fontSrc = (_font != null && _font.material != null) ? _font.material : mr.sharedMaterial;
+            if (spriteShader != null && fontSrc != null)
+            {
+                Material fontMat = new Material(spriteShader);
+                fontMat.mainTexture = fontSrc.mainTexture;
+                fontMat.color = tm.color;
+                fontMat.renderQueue = 3100;
+                mr.sharedMaterial = fontMat;
+            }
+            else if (fontSrc != null)
+            {
+                mr.sharedMaterial = new Material(fontSrc);
+                mr.sharedMaterial.renderQueue = 3100;
+            }
+        }
+    }
+
     // ===== GALLERY PREFAB =====
     /// <summary>
     /// Saves the fully-dressed MrCorny model (with face features, yellow corn kernels,
@@ -1288,7 +1315,7 @@ public class SceneBootstrapper
         EditorUtility.SetDirty(hazeMat);
         // Positive z = toward pipe center = visible to player inside pipe
         AddPrimChild(root, "Haze", PrimitiveType.Cube, new Vector3(0, 0, 0.003f),
-            Quaternion.identity, new Vector3(0.3f, 0.2f, 0.001f), hazeMat);
+            Quaternion.identity, new Vector3(0.6f, 0.35f, 0.001f), hazeMat);
 
         string txt = WarningTexts[_warningIndex % WarningTexts.Length];
         _warningIndex++;
@@ -1301,11 +1328,12 @@ public class SceneBootstrapper
         TextMesh tm = textObj.AddComponent<TextMesh>();
         tm.text = txt;
         tm.fontSize = 56;
-        tm.characterSize = 0.015f;
+        tm.characterSize = 0.045f;
         tm.anchor = TextAnchor.MiddleCenter;
         tm.alignment = TextAlignment.Center;
         tm.color = yellow;
         tm.fontStyle = FontStyle.Bold;
+        ConfigureSignText(tm);
 
         // Stencil-style hazard stripes
         Material stripeMat = MakeURPMat("Gross_WarnStripe", new Color(0.1f, 0.08f, 0.05f), 0f, 0.15f);
@@ -1370,7 +1398,7 @@ public class SceneBootstrapper
         EditorUtility.SetDirty(hazeMat);
         // Positive z = toward player inside pipe
         AddPrimChild(root, "Haze", PrimitiveType.Cube, new Vector3(0, 0, 0.003f),
-            Quaternion.identity, new Vector3(0.35f, 0.14f, 0.001f), hazeMat);
+            Quaternion.identity, new Vector3(0.55f, 0.2f, 0.001f), hazeMat);
 
         string num = PipeNumbers[_pipeNumIndex % PipeNumbers.Length];
         _pipeNumIndex++;
@@ -1383,11 +1411,12 @@ public class SceneBootstrapper
         TextMesh tm = textObj.AddComponent<TextMesh>();
         tm.text = num;
         tm.fontSize = 44;
-        tm.characterSize = 0.009f;
+        tm.characterSize = 0.03f;
         tm.anchor = TextAnchor.MiddleCenter;
         tm.alignment = TextAlignment.Center;
         tm.color = stencilCol;
         tm.fontStyle = FontStyle.Bold;
+        ConfigureSignText(tm);
 
         // Underline spray stroke
         Material lineMat = MakeURPMat("Gross_NumLine", stencilCol * 0.6f, 0f, 0.15f);
@@ -1469,7 +1498,7 @@ public class SceneBootstrapper
         EditorUtility.SetDirty(hazeMat);
         // Haze slightly behind text but still inside pipe (positive z = toward player)
         AddPrimChild(root, "Haze", PrimitiveType.Cube, new Vector3(0, 0, 0.003f),
-            Quaternion.identity, new Vector3(0.35f, 0.25f, 0.001f), hazeMat);
+            Quaternion.identity, new Vector3(0.65f, 0.35f, 0.001f), hazeMat);
 
         // Spray painted text — in front of haze, facing player inside the pipe
         // Sign faces INWARD so positive Z = toward pipe center = toward player = visible
@@ -1484,11 +1513,12 @@ public class SceneBootstrapper
         TextMesh tm = textObj.AddComponent<TextMesh>();
         tm.text = msg;
         tm.fontSize = 64;
-        tm.characterSize = 0.022f;
+        tm.characterSize = 0.06f;
         tm.anchor = TextAnchor.MiddleCenter;
         tm.alignment = TextAlignment.Center;
         tm.color = sprayColor;
         tm.fontStyle = FontStyle.Bold;
+        ConfigureSignText(tm);
 
         // Paint drips (more for that authentic spray-paint feel)
         Material dripMat = MakeURPMat("Gross_Paint", sprayColor * 0.7f, 0f, 0.15f);
@@ -1768,11 +1798,12 @@ public class SceneBootstrapper
         TextMesh titleTm = titleObj.AddComponent<TextMesh>();
         titleTm.text = ad[0];
         titleTm.fontSize = 56;
-        titleTm.characterSize = 0.012f;
+        titleTm.characterSize = 0.035f;
         titleTm.anchor = TextAnchor.MiddleCenter;
         titleTm.alignment = TextAlignment.Center;
         titleTm.color = titleCol;
         titleTm.fontStyle = FontStyle.Bold;
+        ConfigureSignText(titleTm);
 
         // Subtitle
         GameObject subObj = new GameObject("SubText");
@@ -1782,10 +1813,11 @@ public class SceneBootstrapper
         TextMesh subTm = subObj.AddComponent<TextMesh>();
         subTm.text = ad[1];
         subTm.fontSize = 38;
-        subTm.characterSize = 0.009f;
+        subTm.characterSize = 0.025f;
         subTm.anchor = TextAnchor.MiddleCenter;
         subTm.alignment = TextAlignment.Center;
         subTm.color = subCol;
+        ConfigureSignText(subTm);
 
         // Body — the funny part
         GameObject bodyObj = new GameObject("BodyText");
@@ -1795,11 +1827,12 @@ public class SceneBootstrapper
         TextMesh bodyTm = bodyObj.AddComponent<TextMesh>();
         bodyTm.text = ad[2];
         bodyTm.fontSize = 34;
-        bodyTm.characterSize = 0.009f;
+        bodyTm.characterSize = 0.025f;
         bodyTm.anchor = TextAnchor.MiddleCenter;
         bodyTm.alignment = TextAlignment.Center;
         bodyTm.color = bodyCol;
         bodyTm.fontStyle = FontStyle.Bold;
+        ConfigureSignText(bodyTm);
 
         // Footer
         GameObject footObj = new GameObject("FooterText");
@@ -1809,10 +1842,11 @@ public class SceneBootstrapper
         TextMesh footTm = footObj.AddComponent<TextMesh>();
         footTm.text = ad[3];
         footTm.fontSize = 28;
-        footTm.characterSize = 0.008f;
+        footTm.characterSize = 0.022f;
         footTm.anchor = TextAnchor.MiddleCenter;
         footTm.alignment = TextAlignment.Center;
         footTm.color = footCol;
+        ConfigureSignText(footTm);
 
         // Paint drips from title (most paint = most drips)
         Material dripMat = MakeURPMat("Gross_AdDrip", titleCol * 0.7f, 0f, 0.15f);
@@ -1896,11 +1930,12 @@ public class SceneBootstrapper
         TextMesh tm = textObj.AddComponent<TextMesh>();
         tm.text = txt;
         tm.fontSize = 38;
-        tm.characterSize = 0.008f;
+        tm.characterSize = 0.025f;
         tm.anchor = TextAnchor.MiddleCenter;
         tm.alignment = TextAlignment.Center;
         tm.color = arrowCol;
         tm.fontStyle = FontStyle.Bold;
+        ConfigureSignText(tm);
 
         // Paint drips
         Material dripMat = MakeURPMat("Gross_ArrowDrip", arrowCol * 0.6f, 0f, 0.15f);
@@ -1965,11 +2000,12 @@ public class SceneBootstrapper
         TextMesh headerTm = headerObj.AddComponent<TextMesh>();
         headerTm.text = poster[0];
         headerTm.fontSize = 52;
-        headerTm.characterSize = 0.01f;
+        headerTm.characterSize = 0.03f;
         headerTm.anchor = TextAnchor.MiddleCenter;
         headerTm.alignment = TextAlignment.Center;
         headerTm.color = headerCol;
         headerTm.fontStyle = FontStyle.Bold;
+        ConfigureSignText(headerTm);
 
         // Name
         GameObject nameObj = new GameObject("Name");
@@ -1979,11 +2015,12 @@ public class SceneBootstrapper
         TextMesh nameTm = nameObj.AddComponent<TextMesh>();
         nameTm.text = poster[1];
         nameTm.fontSize = 40;
-        nameTm.characterSize = 0.009f;
+        nameTm.characterSize = 0.025f;
         nameTm.anchor = TextAnchor.MiddleCenter;
         nameTm.alignment = TextAlignment.Center;
         nameTm.color = new Color(0.15f, 0.12f, 0.08f);
         nameTm.fontStyle = FontStyle.Bold;
+        ConfigureSignText(nameTm);
 
         // Description
         GameObject descObj = new GameObject("Desc");
@@ -1993,10 +2030,11 @@ public class SceneBootstrapper
         TextMesh descTm = descObj.AddComponent<TextMesh>();
         descTm.text = poster[2];
         descTm.fontSize = 28;
-        descTm.characterSize = 0.007f;
+        descTm.characterSize = 0.02f;
         descTm.anchor = TextAnchor.MiddleCenter;
         descTm.alignment = TextAlignment.Center;
         descTm.color = new Color(0.2f, 0.18f, 0.12f);
+        ConfigureSignText(descTm);
 
         // Footer
         GameObject footObj = new GameObject("Footer");
@@ -2006,11 +2044,12 @@ public class SceneBootstrapper
         TextMesh footTm = footObj.AddComponent<TextMesh>();
         footTm.text = poster[3];
         footTm.fontSize = 30;
-        footTm.characterSize = 0.007f;
+        footTm.characterSize = 0.02f;
         footTm.anchor = TextAnchor.MiddleCenter;
         footTm.alignment = TextAlignment.Center;
         footTm.color = headerCol * 0.8f;
         footTm.fontStyle = FontStyle.Bold;
+        ConfigureSignText(footTm);
 
         // Tape/pin at top (holding poster to wall)
         Material tapeMat = MakeURPMat("Gross_Tape", new Color(0.75f, 0.7f, 0.55f, 0.8f), 0f, 0.3f);
@@ -2476,6 +2515,7 @@ public class SceneBootstrapper
         tm.anchor = TextAnchor.MiddleCenter;
         tm.color = new Color(0.2f, 0.8f, 0.9f);
         tm.fontStyle = FontStyle.Bold;
+        ConfigureSignText(tm);
 
         // Trigger collider - must span entire pipe cross-section so player hits it
         // Player rides the wall at ~3m from center, so radius must cover that
@@ -3030,7 +3070,7 @@ public class SceneBootstrapper
                 model.name = "Model";
                 model.transform.SetParent(racer.transform, false);
                 model.transform.localPosition = Vector3.zero;
-                model.transform.localScale = Vector3.one * 0.15f; // slightly smaller than player
+                model.transform.localScale = Vector3.one * 0.41f; // ~80% of player (0.51) for visible racing
 
                 // Remove imported colliders
                 foreach (Collider c in model.GetComponentsInChildren<Collider>())
@@ -3067,9 +3107,9 @@ public class SceneBootstrapper
             // Collider
             CapsuleCollider col = racer.AddComponent<CapsuleCollider>();
             col.isTrigger = false;
-            col.radius = 0.25f;
-            col.height = 1.2f;
-            col.direction = 2;
+            col.radius = 0.24f;
+            col.height = 0.8f;
+            col.direction = 2; // Z axis
 
             // Slither animation
             racer.AddComponent<TurdSlither>();

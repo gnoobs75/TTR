@@ -39,8 +39,8 @@ public class PipeZoneSystem : MonoBehaviour
             pipeEmission = new Color(0.08f, 0.07f, 0.06f),
             waterColor = new Color(0.15f, 0.22f, 0.18f),        // Murky gray-green (sewer water, not neon)
             waterEmission = new Color(0.02f, 0.04f, 0.03f),
-            fogColor = new Color(0.12f, 0.13f, 0.14f),
-            fogDensity = 0.003f,
+            fogColor = new Color(0.10f, 0.11f, 0.12f),
+            fogDensity = 0.008f,
             ambientColor = new Color(0.28f, 0.30f, 0.32f),
             lightColor = new Color(0.95f, 0.92f, 0.88f),
             lightIntensity = 1.5f,
@@ -55,8 +55,8 @@ public class PipeZoneSystem : MonoBehaviour
             pipeEmission = new Color(0.04f, 0.035f, 0.02f),
             waterColor = new Color(0.12f, 0.18f, 0.08f),        // Darker green-brown murk
             waterEmission = new Color(0.03f, 0.05f, 0.02f),
-            fogColor = new Color(0.08f, 0.09f, 0.06f),
-            fogDensity = 0.004f,
+            fogColor = new Color(0.06f, 0.07f, 0.04f),
+            fogDensity = 0.012f,
             ambientColor = new Color(0.20f, 0.22f, 0.16f),
             lightColor = new Color(0.88f, 0.80f, 0.65f),
             lightIntensity = 1.3f,
@@ -68,16 +68,16 @@ public class PipeZoneSystem : MonoBehaviour
             name = "Toxic Tunnels",
             startDistance = 250f,
             pipeColor = new Color(0.55f, 0.62f, 0.45f),        // Subtle green tint on concrete (not neon)
-            pipeEmission = new Color(0.03f, 0.06f, 0.02f),
+            pipeEmission = new Color(0.02f, 0.07f, 0.015f),
             waterColor = new Color(0.10f, 0.25f, 0.06f),        // Dark toxic green (not neon)
-            waterEmission = new Color(0.04f, 0.10f, 0.02f),
-            fogColor = new Color(0.05f, 0.08f, 0.03f),
-            fogDensity = 0.005f,
-            ambientColor = new Color(0.14f, 0.20f, 0.10f),
-            lightColor = new Color(0.65f, 0.85f, 0.55f),
-            lightIntensity = 1.1f,
+            waterEmission = new Color(0.03f, 0.12f, 0.015f),
+            fogColor = new Color(0.03f, 0.08f, 0.02f),          // Murkier toxic green fog
+            fogDensity = 0.015f,
+            ambientColor = new Color(0.10f, 0.18f, 0.06f),      // Darker, more saturated green
+            lightColor = new Color(0.55f, 0.88f, 0.45f),        // More saturated toxic green light
+            lightIntensity = 0.9f,                               // Dimmer - feels more dangerous
             bumpScale = 1.4f,
-            emissionBoost = 1.2f,
+            emissionBoost = 1.5f,                                // Pipes glow more in darkness
             detailDensity = 0.8f
         },
         new ZoneData {
@@ -87,8 +87,8 @@ public class PipeZoneSystem : MonoBehaviour
             pipeEmission = new Color(0.06f, 0.03f, 0.01f),
             waterColor = new Color(0.18f, 0.12f, 0.06f),        // Dark brown water
             waterEmission = new Color(0.05f, 0.03f, 0.01f),
-            fogColor = new Color(0.10f, 0.06f, 0.03f),
-            fogDensity = 0.004f,
+            fogColor = new Color(0.08f, 0.05f, 0.02f),
+            fogDensity = 0.012f,
             ambientColor = new Color(0.22f, 0.16f, 0.10f),
             lightColor = new Color(0.95f, 0.72f, 0.45f),
             lightIntensity = 1.2f,
@@ -100,16 +100,16 @@ public class PipeZoneSystem : MonoBehaviour
             name = "Hellsewer",
             startDistance = 800f,
             pipeColor = new Color(0.45f, 0.22f, 0.15f),        // Dark reddish-brown (not bright crimson)
-            pipeEmission = new Color(0.10f, 0.03f, 0.01f),
+            pipeEmission = new Color(0.14f, 0.03f, 0.01f),      // Stronger hellish glow
             waterColor = new Color(0.25f, 0.08f, 0.04f),        // Dark blood-brown
-            waterEmission = new Color(0.08f, 0.02f, 0.01f),
-            fogColor = new Color(0.10f, 0.03f, 0.02f),
-            fogDensity = 0.006f,
-            ambientColor = new Color(0.20f, 0.10f, 0.06f),
-            lightColor = new Color(0.95f, 0.45f, 0.25f),
-            lightIntensity = 1.0f,
+            waterEmission = new Color(0.12f, 0.02f, 0.008f),    // Blood-red glow
+            fogColor = new Color(0.10f, 0.02f, 0.008f),         // Blood-red murk
+            fogDensity = 0.02f,                                  // Dense, claustrophobic
+            ambientColor = new Color(0.14f, 0.06f, 0.03f),      // Much darker, oppressive
+            lightColor = new Color(1.0f, 0.38f, 0.18f),         // Deep crimson light
+            lightIntensity = 0.75f,                              // Darker, more oppressive
             bumpScale = 1.8f,
-            emissionBoost = 1.5f,
+            emissionBoost = 2.0f,                                // Pipes glow more in the dark
             detailDensity = 1.0f
         }
     };
@@ -218,6 +218,22 @@ public class PipeZoneSystem : MonoBehaviour
             _mainLight.intensity = Mathf.Lerp(current.lightIntensity, next.lightIntensity, blend);
         }
 
+        // Light flicker in dark zones (Rusty + Hellsewer) for aging infrastructure feel
+        if (_mainLight != null && zoneIdx >= 3)
+        {
+            float flickerStrength = (zoneIdx == 4) ? 0.08f : 0.04f;
+            float flicker = 1f + (Mathf.PerlinNoise(Time.time * 8f, 0f) - 0.5f) * flickerStrength
+                              + (Mathf.PerlinNoise(Time.time * 23f, 5f) - 0.5f) * flickerStrength * 0.5f;
+            _mainLight.intensity *= flicker;
+        }
+
+        // Zone vignette: subtle atmosphere tint at screen edges (stronger in deeper zones)
+        if (ScreenEffects.Instance != null)
+        {
+            float vignetteStr = Mathf.Lerp(0f, 1f, zoneIdx / (float)(zones.Length - 1));
+            ScreenEffects.Instance.UpdateZoneVignette(fogCol, vignetteStr);
+        }
+
         // Announce zone change with full fanfare
         if (zoneChanged)
         {
@@ -228,12 +244,12 @@ public class PipeZoneSystem : MonoBehaviour
                 ScorePopup.Instance.ShowMilestone(
                     _tc.transform.position + Vector3.up * 2.5f,
                     zones[zoneIdx].name.ToUpper());
-            // Camera rumble for zone transition
+            // Camera rumble for zone transition (stronger in later zones)
             if (PipeCamera.Instance != null)
-                PipeCamera.Instance.Shake(0.2f);
-            // Screen flash
+                PipeCamera.Instance.Shake(0.2f + zoneIdx * 0.05f);
+            // Zone-colored screen flash instead of generic gold
             if (ScreenEffects.Instance != null)
-                ScreenEffects.Instance.TriggerMilestoneFlash();
+                ScreenEffects.Instance.TriggerZoneFlash(zones[zoneIdx].lightColor);
             HapticManager.MediumTap();
         }
     }

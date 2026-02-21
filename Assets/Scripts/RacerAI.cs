@@ -73,6 +73,10 @@ public class RacerAI : MonoBehaviour
     private List<Transform> _pupils = new List<Transform>();
     private List<Transform> _eyes = new List<Transform>();
 
+    // Near-miss detection (trigger combo when passing close to player)
+    private bool _nearMissTriggered;
+    private const float NEAR_MISS_DIST = 2.5f;
+
     // Public accessors
     public float DistanceTraveled => _distanceAlongPath;
     public bool IsFinished => _finished;
@@ -263,6 +267,25 @@ public class RacerAI : MonoBehaviour
             _slither.turnInput = _steerInput;
         }
 
+        // === NEAR-MISS DETECTION (combo event when racers pass close) ===
+        if (rm != null && rm.PlayerController != null)
+        {
+            float distToPlayer = Vector3.Distance(transform.position, rm.PlayerController.transform.position);
+            if (distToPlayer < NEAR_MISS_DIST && !_nearMissTriggered)
+            {
+                _nearMissTriggered = true;
+                if (ComboSystem.Instance != null)
+                    ComboSystem.Instance.RegisterEvent(ComboSystem.EventType.NearMiss);
+                if (ParticleManager.Instance != null)
+                    ParticleManager.Instance.PlayNearMissStreak(transform.position);
+                HapticManager.LightTap();
+            }
+            else if (distToPlayer > NEAR_MISS_DIST * 2f)
+            {
+                _nearMissTriggered = false;
+            }
+        }
+
         // === EYE TRACKING (look at nearest racer or player) ===
         if (rm != null && rm.PlayerController != null)
         {
@@ -324,6 +347,9 @@ public class RacerAI : MonoBehaviour
 
         if (ProceduralAudio.Instance != null)
             ProceduralAudio.Instance.PlayObstacleHit();
+        // Visual feedback on AI stumble
+        if (ParticleManager.Instance != null)
+            ParticleManager.Instance.PlayHitExplosion(transform.position);
     }
 
     /// <summary>Called by RaceManager when this racer crosses the finish line.</summary>

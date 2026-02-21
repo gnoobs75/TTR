@@ -50,6 +50,9 @@ public class RaceManager : MonoBehaviour
     private float _autoFinishTimer;
     private const float AUTO_FINISH_TIMEOUT = 15f;
 
+    // Position change tracking
+    private int _lastPlayerPosition = 0;
+
     public State RaceState => _state;
     public float LeaderDistance => _leaderDistance;
     public float RaceTime => _state >= State.Racing ? Time.time - _raceStartTime : 0f;
@@ -231,6 +234,38 @@ public class RaceManager : MonoBehaviour
             _entries[i] = e;
         }
 
+        // Position change announcements
+        foreach (var e in _entries)
+        {
+            if (e.isPlayer && !e.isFinished)
+            {
+                if (_lastPlayerPosition > 0 && e.position != _lastPlayerPosition)
+                {
+                    bool improved = e.position < _lastPlayerPosition;
+                    string posStr = e.position + GetOrdinal(e.position);
+                    if (improved)
+                    {
+                        // Player moved UP in position
+                        if (ScorePopup.Instance != null && playerController != null)
+                            ScorePopup.Instance.ShowMilestone(
+                                playerController.transform.position + Vector3.up * 2f, posStr + "!");
+                        if (PipeCamera.Instance != null)
+                            PipeCamera.Instance.PunchFOV(3f);
+                        HapticManager.MediumTap();
+                    }
+                    else
+                    {
+                        // Player dropped position
+                        if (PipeCamera.Instance != null)
+                            PipeCamera.Instance.Shake(0.15f);
+                        HapticManager.LightTap();
+                    }
+                }
+                _lastPlayerPosition = e.position;
+                break;
+            }
+        }
+
         if (leaderboard != null)
             leaderboard.UpdatePositions(_entries);
 
@@ -344,6 +379,10 @@ public class RaceManager : MonoBehaviour
         bannerObj.transform.position = center + up * (radius * 0.5f);
         bannerObj.transform.rotation = Quaternion.LookRotation(-forward, up);
 
+        // Load font for TextMesh visibility
+        Font bannerFont = Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
+        if (bannerFont == null) bannerFont = Resources.GetBuiltinResource<Font>("Arial.ttf");
+
         TextMesh tm = bannerObj.AddComponent<TextMesh>();
         tm.text = "FINISH";
         tm.fontSize = 80;
@@ -352,6 +391,14 @@ public class RaceManager : MonoBehaviour
         tm.anchor = TextAnchor.MiddleCenter;
         tm.color = new Color(1f, 0.85f, 0.1f);
         tm.fontStyle = FontStyle.Bold;
+        if (bannerFont != null) tm.font = bannerFont;
+        // Ensure material is set for URP rendering
+        MeshRenderer tmr = bannerObj.GetComponent<MeshRenderer>();
+        if (tmr != null && bannerFont != null && bannerFont.material != null)
+        {
+            tmr.sharedMaterial = new Material(bannerFont.material);
+            tmr.sharedMaterial.renderQueue = 3100;
+        }
 
         // Second banner facing opposite direction
         GameObject banner2 = new GameObject("FinishBanner3D_Back");
@@ -366,6 +413,13 @@ public class RaceManager : MonoBehaviour
         tm2.anchor = TextAnchor.MiddleCenter;
         tm2.color = new Color(1f, 0.85f, 0.1f);
         tm2.fontStyle = FontStyle.Bold;
+        if (bannerFont != null) tm2.font = bannerFont;
+        MeshRenderer tmr2 = banner2.GetComponent<MeshRenderer>();
+        if (tmr2 != null && bannerFont != null && bannerFont.material != null)
+        {
+            tmr2.sharedMaterial = new Material(bannerFont.material);
+            tmr2.sharedMaterial.renderQueue = 3100;
+        }
 
         Debug.Log($"TTR: Spawned checkered finish gate at {raceDistance:F0}m");
     }
