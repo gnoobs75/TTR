@@ -89,6 +89,7 @@ public class GameUI : MonoBehaviour
     void OnStartClicked()
     {
         HapticManager.MediumTap();
+        if (ProceduralAudio.Instance != null) ProceduralAudio.Instance.PlayUIClick();
         if (GameManager.Instance != null)
             GameManager.Instance.StartGame();
     }
@@ -110,6 +111,7 @@ public class GameUI : MonoBehaviour
     void OnShopClicked()
     {
         HapticManager.LightTap();
+        if (ProceduralAudio.Instance != null) ProceduralAudio.Instance.PlayUIClick();
         if (shopPanel != null)
             shopPanel.SetActive(true);
         if (startPanel != null)
@@ -120,6 +122,8 @@ public class GameUI : MonoBehaviour
 
     void OnShopCloseClicked()
     {
+        HapticManager.LightTap();
+        if (ProceduralAudio.Instance != null) ProceduralAudio.Instance.PlayUIClick();
         if (shopPanel != null)
             shopPanel.SetActive(false);
         if (startPanel != null)
@@ -466,6 +470,7 @@ public class GameUI : MonoBehaviour
     void OnRestartClicked()
     {
         HapticManager.MediumTap();
+        if (ProceduralAudio.Instance != null) ProceduralAudio.Instance.PlayUIClick();
         if (GameManager.Instance != null)
             GameManager.Instance.RestartGame();
     }

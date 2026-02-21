@@ -66,6 +66,8 @@ public class ProceduralAudio : MonoBehaviour
     private AudioClip _bubblePop;
     private AudioClip _coinMagnet;
     private AudioClip _forkWarning;
+    private AudioClip _comboBreak;
+    private AudioClip _uiClick;
 
     // Real audio file clips
     private AudioClip _toiletFlush;
@@ -498,6 +500,25 @@ public class ProceduralAudio : MonoBehaviour
             return signal * env * 0.5f;
         });
 
+        // Combo break: 3 quick descending notes (sad trombone mini)
+        _comboBreak = GenerateClip("ComboBreak", 0.25f, (t, dur) =>
+        {
+            float third = dur / 3f;
+            float freq;
+            if (t < third) freq = 523f;          // C5 (starts high)
+            else if (t < third * 2) freq = 392f; // G4 (drops)
+            else freq = 294f;                     // D4 (drops more)
+            float env = 1f - (t / dur);
+            return Mathf.Sin(2f * Mathf.PI * freq * t) * env * 0.25f;
+        });
+
+        // UI click: short crisp pop
+        _uiClick = GenerateClip("UIClick", 0.06f, (t, dur) =>
+        {
+            float env = 1f - (t / dur);
+            return Mathf.Sin(2f * Mathf.PI * 1200f * t) * env * env * 0.3f;
+        });
+
         // Background music: simple bass-driven loop
         GenerateBGM();
     }
@@ -669,6 +690,8 @@ public class ProceduralAudio : MonoBehaviour
     public void PlayBubblePop() => PlaySFX(_bubblePop, 0.4f);
     public void PlayCoinMagnet() => PlaySFX(_coinMagnet, 0.5f);
     public void PlayForkWarning() => PlaySFX(_forkWarning, 0.8f);
+    public void PlayComboBreak() => PlaySFX(_comboBreak, 0.5f);
+    public void PlayUIClick() => PlaySFX(_uiClick, 0.6f);
 
     public void StartMusic()
     {

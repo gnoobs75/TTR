@@ -104,6 +104,8 @@ public class ComboSystem : MonoBehaviour
 
     void EndCombo()
     {
+        if (ComboCount >= 3 && ProceduralAudio.Instance != null)
+            ProceduralAudio.Instance.PlayComboBreak();
         ComboCount = 0;
     }
 

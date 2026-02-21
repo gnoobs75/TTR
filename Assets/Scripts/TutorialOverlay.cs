@@ -5,6 +5,7 @@ using System.Collections;
 /// <summary>
 /// First-run tutorial hints that appear during gameplay.
 /// Shows contextual tips (steer, coins, near-miss, ramps) then never again.
+/// Self-builds UI at runtime - finds the overlay canvas and creates hint panel.
 /// </summary>
 public class TutorialOverlay : MonoBehaviour
 {
@@ -18,6 +19,8 @@ public class TutorialOverlay : MonoBehaviour
     private bool _showing;
     private int _hintIndex;
     private float _gameTimer;
+    private Text _progressText; // shows "1/4", "2/4" etc.
+    private float _uiScale = 1f;
 
     // Track which hints have been shown this session
     private bool _shownSteer;
@@ -35,8 +38,83 @@ public class TutorialOverlay : MonoBehaviour
     void Start()
     {
         _tutorialDone = PlayerPrefs.GetInt(PREFS_KEY, 0) == 1;
+
+        // DPI scaling for mobile
+        float dpi = Screen.dpi > 0 ? Screen.dpi : 160f;
+        _uiScale = Mathf.Clamp(dpi / 160f, 1f, 2.5f);
+
+        BuildTutorialUI();
+
         if (canvasGroup != null)
             canvasGroup.alpha = 0f;
+    }
+
+    void BuildTutorialUI()
+    {
+        // Find the overlay canvas
+        Canvas canvas = null;
+        foreach (var c in Object.FindObjectsByType<Canvas>(FindObjectsSortMode.None))
+        {
+            if (c.renderMode == RenderMode.ScreenSpaceOverlay && c.sortingOrder >= 100)
+            { canvas = c; break; }
+        }
+        if (canvas == null) return;
+
+        Font font = Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
+        if (font == null) font = Font.CreateDynamicFontFromOSFont("Arial", 14);
+
+        // Hint container (centered, middle-lower area of screen)
+        GameObject hintObj = new GameObject("TutorialHint");
+        hintObj.transform.SetParent(canvas.transform, false);
+        RectTransform hintRt = hintObj.AddComponent<RectTransform>();
+        hintRt.anchorMin = new Vector2(0.1f, 0.22f);
+        hintRt.anchorMax = new Vector2(0.9f, 0.32f);
+        hintRt.offsetMin = Vector2.zero;
+        hintRt.offsetMax = Vector2.zero;
+
+        // Translucent background for readability
+        Image bg = hintObj.AddComponent<Image>();
+        bg.color = new Color(0.05f, 0.08f, 0.03f, 0.85f);
+
+        // CanvasGroup for fading
+        canvasGroup = hintObj.AddComponent<CanvasGroup>();
+        canvasGroup.alpha = 0f;
+
+        // Hint text
+        GameObject textObj = new GameObject("HintText");
+        textObj.transform.SetParent(hintObj.transform, false);
+        RectTransform textRt = textObj.AddComponent<RectTransform>();
+        textRt.anchorMin = new Vector2(0.05f, 0f);
+        textRt.anchorMax = new Vector2(0.95f, 1f);
+        textRt.offsetMin = Vector2.zero;
+        textRt.offsetMax = Vector2.zero;
+
+        hintText = textObj.AddComponent<Text>();
+        hintText.font = font;
+        hintText.fontSize = Mathf.RoundToInt(26 * _uiScale);
+        hintText.fontStyle = FontStyle.Bold;
+        hintText.alignment = TextAnchor.MiddleCenter;
+        hintText.color = new Color(1f, 0.95f, 0.7f);
+        hintText.horizontalOverflow = HorizontalWrapMode.Overflow;
+
+        Outline outline = textObj.AddComponent<Outline>();
+        outline.effectColor = new Color(0, 0, 0, 0.9f);
+        outline.effectDistance = new Vector2(2, -2);
+
+        // Progress indicator (small text at bottom-right of hint box)
+        GameObject progObj = new GameObject("HintProgress");
+        progObj.transform.SetParent(hintObj.transform, false);
+        RectTransform progRt = progObj.AddComponent<RectTransform>();
+        progRt.anchorMin = new Vector2(0.7f, 0f);
+        progRt.anchorMax = new Vector2(0.98f, 0.35f);
+        progRt.offsetMin = Vector2.zero;
+        progRt.offsetMax = Vector2.zero;
+
+        _progressText = progObj.AddComponent<Text>();
+        _progressText.font = font;
+        _progressText.fontSize = Mathf.RoundToInt(14 * _uiScale);
+        _progressText.alignment = TextAnchor.LowerRight;
+        _progressText.color = new Color(0.5f, 0.5f, 0.4f, 0.7f);
     }
 
     void Update()
@@ -125,32 +203,50 @@ public class TutorialOverlay : MonoBehaviour
         StartCoroutine(ShowHintCoroutine());
     }
 
+    int CountHintsShown()
+    {
+        int n = 0;
+        if (_shownSteer) n++;
+        if (_shownCoin) n++;
+        if (_shownNearMiss) n++;
+        if (_shownRamp) n++;
+        return n;
+    }
+
     IEnumerator ShowHintCoroutine()
     {
         _showing = true;
+
+        // Update progress indicator
+        int shown = CountHintsShown();
+        if (_progressText != null)
+            _progressText.text = $"{shown}/4";
 
         // Fade in
         float t = 0f;
         while (t < 0.3f)
         {
             t += Time.deltaTime;
-            canvasGroup.alpha = t / 0.3f;
+            if (canvasGroup != null) canvasGroup.alpha = t / 0.3f;
             yield return null;
         }
-        canvasGroup.alpha = 1f;
+        if (canvasGroup != null) canvasGroup.alpha = 1f;
 
-        // Hold
-        yield return new WaitForSeconds(2.5f);
+        // Gentle haptic to draw attention
+        HapticManager.LightTap();
+
+        // Hold (longer for mobile readability)
+        yield return new WaitForSeconds(3.5f);
 
         // Fade out
         t = 0f;
         while (t < 0.5f)
         {
             t += Time.deltaTime;
-            canvasGroup.alpha = 1f - (t / 0.5f);
+            if (canvasGroup != null) canvasGroup.alpha = 1f - (t / 0.5f);
             yield return null;
         }
-        canvasGroup.alpha = 0f;
+        if (canvasGroup != null) canvasGroup.alpha = 0f;
 
         _showing = false;
         _hintIndex++;
