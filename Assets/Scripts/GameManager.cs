@@ -52,6 +52,9 @@ public class GameManager : MonoBehaviour
     // Freeze frame
     private float _freezeTimer = 0f;
 
+    // Fork approach warning
+    private PipeFork _warnedFork;
+
     public int RunCoins => _runCoins;
     public float Multiplier => _multiplier;
 
@@ -197,9 +200,28 @@ public class GameManager : MonoBehaviour
                 PipeCamera.Instance.Shake(0.3f);
                 PipeCamera.Instance.PunchFOV(6f);
             }
+            if (ScreenEffects.Instance != null)
+                ScreenEffects.Instance.TriggerMilestoneFlash();
             HapticManager.HeavyTap();
 
             _nextMilestoneIdx++;
+        }
+
+        // Fork approach warning (50m ahead)
+        foreach (var fork in PipeFork.ActiveForks)
+        {
+            if (fork == null) continue;
+            float distToFork = fork.forkDistance - distanceTraveled;
+            if (distToFork > 0f && distToFork < 50f && _warnedFork != fork)
+            {
+                _warnedFork = fork;
+                if (ScorePopup.Instance != null && player != null)
+                    ScorePopup.Instance.ShowMilestone(
+                        player.transform.position + Vector3.up * 2.5f, "FORK AHEAD!");
+                if (ProceduralAudio.Instance != null)
+                    ProceduralAudio.Instance.PlayForkWarning();
+                break;
+            }
         }
 
         // Update atmospheric particles
@@ -216,6 +238,7 @@ public class GameManager : MonoBehaviour
             gameUI.UpdateDistance(distanceTraveled);
             gameUI.UpdateMultiplier(_multiplier);
             gameUI.UpdateCoinCount(_runCoins);
+            if (player != null) gameUI.UpdateSpeed(player.CurrentSpeed);
         }
     }
 

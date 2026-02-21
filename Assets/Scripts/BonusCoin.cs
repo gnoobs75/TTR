@@ -92,6 +92,9 @@ public class BonusCoin : MonoBehaviour
             if (PipeCamera.Instance != null)
                 PipeCamera.Instance.PunchFOV(5f);
 
+            if (ScreenEffects.Instance != null)
+                ScreenEffects.Instance.TriggerPowerUpFlash();
+
             HapticManager.HeavyTap();
 
             Destroy(gameObject);

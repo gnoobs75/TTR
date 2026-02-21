@@ -102,6 +102,15 @@ public class SpeedBoost : MonoBehaviour
             tc.ApplySpeedBoost(speedMultiplier, duration);
             _used = true;
 
+            // Screen flash for boost pickup
+            if (ScreenEffects.Instance != null)
+                ScreenEffects.Instance.TriggerPowerUpFlash();
+
+            if (ProceduralAudio.Instance != null)
+                ProceduralAudio.Instance.PlaySpeedBoost();
+
+            HapticManager.MediumTap();
+
             // Flash bright then fade out
             foreach (Renderer r in _renderers)
             {

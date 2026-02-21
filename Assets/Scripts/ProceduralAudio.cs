@@ -33,6 +33,9 @@ public class ProceduralAudio : MonoBehaviour
     private AudioClip _blobGroan;
     private AudioClip _roachHiss;
     private AudioClip _aiTaunt;
+    private AudioClip _frogCroak;
+    private AudioClip _jellyZap;
+    private AudioClip _spiderHiss;
 
     // Stomp sound
     private AudioClip _stomp;
@@ -62,6 +65,7 @@ public class ProceduralAudio : MonoBehaviour
     private AudioClip _celebration;
     private AudioClip _bubblePop;
     private AudioClip _coinMagnet;
+    private AudioClip _forkWarning;
 
     // Real audio file clips
     private AudioClip _toiletFlush;
@@ -212,6 +216,37 @@ public class ProceduralAudio : MonoBehaviour
             float noise = Mathf.Sin(t * 6789f) * Mathf.Cos(t * 3456f);
             float low = Mathf.Sin(2f * Mathf.PI * 300f * t) * 0.15f;
             return (noise * 0.3f + low) * env * 0.2f;
+        });
+
+        // Frog croak: deep vibrating throat pouch sound
+        _frogCroak = GenerateClip("FrogCroak", 0.35f, (t, dur) =>
+        {
+            float freq = 120f + Mathf.Sin(t * 15f) * 30f; // warbling
+            float env = Mathf.Sin(Mathf.PI * t / dur) * Mathf.Exp(-t * 3f);
+            float tone = Mathf.Sin(2f * Mathf.PI * freq * t) * 0.5f
+                       + Mathf.Sin(2f * Mathf.PI * freq * 2.02f * t) * 0.25f
+                       + Mathf.Sin(2f * Mathf.PI * freq * 3.1f * t) * 0.1f;
+            return tone * env * 0.4f;
+        });
+
+        // Jellyfish zap: electric sting with buzzy crackle
+        _jellyZap = GenerateClip("JellyZap", 0.2f, (t, dur) =>
+        {
+            float freq = 800f + Mathf.Sin(t * 120f) * 400f;
+            float env = Mathf.Exp(-t * 15f);
+            float buzz = Mathf.Sin(2f * Mathf.PI * freq * t) * 0.4f;
+            float crackle = Mathf.Sin(t * 12345f) * Mathf.Cos(t * 8765f) * 0.3f;
+            return (buzz + crackle) * env * 0.35f;
+        });
+
+        // Spider hiss: high-pitched breathy hiss with clicking
+        _spiderHiss = GenerateClip("SpiderHiss", 0.25f, (t, dur) =>
+        {
+            float env = Mathf.Exp(-t * 8f);
+            float noise = Mathf.Sin(t * 8888f) * Mathf.Cos(t * 5555f) * 0.4f;
+            float click = (t < 0.03f) ? Mathf.Sin(2f * Mathf.PI * 2000f * t) * 0.5f : 0f;
+            float hiss = Mathf.Sin(2f * Mathf.PI * 3500f * t) * 0.15f;
+            return (noise + click + hiss) * env * 0.25f;
         });
 
         // AI taunt: soft mocking chuckle (lower, warmer)
@@ -449,6 +484,16 @@ public class ProceduralAudio : MonoBehaviour
             return shimmer * env * 0.3f;
         });
 
+        // Fork warning: urgent two-tone klaxon
+        _forkWarning = GenerateClip("ForkWarning", 0.5f, (t, dur) =>
+        {
+            float freq = (t % 0.15f < 0.075f) ? 600f : 450f; // alternating tones
+            float env = Mathf.Sin(Mathf.PI * t / dur);
+            float signal = Mathf.Sin(2f * Mathf.PI * freq * t) * 0.4f
+                         + Mathf.Sin(2f * Mathf.PI * freq * 2f * t) * 0.15f;
+            return signal * env * 0.5f;
+        });
+
         // Background music: simple bass-driven loop
         GenerateBGM();
     }
@@ -601,6 +646,9 @@ public class ProceduralAudio : MonoBehaviour
     public void PlayBlobSquish() => PlaySFX(_blobSquish);
     public void PlayMineExplosion() => PlaySFX(_mineExplosion);
     public void PlayRoachScurry() => PlaySFX(_roachScurry);
+    public void PlayFrogCroak() => PlaySFX(_frogCroak);
+    public void PlayJellyZap() => PlaySFX(_jellyZap);
+    public void PlaySpiderHiss() => PlaySFX(_spiderHiss);
 
     // Water sounds
     public void PlayWaterGush() => PlaySFX(_waterGush, 0.6f);
@@ -616,6 +664,7 @@ public class ProceduralAudio : MonoBehaviour
     public void PlayCelebration() => PlaySFX(_celebration);
     public void PlayBubblePop() => PlaySFX(_bubblePop, 0.4f);
     public void PlayCoinMagnet() => PlaySFX(_coinMagnet, 0.5f);
+    public void PlayForkWarning() => PlaySFX(_forkWarning, 0.8f);
 
     public void StartMusic()
     {

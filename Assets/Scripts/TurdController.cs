@@ -97,11 +97,17 @@ public class TurdController : MonoBehaviour
     private float _dropExitBoostDur = 3f;
     private Vector2 _dropOffset = Vector2.zero; // 2D offset from pipe center
 
+    // Fork tracking
+    private PipeFork _currentFork;
+    private int _forkBranch = -1;
+
     public float DistanceTraveled => _distanceAlongPath;
     public float CurrentSpeed => _currentSpeed;
     public float CurrentAngle => _currentAngle;
     public float AngularVelocity => _angularVelocity;
     public HitState CurrentHitState => _hitState;
+    public int ForkBranch => _forkBranch;
+    public PipeFork CurrentFork => _currentFork;
     public bool IsInvincible => _hitState == HitState.Invincible || _hitState == HitState.Stunned;
     public bool IsStunned => _hitState == HitState.Stunned;
     public bool IsJumping => _isJumping;
@@ -234,14 +240,54 @@ public class TurdController : MonoBehaviour
         if (Mathf.Abs(angleDelta) < 10f && Mathf.Abs(_steerInput) < 0.05f)
             _angularVelocity *= (1f - 6f * Time.deltaTime);
 
+        // === FORK CHECK (visual only - tracks branch for spawn density) ===
+        if (pipeGen != null)
+        {
+            PipeFork fork = pipeGen.GetForkAtDistance(_distanceAlongPath);
+            if (fork != null && _currentFork != fork)
+            {
+                // Entering a new fork - assign branch based on which side of pipe we're on
+                _currentFork = fork;
+                fork.AssignPlayer(_currentAngle);
+                _forkBranch = fork.PlayerBranch;
+            }
+            else if (fork == null && _currentFork != null)
+            {
+                // Exited fork zone
+                _currentFork.ResetPlayerBranch();
+                _currentFork = null;
+                _forkBranch = -1;
+            }
+        }
+
         // === POSITION AND ORIENT ===
         if (pipeGen != null)
         {
             Vector3 center, forward, right, up;
+
+            // Always use main path orientation (forward/right/up) for stable camera.
+            // Only blend the CENTER position laterally into the chosen branch.
             pipeGen.GetPathFrame(_distanceAlongPath, out center, out forward, out right, out up);
 
+            if (_currentFork != null && _forkBranch >= 0)
+            {
+                Vector3 branchCenter, branchFwd, branchRight, branchUp;
+                if (_currentFork.GetBranchFrame(_forkBranch, _distanceAlongPath,
+                    out branchCenter, out branchFwd, out branchRight, out branchUp))
+                {
+                    float blend = _currentFork.GetBranchBlend(_distanceAlongPath);
+                    center = Vector3.Lerp(center, branchCenter, blend);
+                }
+            }
+
+            // Use smaller radius when in a branch tube
+            float activeRadius = (_currentFork != null && _forkBranch >= 0)
+                ? Mathf.Lerp(pipeRadius, _currentFork.branchPipeRadius,
+                    _currentFork.GetBranchBlend(_distanceAlongPath))
+                : pipeRadius;
+
             float rad = _currentAngle * Mathf.Deg2Rad;
-            Vector3 offset = (right * Mathf.Cos(rad) + up * Mathf.Sin(rad)) * pipeRadius;
+            Vector3 offset = (right * Mathf.Cos(rad) + up * Mathf.Sin(rad)) * activeRadius;
             Vector3 targetPos = center + offset;
 
             // Jump: smooth parabolic arc above the pipe surface
@@ -432,6 +478,26 @@ public class TurdController : MonoBehaviour
     {
         if (_hitState != HitState.Normal) return;
 
+        // Underwater hit: push player to a random direction, brief stagger
+        if (_isDropping)
+        {
+            // Knockback: push offset in a random direction
+            Vector2 knockDir = Random.insideUnitCircle.normalized;
+            _dropOffset += knockDir * 1.2f;
+            if (_dropOffset.magnitude > _dropMoveRadius)
+                _dropOffset = _dropOffset.normalized * _dropMoveRadius;
+
+            if (PipeCamera.Instance != null)
+                PipeCamera.Instance.Shake(0.3f);
+            if (ProceduralAudio.Instance != null)
+                ProceduralAudio.Instance.PlayObstacleHit();
+            HapticManager.MediumTap();
+
+            if (ComboSystem.Instance != null)
+                ComboSystem.Instance.ResetCombo();
+            return;
+        }
+
         // Reset combo
         if (ComboSystem.Instance != null)
             ComboSystem.Instance.ResetCombo();
@@ -447,6 +513,10 @@ public class TurdController : MonoBehaviour
         if (ProceduralAudio.Instance != null)
             ProceduralAudio.Instance.PlayObstacleHit();
         HapticManager.HeavyTap();
+
+        // Screen flash overlay
+        if (ScreenEffects.Instance != null)
+            ScreenEffects.Instance.TriggerHitFlash();
 
         // Reset multiplier
         if (GameManager.Instance != null)
@@ -496,6 +566,10 @@ public class TurdController : MonoBehaviour
                 if (r != null) r.enabled = true;
         }
 
+        // Flash to indicate invincibility ending
+        if (ScreenEffects.Instance != null)
+            ScreenEffects.Instance.TriggerInvincibilityFlash();
+
         _hitState = HitState.Normal;
     }
 
@@ -544,6 +618,8 @@ public class TurdController : MonoBehaviour
         }
         if (ProceduralAudio.Instance != null)
             ProceduralAudio.Instance.PlayStomp();
+        if (ParticleManager.Instance != null)
+            ParticleManager.Instance.PlayStompSquash(transform.position);
         HapticManager.MediumTap();
     }
 
@@ -647,6 +723,14 @@ public class TurdController : MonoBehaviour
 
         // Kill angular velocity during drop
         _angularVelocity = 0f;
+
+        // Underwater screen tint
+        if (ScreenEffects.Instance != null)
+            ScreenEffects.Instance.SetUnderwater(true);
+
+        // Underwater bubble and debris particles
+        if (ParticleManager.Instance != null)
+            ParticleManager.Instance.StartUnderwaterEffects(transform);
     }
 
     void UpdateDropState()
@@ -654,33 +738,67 @@ public class TurdController : MonoBehaviour
         float dt = Time.deltaTime;
         _dropTimer += dt;
 
+        float progress = Mathf.Clamp01(_dropTimer / _dropDuration);
+
         // 2D movement input (arrow keys / touch move freely within pipe cross-section)
         float inputX = 0f, inputY = 0f;
 
         if (TouchInput.Instance != null)
         {
-            inputX = -TouchInput.Instance.SteerInput; // left/right
+            inputX = TouchInput.Instance.SteerInput; // left/right (positive = right)
         }
-        else if (Keyboard.current != null)
+
+        // Always check keyboard — touch only provides X axis, keyboard provides Y (up/down)
+        if (Keyboard.current != null)
         {
-            if (Keyboard.current.leftArrowKey.isPressed || Keyboard.current.aKey.isPressed)
-                inputX += 1f;
-            if (Keyboard.current.rightArrowKey.isPressed || Keyboard.current.dKey.isPressed)
-                inputX -= 1f;
+            if (TouchInput.Instance == null)
+            {
+                // Only use keyboard for X if no touch input available
+                if (Keyboard.current.leftArrowKey.isPressed || Keyboard.current.aKey.isPressed)
+                    inputX -= 1f;
+                if (Keyboard.current.rightArrowKey.isPressed || Keyboard.current.dKey.isPressed)
+                    inputX += 1f;
+            }
+            // Y axis always from keyboard (up/down arrows or W/S)
             if (Keyboard.current.upArrowKey.isPressed || Keyboard.current.wKey.isPressed)
                 inputY += 1f;
             if (Keyboard.current.downArrowKey.isPressed || Keyboard.current.sKey.isPressed)
                 inputY -= 1f;
         }
 
-        // Move offset within pipe cross-section
-        Vector2 targetOffset = _dropOffset + new Vector2(inputX, inputY) * _dropMoveSpeed * dt;
+        // === UNDERWATER PHYSICS: floaty, inertial movement ===
+        // Movement feels like swimming - slow response, drifty
+        float floatyLerp = 7f; // responsive but still floaty
+        Vector2 inputDir = new Vector2(inputX, inputY);
+        Vector2 targetOffset = _dropOffset + inputDir * _dropMoveSpeed * dt;
         if (targetOffset.magnitude > _dropMoveRadius)
             targetOffset = targetOffset.normalized * _dropMoveRadius;
-        _dropOffset = Vector2.Lerp(_dropOffset, targetOffset, dt * 10f);
+        _dropOffset = Vector2.Lerp(_dropOffset, targetOffset, dt * floatyLerp);
 
-        // Advance along pipe path at drop speed
-        _distanceAlongPath += _dropSpeed * dt;
+        // Drift slowly back to center when no input (gentle current)
+        if (inputDir.magnitude < 0.1f)
+            _dropOffset = Vector2.Lerp(_dropOffset, Vector2.zero, dt * 0.15f);
+
+        // Forward speed: gentle swim, then PLUNGE acceleration in the final 20%
+        float currentSwimSpeed = _dropSpeed;
+        bool plunging = progress > 0.8f;
+
+        if (plunging)
+        {
+            // Dramatic acceleration! The flush is coming!
+            float plungeT = (progress - 0.8f) / 0.2f; // 0→1 over last 20%
+            currentSwimSpeed = Mathf.Lerp(_dropSpeed, _dropSpeed * 4f, plungeT * plungeT);
+
+            // Camera effects during plunge
+            if (PipeCamera.Instance != null)
+            {
+                PipeCamera.Instance.PunchFOV(plungeT * 0.5f); // gradual FOV increase
+                if (plungeT > 0.5f)
+                    PipeCamera.Instance.Shake(plungeT * 0.15f);
+            }
+        }
+
+        _distanceAlongPath += currentSwimSpeed * dt;
 
         // Position: pipe center + 2D offset
         if (pipeGen != null)
@@ -689,23 +807,31 @@ public class TurdController : MonoBehaviour
             pipeGen.GetPathFrame(_distanceAlongPath, out center, out forward, out right, out up);
 
             Vector3 targetPos = center + right * _dropOffset.x + up * _dropOffset.y;
-            transform.position = Vector3.Lerp(transform.position, targetPos, dt * 12f);
+            transform.position = Vector3.Lerp(transform.position, targetPos, dt * 8f);
 
-            // Face forward with slight tilt based on movement
+            // Face forward with gentle swimming tilt (not wild spinning)
             Quaternion pathRot = Quaternion.LookRotation(forward, up);
-            Quaternion tilt = Quaternion.Euler(-inputY * 15f, 0, inputX * 20f);
+            float tiltX = -inputY * 12f;
+            float tiltZ = inputX * 18f;
+
+            // Gentle idle bob when not moving (floating underwater feel)
+            if (inputDir.magnitude < 0.1f && !plunging)
+            {
+                tiltX += Mathf.Sin(Time.time * 1.2f) * 3f;
+                tiltZ += Mathf.Sin(Time.time * 0.8f + 1f) * 2f;
+            }
+
+            Quaternion tilt = Quaternion.Euler(tiltX, 0, tiltZ);
             Quaternion targetRot = pathRot * tilt;
-            transform.rotation = Quaternion.Slerp(transform.rotation, targetRot, dt * 8f);
+            float rotSmooth = plunging ? 12f : 4f; // snappier during plunge
+            transform.rotation = Quaternion.Slerp(transform.rotation, targetRot, dt * rotSmooth);
         }
 
-        // Spin animation during freefall
-        transform.Rotate(0, 0, 120f * dt, Space.Self);
-
-        // Feed slither animation
+        // Feed slither animation (gentle undulation underwater)
         if (slither != null)
         {
-            slither.currentSpeed = _dropSpeed / forwardSpeed;
-            slither.turnInput = inputX;
+            slither.currentSpeed = currentSwimSpeed / forwardSpeed;
+            slither.turnInput = inputX * 0.6f; // gentler slither underwater
         }
 
         // Check drop end
@@ -719,16 +845,33 @@ public class TurdController : MonoBehaviour
         _currentAngle = 270f; // snap back to pipe bottom
         _currentSpeed = forwardSpeed; // reset speed before boost
 
-        // Speed boost on exit
+        // Clear underwater tint and particles
+        if (ScreenEffects.Instance != null)
+            ScreenEffects.Instance.SetUnderwater(false);
+        if (ParticleManager.Instance != null)
+            ParticleManager.Instance.StopUnderwaterEffects();
+
+        // === DRAMATIC PLUNGE FLUSH ===
+        // The water rushes forward and carries you at super speed!
         ApplySpeedBoost(_dropExitBoostMult, _dropExitBoostDur);
 
         if (ScorePopup.Instance != null)
-            ScorePopup.Instance.ShowMilestone(transform.position + Vector3.up * 2f, "BOOST!");
+            ScorePopup.Instance.ShowMilestone(transform.position + Vector3.up * 2f, "FLUSH!!!");
 
         if (PipeCamera.Instance != null)
         {
-            PipeCamera.Instance.Shake(0.4f);
-            PipeCamera.Instance.PunchFOV(8f);
+            PipeCamera.Instance.Shake(0.6f);
+            PipeCamera.Instance.PunchFOV(12f); // massive FOV punch
+        }
+
+        if (ProceduralAudio.Instance != null)
+            ProceduralAudio.Instance.PlaySpeedBoost();
+
+        if (ParticleManager.Instance != null)
+        {
+            ParticleManager.Instance.PlayWaterSplash(transform.position);
+            if (Camera.main != null)
+                ParticleManager.Instance.StartSpeedLines(Camera.main.transform);
         }
 
         HapticManager.HeavyTap();

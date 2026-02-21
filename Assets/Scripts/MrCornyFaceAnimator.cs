@@ -33,6 +33,12 @@ public class MrCornyFaceAnimator : MonoBehaviour
     public Transform hypnoDiscL;
     public Transform hypnoDiscR;
 
+    [Header("Enhanced Face")]
+    public Transform leftIris, rightIris;
+    public Transform leftEyelid, rightEyelid;
+    public Transform leftBrow, rightBrow;
+    public Transform sweatL, sweatR;
+
     // Cached defaults
     private Vector3 _leftEyeBaseScale;
     private Vector3 _rightEyeBaseScale;
@@ -49,6 +55,18 @@ public class MrCornyFaceAnimator : MonoBehaviour
     private Vector3 _tongueBaseScale;
     private Vector3 _cheekLBaseScale;
     private Vector3 _cheekRBaseScale;
+    private Vector3 _leftIrisBasePos;
+    private Vector3 _rightIrisBasePos;
+    private Vector3 _leftIrisBaseScale;
+    private Vector3 _rightIrisBaseScale;
+    private Vector3 _leftEyelidBaseScale;
+    private Vector3 _rightEyelidBaseScale;
+    private Quaternion _leftBrowBaseRot;
+    private Quaternion _rightBrowBaseRot;
+    private Vector3 _sweatLBasePos;
+    private Vector3 _sweatRBasePos;
+    private Vector3 _sweatLBaseScale;
+    private Vector3 _sweatRBaseScale;
 
     private TurdController _tc;
     private float _googlyPhaseL;
@@ -98,6 +116,15 @@ public class MrCornyFaceAnimator : MonoBehaviour
         if (tongue) _tongueBaseScale = tongue.localScale;
         if (cheekL) _cheekLBaseScale = cheekL.localScale;
         if (cheekR) _cheekRBaseScale = cheekR.localScale;
+
+        if (leftIris) { _leftIrisBasePos = leftIris.localPosition; _leftIrisBaseScale = leftIris.localScale; }
+        if (rightIris) { _rightIrisBasePos = rightIris.localPosition; _rightIrisBaseScale = rightIris.localScale; }
+        if (leftEyelid) _leftEyelidBaseScale = leftEyelid.localScale;
+        if (rightEyelid) _rightEyelidBaseScale = rightEyelid.localScale;
+        if (leftBrow) _leftBrowBaseRot = leftBrow.localRotation;
+        if (rightBrow) _rightBrowBaseRot = rightBrow.localRotation;
+        if (sweatL) { _sweatLBasePos = sweatL.localPosition; _sweatLBaseScale = sweatL.localScale; sweatL.localScale = Vector3.zero; }
+        if (sweatR) { _sweatRBasePos = sweatR.localPosition; _sweatRBaseScale = sweatR.localScale; sweatR.localScale = Vector3.zero; }
 
         _googlyPhaseL = Random.Range(0f, Mathf.PI * 2f);
         _googlyPhaseR = Random.Range(0f, Mathf.PI * 2f);
@@ -229,6 +256,12 @@ public class MrCornyFaceAnimator : MonoBehaviour
         if (rightPupil)
             rightPupil.localScale = Vector3.Lerp(rightPupil.localScale, _rightPupilBaseScale * pupilScale, dt * 10f);
 
+        // === IRIS SCALE (follows pupil sizing) ===
+        if (leftIris)
+            leftIris.localScale = Vector3.Lerp(leftIris.localScale, _leftIrisBaseScale * pupilScale, dt * 10f);
+        if (rightIris)
+            rightIris.localScale = Vector3.Lerp(rightIris.localScale, _rightIrisBaseScale * pupilScale, dt * 10f);
+
         // === PUPIL TRACKING (look toward steering direction) ===
         if (!_hypnoActive)
         {
@@ -249,6 +282,126 @@ public class MrCornyFaceAnimator : MonoBehaviour
                 targetPos.x += steerLook + googlyR;
                 targetPos.y += googlyR * 0.5f;
                 rightPupil.localPosition = Vector3.Lerp(rightPupil.localPosition, targetPos, dt * 8f);
+            }
+        }
+
+        // === IRIS TRACKING (follows pupil at 60% amplitude) ===
+        if (!_hypnoActive)
+        {
+            float steerIris = Mathf.Clamp(angVel * 0.012f, -0.09f, 0.09f);
+            float googlyIrisL = Mathf.Sin(Time.time * 1.8f + _googlyPhaseL) * 0.018f;
+            float googlyIrisR = Mathf.Sin(Time.time * 2.1f + _googlyPhaseR) * 0.018f;
+
+            if (leftIris)
+            {
+                Vector3 t = _leftIrisBasePos;
+                t.x += steerIris + googlyIrisL;
+                t.y += googlyIrisL * 0.3f;
+                leftIris.localPosition = Vector3.Lerp(leftIris.localPosition, t, dt * 8f);
+            }
+            if (rightIris)
+            {
+                Vector3 t = _rightIrisBasePos;
+                t.x += steerIris + googlyIrisR;
+                t.y += googlyIrisR * 0.3f;
+                rightIris.localPosition = Vector3.Lerp(rightIris.localPosition, t, dt * 8f);
+            }
+        }
+
+        // === EYELID ANIMATION (Y-scale for droop/retract) ===
+        {
+            float lidScaleMult = 1f;
+            if (_isBlinking)
+                lidScaleMult = 1.7f;       // expand to cover eye
+            else if (stunned)
+                lidScaleMult = 0.55f;       // retract (shock = wide open)
+            else if (jumping)
+                lidScaleMult = 0.6f;        // retract (excited)
+            else if (_hypnoActive)
+                lidScaleMult = 0.7f + Mathf.Sin(Time.time * 4f) * 0.15f;
+            else if (speedRatio > 0.7f)
+            {
+                float squint = Mathf.InverseLerp(0.7f, 1f, speedRatio);
+                lidScaleMult = Mathf.Lerp(1f, 1.35f, squint); // lower = squint
+            }
+
+            if (leftEyelid)
+            {
+                Vector3 s = _leftEyelidBaseScale;
+                s.y *= lidScaleMult;
+                leftEyelid.localScale = Vector3.Lerp(leftEyelid.localScale, s, dt * 12f);
+            }
+            if (rightEyelid)
+            {
+                Vector3 s = _rightEyelidBaseScale;
+                s.y *= lidScaleMult;
+                rightEyelid.localScale = Vector3.Lerp(rightEyelid.localScale, s, dt * 12f);
+            }
+        }
+
+        // === EYEBROW ANIMATION (rotation offsets from base) ===
+        {
+            float browOffL = 0f;
+            float browOffR = 0f;
+
+            if (stunned)
+            {
+                browOffL = 12f;     // raised surprised
+                browOffR = -12f;
+            }
+            else if (_hypnoActive)
+            {
+                browOffL = Mathf.Sin(Time.time * 5f) * 15f;
+                browOffR = Mathf.Sin(Time.time * 3.7f) * 15f; // asymmetric wobble
+            }
+            else if (jumping)
+            {
+                browOffL = 7f;      // slightly raised excited
+                browOffR = -7f;
+            }
+            else if (speedRatio > 0.7f)
+            {
+                float angry = Mathf.InverseLerp(0.7f, 1f, speedRatio);
+                browOffL = Mathf.Lerp(0f, -20f, angry);   // angry V inward
+                browOffR = Mathf.Lerp(0f, 20f, angry);
+            }
+
+            if (leftBrow)
+            {
+                Quaternion target = _leftBrowBaseRot * Quaternion.Euler(0, 0, browOffL);
+                leftBrow.localRotation = Quaternion.Slerp(leftBrow.localRotation, target, dt * 10f);
+            }
+            if (rightBrow)
+            {
+                Quaternion target = _rightBrowBaseRot * Quaternion.Euler(0, 0, browOffR);
+                rightBrow.localRotation = Quaternion.Slerp(rightBrow.localRotation, target, dt * 10f);
+            }
+        }
+
+        // === SWEAT DROPS (fade in at high speed with drip animation) ===
+        if (sweatL || sweatR)
+        {
+            float sweatVis = speedRatio > 0.75f ? Mathf.InverseLerp(0.75f, 0.9f, speedRatio) : 0f;
+
+            if (sweatL)
+            {
+                sweatL.localScale = Vector3.Lerp(sweatL.localScale, _sweatLBaseScale * sweatVis, dt * 6f);
+                if (sweatVis > 0.01f)
+                {
+                    Vector3 pos = _sweatLBasePos;
+                    pos.y += Mathf.Sin(Time.time * 3f) * 0.015f;
+                    sweatL.localPosition = Vector3.Lerp(sweatL.localPosition, pos, dt * 4f);
+                }
+            }
+            if (sweatR)
+            {
+                sweatR.localScale = Vector3.Lerp(sweatR.localScale, _sweatRBaseScale * sweatVis, dt * 6f);
+                if (sweatVis > 0.01f)
+                {
+                    Vector3 pos = _sweatRBasePos;
+                    pos.y += Mathf.Sin(Time.time * 3.4f) * 0.015f;
+                    sweatR.localPosition = Vector3.Lerp(sweatR.localPosition, pos, dt * 4f);
+                }
             }
         }
 

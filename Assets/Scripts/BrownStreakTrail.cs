@@ -141,14 +141,15 @@ public class BrownStreakTrail : MonoBehaviour
         streak.transform.position = pos;
         streak.transform.rotation = rot;
 
-        // Randomize size slightly
-        float w = streakWidth * Random.Range(0.6f, 1.4f);
-        float l = streakLength * Random.Range(0.7f, 1.3f);
+        // Speed-dependent size: faster = wider, longer, more visible
+        float speedFactor = Mathf.Clamp01((_tc.CurrentSpeed - 4f) / 12f);
+        float w = streakWidth * Random.Range(0.6f, 1.4f) * (1f + speedFactor * 0.8f);
+        float l = streakLength * Random.Range(0.7f, 1.3f) * (1f + speedFactor * 0.5f);
         streak.transform.localScale = new Vector3(w, l, 1f);
 
-        // Random brown shade - subtle so streaks blend with pipe wall
+        // Random brown shade - darker and more opaque at higher speeds
         float shade = Random.Range(0.15f, 0.35f);
-        float alpha = Random.Range(0.12f, 0.25f);
+        float alpha = Random.Range(0.12f, 0.25f) + speedFactor * 0.1f;
         Color streakColor = new Color(shade, shade * 0.6f, shade * 0.2f, alpha);
 
         var rend = streak.GetComponent<Renderer>();

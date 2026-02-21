@@ -45,6 +45,16 @@ public class PipeGenerator : MonoBehaviour
     private Material _waterMat;
     private Material _detailMat; // rust/slime overlay
 
+    // Pipe forks
+    [Header("Fork Settings")]
+    public float firstForkDistance = 300f;   // ~1 min at ~5m/s
+    public float secondForkDistance = 600f;  // ~2 min
+    private List<PipeFork> _forks = new List<PipeFork>();
+    private int _nextForkIdx = 0;
+    private float[] _forkDistances;
+
+    public List<PipeFork> Forks => _forks;
+
     public float SegmentLength => nodesPerSegment * nodeSpacing;
 
     // Structural geometry materials (shared across segments for batching)
@@ -106,6 +116,9 @@ public class PipeGenerator : MonoBehaviour
         if (player != null)
             _tc = player.GetComponent<TurdController>();
 
+        // Initialize fork distances
+        _forkDistances = new float[] { firstForkDistance, secondForkDistance };
+
         for (int i = 0; i < visiblePipes + 2; i++)
             SpawnSegment();
     }
@@ -136,6 +149,9 @@ public class PipeGenerator : MonoBehaviour
             }
             else break;
         }
+
+        // Spawn forks ahead
+        SpawnForksAhead(dist);
 
         // Zone-based material updates
         UpdateZoneMaterials();
@@ -968,5 +984,81 @@ public class PipeGenerator : MonoBehaviour
             Collider c = rivet.GetComponent<Collider>();
             if (c != null) Destroy(c);
         }
+    }
+
+    // ===== PIPE FORK SYSTEM =====
+
+    void SpawnForksAhead(float playerDist)
+    {
+        if (_forkDistances == null) return;
+
+        while (_nextForkIdx < _forkDistances.Length)
+        {
+            float forkDist = _forkDistances[_nextForkIdx];
+            // Spawn fork when player is within 200m
+            if (playerDist + 200f >= forkDist)
+            {
+                SpawnFork(forkDist);
+                _nextForkIdx++;
+            }
+            else break;
+        }
+
+        // Clean up passed forks
+        for (int i = _forks.Count - 1; i >= 0; i--)
+        {
+            if (_forks[i] == null)
+            {
+                _forks.RemoveAt(i);
+                continue;
+            }
+            if (playerDist > _forks[i].rejoinDistance + 50f)
+            {
+                Destroy(_forks[i].gameObject);
+                _forks.RemoveAt(i);
+            }
+        }
+    }
+
+    void SpawnFork(float distance)
+    {
+        GameObject forkObj = new GameObject($"PipeFork_{distance:F0}m");
+        forkObj.transform.SetParent(transform);
+        PipeFork fork = forkObj.AddComponent<PipeFork>();
+        fork.Setup(distance, pipeRadius, this);
+        _forks.Add(fork);
+        Debug.Log($"TTR: Spawned pipe fork at {distance:F0}m (branches rejoin at {fork.rejoinDistance:F0}m)");
+    }
+
+    /// <summary>
+    /// Get path frame accounting for forks. If a racer is on a branch,
+    /// returns the branch path instead of the main pipe path.
+    /// </summary>
+    public void GetPathFrameForBranch(float distance, int branchIdx, PipeFork fork,
+        out Vector3 position, out Vector3 forward, out Vector3 right, out Vector3 up)
+    {
+        // If in a fork branch, use branch path
+        if (fork != null && branchIdx >= 0 &&
+            distance >= fork.forkDistance && distance <= fork.rejoinDistance)
+        {
+            if (fork.GetBranchFrame(branchIdx, distance, out position, out forward, out right, out up))
+                return;
+        }
+
+        // Default: main pipe path
+        GetPathFrame(distance, out position, out forward, out right, out up);
+    }
+
+    /// <summary>
+    /// Find the active fork (if any) for a given distance.
+    /// </summary>
+    public PipeFork GetForkAtDistance(float distance)
+    {
+        foreach (var fork in _forks)
+        {
+            if (fork != null && distance >= fork.forkDistance - 5f && distance <= fork.rejoinDistance)
+                return fork;
+        }
+        return null;
     }
 }

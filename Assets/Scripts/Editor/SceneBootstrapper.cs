@@ -138,6 +138,33 @@ public class SceneBootstrapper
         Debug.Log("TTR: Saved MrCorny_Gallery.prefab (with face features + yellow corn kernels)");
     }
 
+    /// <summary>
+    /// Saves a racer's visual model as a gallery prefab (no AI/physics components).
+    /// </summary>
+    static void SaveRacerGalleryPrefab(GameObject racer, string presetName)
+    {
+        Transform modelT = racer.transform.Find("Model");
+        GameObject source = modelT != null ? modelT.gameObject : racer;
+
+        GameObject clone = (GameObject)Object.Instantiate(source);
+        clone.name = $"Racer_{presetName}_Gallery";
+        clone.transform.SetParent(null);
+        clone.transform.position = Vector3.zero;
+        clone.transform.rotation = Quaternion.identity;
+
+        // Strip any non-visual components
+        foreach (var comp in clone.GetComponentsInChildren<MonoBehaviour>())
+            Object.DestroyImmediate(comp);
+
+        if (!AssetDatabase.IsValidFolder("Assets/Prefabs"))
+            AssetDatabase.CreateFolder("Assets", "Prefabs");
+
+        string path = $"Assets/Prefabs/Racer_{presetName}_Gallery.prefab";
+        PrefabUtility.SaveAsPrefabAsset(clone, path);
+        Object.DestroyImmediate(clone);
+        Debug.Log($"TTR: Saved {path} for gallery display");
+    }
+
     // ===== TEXTURE SETUP =====
     static void SetupTextureImports()
     {
@@ -247,7 +274,7 @@ public class SceneBootstrapper
         player.tag = "Player";
 
         // Load visual model as child
-        GameObject modelPrefab = LoadModel("Assets/Models/MrCorny.fbx");
+        GameObject modelPrefab = LoadModel("Assets/Models/MrCorny_Rigged.fbx");
 
         if (modelPrefab != null)
         {
@@ -256,14 +283,21 @@ public class SceneBootstrapper
             // SetParent(parent, false) preserves the FBX import rotation!
             model.transform.SetParent(player.transform, false);
             model.transform.localPosition = Vector3.zero;
-            model.transform.localScale = Vector3.one * 0.17f;
+            model.transform.localScale = Vector3.one * 0.51f;
 
-            // Log model bounds for size debugging
+            // Log model bounds for size debugging (skip face meshes for accurate body size)
             {
                 Bounds mb = new Bounds(model.transform.position, Vector3.zero);
+                bool mbHas = false;
                 foreach (Renderer r in model.GetComponentsInChildren<Renderer>())
-                    mb.Encapsulate(r.bounds);
-                Debug.Log($"TTR: MrCorny model bounds at scale 0.17: size={mb.size} (GLB={_lastModelWasGLB})");
+                {
+                    string gn = r.gameObject.name;
+                    if (gn.Contains("Eye") || gn.Contains("Pupil") || gn.Contains("Mouth"))
+                        continue;
+                    if (!mbHas) { mb = r.bounds; mbHas = true; }
+                    else mb.Encapsulate(r.bounds);
+                }
+                Debug.Log($"TTR: MrCorny body bounds at scale 0.17: size={mb.size} center={mb.center} (GLB={_lastModelWasGLB})");
             }
 
             // Remove imported colliders (we add our own on root)
@@ -331,18 +365,40 @@ public class SceneBootstrapper
                 Color shadowCol = isCornKernel ? cornShadow : brownShadow;
                 if (isCornKernel) kernelCount++; else bodyCount++;
 
+                // Safety: if material has broken/missing shader, replace with fresh URP material
+                bool needsReplace = false;
                 foreach (Material m in r.sharedMaterials)
                 {
-                    if (m == null) continue;
-                    if (m.HasProperty("_BaseMap"))
-                        m.SetTexture("_BaseMap", null);
-                    if (m.HasProperty("_BaseColor"))
-                        m.SetColor("_BaseColor", baseCol);
-                    if (m.HasProperty("_ShadowColor"))
-                        m.SetColor("_ShadowColor", shadowCol);
+                    if (m == null || m.shader == null || m.shader.name.Contains("Error") || !m.HasProperty("_BaseColor"))
+                    { needsReplace = true; break; }
+                }
+                if (needsReplace)
+                {
+                    string matName = isCornKernel ? "CornKernel_Fix" : "Body_Fix_" + goName;
+                    r.sharedMaterial = SaveMaterial(MakeURPMat(matName, baseCol, 0f, 0.3f));
+                    Debug.LogWarning($"TTR: Replaced broken material on '{goName}' with fresh URP mat");
+                }
+                else
+                {
+                    foreach (Material m in r.sharedMaterials)
+                    {
+                        if (m == null) continue;
+                        if (m.HasProperty("_BaseMap"))
+                            m.SetTexture("_BaseMap", null);
+                        if (m.HasProperty("_BaseColor"))
+                            m.SetColor("_BaseColor", baseCol);
+                        if (m.HasProperty("_ShadowColor"))
+                            m.SetColor("_ShadowColor", shadowCol);
+                    }
                 }
             }
             Debug.Log($"TTR: MrCorny painting: {kernelCount} kernels, {bodyCount} body, {faceCount} face features");
+
+            // If no corn kernels found in the FBX, add procedural ones as raised yellow nuggets
+            if (kernelCount == 0)
+            {
+                AddProceduralCornKernels(model, cornYellow, cornShadow);
+            }
 
             // Add comical face features based on selected skin
             AddFaceForSkin(model, PlayerData.SelectedSkin);
@@ -358,11 +414,11 @@ public class SceneBootstrapper
             if (fc != null) Object.DestroyImmediate(fc);
             capsule.transform.SetParent(player.transform, false);
             capsule.transform.localPosition = Vector3.zero;
-            capsule.transform.localScale = new Vector3(0.5f, 0.3f, 1f);
+            capsule.transform.localScale = new Vector3(1.5f, 0.9f, 3f);
             capsule.GetComponent<Renderer>().material =
                 MakeURPMat("MrCorny_Mat", new Color(0.55f, 0.35f, 0.18f), 0.05f, 0.4f);
             AddFaceForSkin(capsule, PlayerData.SelectedSkin);
-            Debug.LogWarning("TTR: MrCorny.fbx not found, using placeholder capsule.");
+            Debug.LogWarning("TTR: MrCorny_Rigged model not found, using placeholder capsule.");
         }
 
         // Gameplay collider on root
@@ -430,7 +486,7 @@ public class SceneBootstrapper
 
         PipeCamera pipeCam = camObj.AddComponent<PipeCamera>();
         pipeCam.target = player;
-        pipeCam.followDistance = 4f;         // behind the turd on the pipe path
+        pipeCam.followDistance = 1.5f;       // behind the turd on the pipe path (closer)
         pipeCam.lookAhead = 6f;              // look ahead of the turd
         pipeCam.pipeRadius = 3.5f;
         pipeCam.centerPull = 0.45f;          // 45% from player toward pipe center (above/behind)
@@ -836,6 +892,15 @@ public class SceneBootstrapper
         obstaclePrefabs.Add(CreateHairWadPrefab("HairWad_Brunette",
             new Color(0.35f, 0.2f, 0.1f), new Color(0.22f, 0.12f, 0.06f)));
 
+        // Toxic Frog - squatty mutant frog that hops and lashes tongue
+        obstaclePrefabs.Add(CreateToxicFrogPrefab());
+
+        // Sewer Jellyfish - pulsing translucent blob with trailing tentacles
+        obstaclePrefabs.Add(CreateSewerJellyfishPrefab());
+
+        // Sewer Spider - creepy wall-hanger that drops down
+        obstaclePrefabs.Add(CreateSewerSpiderPrefab());
+
         // Fartcoin - copper penny with $ emboss, sized like a real coin you'd find in a sewer
         GameObject coinPrefab = CreateFartcoinPrefab();
 
@@ -874,6 +939,9 @@ public class SceneBootstrapper
             ("PoopBlob",    new Color(0.35f, 0.2f, 0.08f),  0.05f, 0.78f, new Color(0.12f, 0.06f, 0.02f), 0.4f),  // wet glossy organic
             ("SewerMine",   new Color(0.08f, 0.08f, 0.08f), 0.3f,  0.5f,  new Color(0.05f, 0.03f, 0.01f), 0.2f),  // matte black bomb
             ("Cockroach",   new Color(0.3f, 0.15f, 0.06f),  0.15f, 0.8f,  new Color(0.05f, 0.02f, 0.01f), 0.2f),  // chitinous shell sheen
+            ("ToxicFrog",   new Color(0.15f, 0.5f, 0.08f),  0.1f,  0.65f, new Color(0.05f, 0.3f, 0.02f),  1.5f),  // slimy green amphibian
+            ("SewerJellyfish", new Color(0.2f, 0.6f, 0.5f), 0.0f,  0.9f,  new Color(0.08f, 0.5f, 0.35f),  3.0f),  // translucent bioluminescent
+            ("SewerSpider",    new Color(0.12f, 0.1f, 0.08f), 0.05f, 0.4f,  new Color(0.03f, 0.01f, 0.01f), 0.15f), // dark matte chitin
         };
 
         foreach (var c in creatures)
@@ -1023,9 +1091,13 @@ public class SceneBootstrapper
             signPrefabs.Add(CreateWarningSignPrefab());
         for (int i = 0; i < 3; i++)
             signPrefabs.Add(CreatePipeNumberPrefab());
+        for (int i = 0; i < 3; i++)
+            signPrefabs.Add(CreateArrowSignPrefab());
+        for (int i = 0; i < 3; i++)
+            signPrefabs.Add(CreateWantedPosterPrefab());
 
         spawner.signPrefabs = signPrefabs.ToArray();
-        Debug.Log($"TTR: Created 4 gross decor types + {signPrefabs.Count} sign/graffiti variants.");
+        Debug.Log($"TTR: Created 4 gross decor types + {signPrefabs.Count} sign/graffiti variants (incl arrows + wanted posters).");
     }
 
     // ===== GROSS PIPE CHARACTER PREFABS =====
@@ -1203,32 +1275,39 @@ public class SceneBootstrapper
         // Spray paint stencil style — yellow text on pipe surface
         Color yellow = new Color(0.95f, 0.85f, 0.1f);
 
-        // Overspray haze behind text
-        Material hazeMat = MakeURPMat("Gross_WarnHaze", new Color(yellow.r, yellow.g, yellow.b, 0.15f), 0f, 0.1f);
+        // Overspray haze — flat cube BEHIND the text
+        Material hazeMat = MakeURPMat("Gross_WarnHaze", new Color(yellow.r, yellow.g, yellow.b, 0.10f), 0f, 0.1f);
         hazeMat.EnableKeyword("_EMISSION");
-        hazeMat.SetColor("_EmissionColor", yellow * 0.08f);
+        hazeMat.SetColor("_EmissionColor", yellow * 0.05f);
+        if (hazeMat.HasProperty("_Surface"))
+        {
+            hazeMat.SetFloat("_Surface", 1);
+            hazeMat.SetOverrideTag("RenderType", "Transparent");
+            hazeMat.renderQueue = 3000;
+        }
         EditorUtility.SetDirty(hazeMat);
-        AddPrimChild(root, "Haze", PrimitiveType.Sphere, new Vector3(0, 0, -0.001f),
-            Quaternion.identity, new Vector3(0.3f, 0.2f, 0.003f), hazeMat);
+        // Positive z = toward pipe center = visible to player inside pipe
+        AddPrimChild(root, "Haze", PrimitiveType.Cube, new Vector3(0, 0, 0.003f),
+            Quaternion.identity, new Vector3(0.3f, 0.2f, 0.001f), hazeMat);
 
         string txt = WarningTexts[_warningIndex % WarningTexts.Length];
         _warningIndex++;
 
-        // Spray-painted warning text
+        // Spray-painted warning text — visible inside pipe
         GameObject textObj = new GameObject("SprayText");
         textObj.transform.SetParent(root.transform, false);
-        textObj.transform.localPosition = new Vector3(0, 0, -0.004f);
-        textObj.transform.localRotation = Quaternion.Euler(0, 180, Random.Range(-8f, 8f));
+        textObj.transform.localPosition = new Vector3(0, 0, 0.006f);
+        textObj.transform.localRotation = Quaternion.Euler(0, 0, Random.Range(-6f, 6f));
         TextMesh tm = textObj.AddComponent<TextMesh>();
         tm.text = txt;
-        tm.fontSize = 42;
-        tm.characterSize = 0.012f;
+        tm.fontSize = 56;
+        tm.characterSize = 0.015f;
         tm.anchor = TextAnchor.MiddleCenter;
         tm.alignment = TextAlignment.Center;
         tm.color = yellow;
         tm.fontStyle = FontStyle.Bold;
 
-        // Stencil-style hazard stripes (thin spray-painted lines)
+        // Stencil-style hazard stripes
         Material stripeMat = MakeURPMat("Gross_WarnStripe", new Color(0.1f, 0.08f, 0.05f), 0f, 0.15f);
         stripeMat.EnableKeyword("_EMISSION");
         stripeMat.SetColor("_EmissionColor", new Color(0.02f, 0.02f, 0.01f));
@@ -1237,7 +1316,7 @@ public class SceneBootstrapper
         {
             float x = -0.08f + s * 0.08f;
             AddPrimChild(root, $"Stripe{s}", PrimitiveType.Cube,
-                new Vector3(x, 0.08f, -0.003f),
+                new Vector3(x, 0.08f, 0.005f),
                 Quaternion.Euler(0, 0, 45), new Vector3(0.12f, 0.008f, 0.002f), stripeMat);
         }
 
@@ -1251,12 +1330,12 @@ public class SceneBootstrapper
             float x = Random.Range(-0.08f, 0.08f);
             float len = Random.Range(0.02f, 0.07f);
             AddPrimChild(root, $"Drip{d}", PrimitiveType.Capsule,
-                new Vector3(x, -0.06f - d * 0.02f, -0.003f),
+                new Vector3(x, -0.06f - d * 0.02f, 0.005f),
                 Quaternion.identity, new Vector3(0.005f, len, 0.003f), dripMat);
         }
 
         RemoveAllColliders(root);
-        root.transform.localScale = Vector3.one * 1.0f;
+        root.transform.localScale = Vector3.one * 2f; // bigger for readability at speed
         GameObject prefab = PrefabUtility.SaveAsPrefabAsset(root, path);
         Object.DestroyImmediate(root);
         return prefab;
@@ -1278,22 +1357,29 @@ public class SceneBootstrapper
         // Stenciled sector number — white spray paint on pipe
         Color stencilCol = new Color(0.85f, 0.82f, 0.7f);
 
-        // Overspray haze
-        Material hazeMat = MakeURPMat("Gross_NumHaze", new Color(stencilCol.r, stencilCol.g, stencilCol.b, 0.1f), 0f, 0.1f);
+        // Overspray haze — flat cube BEHIND the text
+        Material hazeMat = MakeURPMat("Gross_NumHaze", new Color(stencilCol.r, stencilCol.g, stencilCol.b, 0.06f), 0f, 0.1f);
         hazeMat.EnableKeyword("_EMISSION");
-        hazeMat.SetColor("_EmissionColor", stencilCol * 0.05f);
+        hazeMat.SetColor("_EmissionColor", stencilCol * 0.03f);
+        if (hazeMat.HasProperty("_Surface"))
+        {
+            hazeMat.SetFloat("_Surface", 1);
+            hazeMat.SetOverrideTag("RenderType", "Transparent");
+            hazeMat.renderQueue = 3000;
+        }
         EditorUtility.SetDirty(hazeMat);
-        AddPrimChild(root, "Haze", PrimitiveType.Sphere, new Vector3(0, 0, -0.001f),
-            Quaternion.identity, new Vector3(0.35f, 0.14f, 0.003f), hazeMat);
+        // Positive z = toward player inside pipe
+        AddPrimChild(root, "Haze", PrimitiveType.Cube, new Vector3(0, 0, 0.003f),
+            Quaternion.identity, new Vector3(0.35f, 0.14f, 0.001f), hazeMat);
 
         string num = PipeNumbers[_pipeNumIndex % PipeNumbers.Length];
         _pipeNumIndex++;
 
-        // Stenciled text
+        // Stenciled text — visible inside pipe
         GameObject textObj = new GameObject("SprayText");
         textObj.transform.SetParent(root.transform, false);
-        textObj.transform.localPosition = new Vector3(0, 0, -0.004f);
-        textObj.transform.localRotation = Quaternion.Euler(0, 180, Random.Range(-3f, 3f));
+        textObj.transform.localPosition = new Vector3(0, 0, 0.006f);
+        textObj.transform.localRotation = Quaternion.Euler(0, 0, Random.Range(-3f, 3f));
         TextMesh tm = textObj.AddComponent<TextMesh>();
         tm.text = num;
         tm.fontSize = 44;
@@ -1309,7 +1395,7 @@ public class SceneBootstrapper
         lineMat.SetColor("_EmissionColor", stencilCol * 0.08f);
         EditorUtility.SetDirty(lineMat);
         AddPrimChild(root, "Underline", PrimitiveType.Cube,
-            new Vector3(0, -0.04f, -0.003f), Quaternion.identity,
+            new Vector3(0, -0.04f, 0.005f), Quaternion.identity,
             new Vector3(0.25f, 0.005f, 0.002f), lineMat);
 
         // Paint drips
@@ -1322,12 +1408,12 @@ public class SceneBootstrapper
             float x = Random.Range(-0.1f, 0.1f);
             float len = Random.Range(0.015f, 0.04f);
             AddPrimChild(root, $"Drip{d}", PrimitiveType.Capsule,
-                new Vector3(x, -0.05f - d * 0.015f, -0.003f),
+                new Vector3(x, -0.05f - d * 0.015f, 0.005f),
                 Quaternion.identity, new Vector3(0.004f, len, 0.002f), dripMat);
         }
 
         RemoveAllColliders(root);
-        root.transform.localScale = Vector3.one * 1.0f;
+        root.transform.localScale = Vector3.one * 2f; // bigger for readability at speed
         GameObject prefab = PrefabUtility.SaveAsPrefabAsset(root, path);
         Object.DestroyImmediate(root);
         return prefab;
@@ -1342,7 +1428,11 @@ public class SceneBootstrapper
         "DUMP\nSTREET", "BROWN\nTOWN\nPOP: YOU", "WIPE\nBETTER",
         "THIS\nPIPE\nSUCKS", "FLUSH\nTWICE", "SEWER\nSURF\nCLUB",
         "RATS\nWERE\nHERE", "DRAIN\nGANG", "POO\nCREW",
-        "STINK\nOR\nSWIM", "MR CORNY\nWAS HERE"
+        "STINK\nOR\nSWIM", "MR CORNY\nWAS HERE",
+        "LIVE\nLAUGH\nFLUSH", "NOT ALL\nWHO WANDER\nARE FLUSHED",
+        "CORNY\n4\nPRESIDENT", "SEWER\nPUNKS\nNOT DEAD",
+        "EAT\nSLEEP\nFLUSH\nREPEAT", "PIPE\nDREAMS", "DRIP\nDROP\nPLOP",
+        "RATED\nE FOR\nEWWW", "TURD\nBURGLAR\nWAS HERE", "FLOATERS\nUNITE"
     };
 
     static int _graffitiIndex = 0;
@@ -1364,27 +1454,37 @@ public class SceneBootstrapper
         };
         Color sprayColor = sprayColors[_graffitiIndex % sprayColors.Length];
 
-        // Overspray haze — semi-transparent cloud behind the text
-        Material hazeMat = MakeURPMat("Gross_GrafHaze", new Color(sprayColor.r, sprayColor.g, sprayColor.b, 0.12f), 0f, 0.1f);
+        // Overspray haze — flat quad BEHIND the text (use Cube with tiny Z to avoid
+        // sphere geometry poking through and occluding the text)
+        Material hazeMat = MakeURPMat("Gross_GrafHaze", new Color(sprayColor.r, sprayColor.g, sprayColor.b, 0.08f), 0f, 0.1f);
         hazeMat.EnableKeyword("_EMISSION");
-        hazeMat.SetColor("_EmissionColor", sprayColor * 0.06f);
+        hazeMat.SetColor("_EmissionColor", sprayColor * 0.04f);
+        if (hazeMat.HasProperty("_Surface"))
+        {
+            hazeMat.SetFloat("_Surface", 1); // Transparent
+            hazeMat.SetFloat("_Blend", 0);   // Alpha blend
+            hazeMat.SetOverrideTag("RenderType", "Transparent");
+            hazeMat.renderQueue = 3000; // render before text
+        }
         EditorUtility.SetDirty(hazeMat);
-        AddPrimChild(root, "Haze", PrimitiveType.Sphere, new Vector3(0, 0, -0.001f),
-            Quaternion.identity, new Vector3(0.35f, 0.25f, 0.003f), hazeMat);
+        // Haze slightly behind text but still inside pipe (positive z = toward player)
+        AddPrimChild(root, "Haze", PrimitiveType.Cube, new Vector3(0, 0, 0.003f),
+            Quaternion.identity, new Vector3(0.35f, 0.25f, 0.001f), hazeMat);
 
-        // Spray painted text
+        // Spray painted text — in front of haze, facing player inside the pipe
+        // Sign faces INWARD so positive Z = toward pipe center = toward player = visible
         string msg = GraffitiMessages[_graffitiIndex % GraffitiMessages.Length];
         _graffitiIndex++;
 
         GameObject textObj = new GameObject("SprayText");
         textObj.transform.SetParent(root.transform, false);
-        textObj.transform.localPosition = new Vector3(0, 0, -0.004f);
-        textObj.transform.localRotation = Quaternion.Euler(0, 180, Random.Range(-12f, 12f));
+        textObj.transform.localPosition = new Vector3(0, 0, 0.006f);
+        textObj.transform.localRotation = Quaternion.Euler(0, 0, Random.Range(-8f, 8f));
 
         TextMesh tm = textObj.AddComponent<TextMesh>();
         tm.text = msg;
-        tm.fontSize = 48;
-        tm.characterSize = 0.018f;
+        tm.fontSize = 64;
+        tm.characterSize = 0.022f;
         tm.anchor = TextAnchor.MiddleCenter;
         tm.alignment = TextAlignment.Center;
         tm.color = sprayColor;
@@ -1402,7 +1502,7 @@ public class SceneBootstrapper
             float len = Random.Range(0.02f, 0.08f);
             float thick = Random.Range(0.004f, 0.007f);
             AddPrimChild(root, $"Drip{i}", PrimitiveType.Capsule,
-                new Vector3(x, -0.07f - i * 0.025f, -0.003f),
+                new Vector3(x, -0.07f - i * 0.025f, 0.005f),
                 Quaternion.identity, new Vector3(thick, len, 0.003f), dripMat);
         }
 
@@ -1413,14 +1513,14 @@ public class SceneBootstrapper
         EditorUtility.SetDirty(splatMat);
         for (int s = 0; s < 3; s++)
         {
-            Vector3 pos = new Vector3(Random.Range(-0.15f, 0.15f), Random.Range(-0.1f, 0.1f), -0.003f);
+            Vector3 pos = new Vector3(Random.Range(-0.15f, 0.15f), Random.Range(-0.1f, 0.1f), 0.005f);
             float sz = Random.Range(0.008f, 0.015f);
             AddPrimChild(root, $"Splat{s}", PrimitiveType.Sphere, pos,
                 Quaternion.identity, new Vector3(sz, sz, 0.002f), splatMat);
         }
 
         RemoveAllColliders(root);
-        root.transform.localScale = Vector3.one * 1.0f;
+        root.transform.localScale = Vector3.one * 2f; // bigger for readability at speed
         GameObject prefab = PrefabUtility.SaveAsPrefabAsset(root, path);
         Object.DestroyImmediate(root);
         return prefab;
@@ -1645,18 +1745,26 @@ public class SceneBootstrapper
         Color bodyCol = new Color(0.2f, 0.6f, 0.95f);
         Color footCol = new Color(0.95f, 0.85f, 0.15f);
 
-        // Big overspray haze behind the whole ad
-        Material hazeMat = MakeURPMat("Gross_AdHaze", new Color(0.5f, 0.5f, 0.5f, 0.08f), 0f, 0.1f);
-        AddPrimChild(root, "Haze", PrimitiveType.Sphere, new Vector3(0, -0.02f, -0.001f),
-            Quaternion.identity, new Vector3(0.55f, 0.4f, 0.003f), hazeMat);
+        // Big overspray haze — flat cube BEHIND the text
+        Material hazeMat = MakeURPMat("Gross_AdHaze", new Color(0.5f, 0.5f, 0.5f, 0.05f), 0f, 0.1f);
+        if (hazeMat.HasProperty("_Surface"))
+        {
+            hazeMat.SetFloat("_Surface", 1);
+            hazeMat.SetOverrideTag("RenderType", "Transparent");
+            hazeMat.renderQueue = 3000;
+        }
+        EditorUtility.SetDirty(hazeMat);
+        // Positive z = toward player inside pipe
+        AddPrimChild(root, "Haze", PrimitiveType.Cube, new Vector3(0, -0.02f, 0.003f),
+            Quaternion.identity, new Vector3(0.55f, 0.4f, 0.001f), hazeMat);
 
         float tilt = Random.Range(-5f, 5f);
 
-        // Title — big spray paint
+        // Title — big spray paint (visible inside pipe)
         GameObject titleObj = new GameObject("TitleText");
         titleObj.transform.SetParent(root.transform, false);
-        titleObj.transform.localPosition = new Vector3(0, 0.1f, -0.004f);
-        titleObj.transform.localRotation = Quaternion.Euler(0, 180, tilt);
+        titleObj.transform.localPosition = new Vector3(0, 0.1f, 0.006f);
+        titleObj.transform.localRotation = Quaternion.Euler(0, 0, tilt);
         TextMesh titleTm = titleObj.AddComponent<TextMesh>();
         titleTm.text = ad[0];
         titleTm.fontSize = 56;
@@ -1669,8 +1777,8 @@ public class SceneBootstrapper
         // Subtitle
         GameObject subObj = new GameObject("SubText");
         subObj.transform.SetParent(root.transform, false);
-        subObj.transform.localPosition = new Vector3(0, 0.05f, -0.004f);
-        subObj.transform.localRotation = Quaternion.Euler(0, 180, tilt + Random.Range(-3f, 3f));
+        subObj.transform.localPosition = new Vector3(0, 0.05f, 0.006f);
+        subObj.transform.localRotation = Quaternion.Euler(0, 0, tilt + Random.Range(-3f, 3f));
         TextMesh subTm = subObj.AddComponent<TextMesh>();
         subTm.text = ad[1];
         subTm.fontSize = 38;
@@ -1682,8 +1790,8 @@ public class SceneBootstrapper
         // Body — the funny part
         GameObject bodyObj = new GameObject("BodyText");
         bodyObj.transform.SetParent(root.transform, false);
-        bodyObj.transform.localPosition = new Vector3(0, -0.04f, -0.004f);
-        bodyObj.transform.localRotation = Quaternion.Euler(0, 180, tilt + Random.Range(-4f, 4f));
+        bodyObj.transform.localPosition = new Vector3(0, -0.04f, 0.006f);
+        bodyObj.transform.localRotation = Quaternion.Euler(0, 0, tilt + Random.Range(-4f, 4f));
         TextMesh bodyTm = bodyObj.AddComponent<TextMesh>();
         bodyTm.text = ad[2];
         bodyTm.fontSize = 34;
@@ -1696,8 +1804,8 @@ public class SceneBootstrapper
         // Footer
         GameObject footObj = new GameObject("FooterText");
         footObj.transform.SetParent(root.transform, false);
-        footObj.transform.localPosition = new Vector3(0, -0.12f, -0.004f);
-        footObj.transform.localRotation = Quaternion.Euler(0, 180, tilt + Random.Range(-2f, 2f));
+        footObj.transform.localPosition = new Vector3(0, -0.12f, 0.006f);
+        footObj.transform.localRotation = Quaternion.Euler(0, 0, tilt + Random.Range(-2f, 2f));
         TextMesh footTm = footObj.AddComponent<TextMesh>();
         footTm.text = ad[3];
         footTm.fontSize = 28;
@@ -1717,7 +1825,7 @@ public class SceneBootstrapper
             float len = Random.Range(0.03f, 0.1f);
             float thick = Random.Range(0.004f, 0.007f);
             AddPrimChild(root, $"Drip{d}", PrimitiveType.Capsule,
-                new Vector3(x, -0.16f - d * 0.025f, -0.003f),
+                new Vector3(x, -0.16f - d * 0.025f, 0.005f),
                 Quaternion.identity, new Vector3(thick, len, 0.003f), dripMat);
         }
 
@@ -1728,14 +1836,194 @@ public class SceneBootstrapper
         EditorUtility.SetDirty(splatMat);
         for (int s = 0; s < 3; s++)
         {
-            Vector3 pos = new Vector3(Random.Range(-0.2f, 0.2f), Random.Range(-0.15f, 0.12f), -0.003f);
+            Vector3 pos = new Vector3(Random.Range(-0.2f, 0.2f), Random.Range(-0.15f, 0.12f), 0.005f);
             float sz = Random.Range(0.008f, 0.018f);
             AddPrimChild(root, $"Splat{s}", PrimitiveType.Sphere, pos,
                 Quaternion.identity, new Vector3(sz, sz, 0.002f), splatMat);
         }
 
         RemoveAllColliders(root);
-        root.transform.localScale = Vector3.one * 0.9f;
+        root.transform.localScale = Vector3.one * 2f; // bigger for readability at speed
+        GameObject prefab = PrefabUtility.SaveAsPrefabAsset(root, path);
+        Object.DestroyImmediate(root);
+        return prefab;
+    }
+
+    // ===== ARROW DIRECTION SIGNS =====
+    static readonly string[] ArrowTexts = {
+        "THIS WAY >>>", "NO EXIT", "DANGER\nAHEAD", "TURN BACK\nNOW",
+        ">>> FLUSH >>>", "KEEP LEFT\n(or don't)", "SPEED UP!\n(you'll need it)",
+        "EXIT\n(just kidding)", "PIPE 7G >>>", "SHORTCUT\n(it's not)"
+    };
+    static int _arrowIndex = 0;
+
+    static GameObject CreateArrowSignPrefab()
+    {
+        string path = $"Assets/Prefabs/ArrowSign_Gross_{_arrowIndex}.prefab";
+        GameObject root = new GameObject("ArrowSign");
+
+        Color arrowCol = new Color(1f, 0.6f, 0.1f); // orange
+        Color bgCol = new Color(0.08f, 0.06f, 0.04f);
+
+        // Dark background rectangle (positive z = toward player inside pipe)
+        Material bgMat = MakeURPMat("Gross_ArrowBG", bgCol, 0f, 0.15f);
+        AddPrimChild(root, "BG", PrimitiveType.Cube, new Vector3(0, 0, 0.003f),
+            Quaternion.identity, new Vector3(0.4f, 0.15f, 0.003f), bgMat);
+
+        // Arrow triangle (pointing right)
+        Material arrowMat = MakeURPMat("Gross_Arrow", arrowCol, 0f, 0.3f);
+        arrowMat.EnableKeyword("_EMISSION");
+        arrowMat.SetColor("_EmissionColor", arrowCol * 0.3f);
+        EditorUtility.SetDirty(arrowMat);
+
+        // Big directional arrow using cubes
+        float arrowX = 0.12f;
+        AddPrimChild(root, "Shaft", PrimitiveType.Cube, new Vector3(arrowX - 0.08f, 0, 0.005f),
+            Quaternion.identity, new Vector3(0.12f, 0.03f, 0.003f), arrowMat);
+        AddPrimChild(root, "Head1", PrimitiveType.Cube, new Vector3(arrowX, 0.02f, 0.005f),
+            Quaternion.Euler(0, 0, -45), new Vector3(0.06f, 0.02f, 0.003f), arrowMat);
+        AddPrimChild(root, "Head2", PrimitiveType.Cube, new Vector3(arrowX, -0.02f, 0.005f),
+            Quaternion.Euler(0, 0, 45), new Vector3(0.06f, 0.02f, 0.003f), arrowMat);
+
+        // Text
+        string txt = ArrowTexts[_arrowIndex % ArrowTexts.Length];
+        _arrowIndex++;
+
+        GameObject textObj = new GameObject("SprayText");
+        textObj.transform.SetParent(root.transform, false);
+        textObj.transform.localPosition = new Vector3(-0.04f, 0, 0.006f);
+        textObj.transform.localRotation = Quaternion.Euler(0, 0, Random.Range(-3f, 3f));
+        TextMesh tm = textObj.AddComponent<TextMesh>();
+        tm.text = txt;
+        tm.fontSize = 38;
+        tm.characterSize = 0.008f;
+        tm.anchor = TextAnchor.MiddleCenter;
+        tm.alignment = TextAlignment.Center;
+        tm.color = arrowCol;
+        tm.fontStyle = FontStyle.Bold;
+
+        // Paint drips
+        Material dripMat = MakeURPMat("Gross_ArrowDrip", arrowCol * 0.6f, 0f, 0.15f);
+        for (int d = 0; d < 2; d++)
+        {
+            float x = Random.Range(-0.12f, 0.08f);
+            AddPrimChild(root, $"Drip{d}", PrimitiveType.Capsule,
+                new Vector3(x, -0.08f - d * 0.02f, 0.005f),
+                Quaternion.identity, new Vector3(0.004f, Random.Range(0.02f, 0.05f), 0.003f), dripMat);
+        }
+
+        RemoveAllColliders(root);
+        root.transform.localScale = Vector3.one * 2f;
+        GameObject prefab = PrefabUtility.SaveAsPrefabAsset(root, path);
+        Object.DestroyImmediate(root);
+        return prefab;
+    }
+
+    // ===== WANTED POSTERS =====
+    static readonly string[][] WantedPosters = {
+        new[] { "WANTED", "MR. CORNY", "Crimes: Being too\nslippery. Armed\nwith corn.", "REWARD:\n500 Fartcoins" },
+        new[] { "WANTED", "SEWER RAT KING", "Crimes: Cheese theft,\ntunnel blocking,\ngeneral stinkiness", "REWARD:\n1000 Fartcoins" },
+        new[] { "WANTED", "THE CLOGGER", "Crimes: Mass\npipe blockage,\ntoilet terrorism", "APPROACH WITH\nPLUNGER" },
+        new[] { "WANTED", "FLUSH GORDON", "Crimes: Excessive\nflushing, water\nwaste, pipe surfing", "LAST SEEN:\nPipe Junction 4" },
+        new[] { "WANTED", "EL TURDO", "Crimes: Illegal\nwrestling moves,\nmask violations", "REWARD:\n200 Fartcoins" },
+        new[] { "MISSING", "MY DIGNITY", "Last seen: Before\nentering this pipe.\nPlease return.", "NO REWARD\n(obviously)" },
+    };
+    static int _wantedIndex = 0;
+
+    static GameObject CreateWantedPosterPrefab()
+    {
+        string path = $"Assets/Prefabs/WantedPoster_Gross_{_wantedIndex}.prefab";
+        GameObject root = new GameObject("WantedPoster");
+
+        string[] poster = WantedPosters[_wantedIndex % WantedPosters.Length];
+        _wantedIndex++;
+
+        // Yellowed paper background (positive z = toward player inside pipe)
+        Color paperCol = new Color(0.85f, 0.78f, 0.55f);
+        Material paperMat = MakeURPMat("Gross_Paper", paperCol, 0f, 0.2f);
+        paperMat.EnableKeyword("_EMISSION");
+        paperMat.SetColor("_EmissionColor", paperCol * 0.1f);
+        EditorUtility.SetDirty(paperMat);
+        AddPrimChild(root, "Paper", PrimitiveType.Cube, new Vector3(0, 0, 0.003f),
+            Quaternion.identity, new Vector3(0.22f, 0.3f, 0.002f), paperMat);
+
+        // Torn/worn edges
+        Material edgeMat = MakeURPMat("Gross_WornEdge", paperCol * 0.7f, 0f, 0.15f);
+        AddPrimChild(root, "Tear1", PrimitiveType.Cube, new Vector3(0.1f, 0.13f, 0.002f),
+            Quaternion.Euler(0, 0, 15), new Vector3(0.04f, 0.03f, 0.002f), edgeMat);
+        AddPrimChild(root, "Tear2", PrimitiveType.Cube, new Vector3(-0.08f, -0.12f, 0.002f),
+            Quaternion.Euler(0, 0, -20), new Vector3(0.05f, 0.025f, 0.002f), edgeMat);
+
+        float tilt = Random.Range(-4f, 4f);
+
+        // "WANTED" / "MISSING" header
+        Color headerCol = poster[0] == "MISSING" ? new Color(0.15f, 0.4f, 0.8f) : new Color(0.75f, 0.1f, 0.05f);
+        GameObject headerObj = new GameObject("Header");
+        headerObj.transform.SetParent(root.transform, false);
+        headerObj.transform.localPosition = new Vector3(0, 0.1f, 0.006f);
+        headerObj.transform.localRotation = Quaternion.Euler(0, 0, tilt);
+        TextMesh headerTm = headerObj.AddComponent<TextMesh>();
+        headerTm.text = poster[0];
+        headerTm.fontSize = 52;
+        headerTm.characterSize = 0.01f;
+        headerTm.anchor = TextAnchor.MiddleCenter;
+        headerTm.alignment = TextAlignment.Center;
+        headerTm.color = headerCol;
+        headerTm.fontStyle = FontStyle.Bold;
+
+        // Name
+        GameObject nameObj = new GameObject("Name");
+        nameObj.transform.SetParent(root.transform, false);
+        nameObj.transform.localPosition = new Vector3(0, 0.055f, 0.006f);
+        nameObj.transform.localRotation = Quaternion.Euler(0, 0, tilt);
+        TextMesh nameTm = nameObj.AddComponent<TextMesh>();
+        nameTm.text = poster[1];
+        nameTm.fontSize = 40;
+        nameTm.characterSize = 0.009f;
+        nameTm.anchor = TextAnchor.MiddleCenter;
+        nameTm.alignment = TextAlignment.Center;
+        nameTm.color = new Color(0.15f, 0.12f, 0.08f);
+        nameTm.fontStyle = FontStyle.Bold;
+
+        // Description
+        GameObject descObj = new GameObject("Desc");
+        descObj.transform.SetParent(root.transform, false);
+        descObj.transform.localPosition = new Vector3(0, -0.03f, 0.006f);
+        descObj.transform.localRotation = Quaternion.Euler(0, 0, tilt);
+        TextMesh descTm = descObj.AddComponent<TextMesh>();
+        descTm.text = poster[2];
+        descTm.fontSize = 28;
+        descTm.characterSize = 0.007f;
+        descTm.anchor = TextAnchor.MiddleCenter;
+        descTm.alignment = TextAlignment.Center;
+        descTm.color = new Color(0.2f, 0.18f, 0.12f);
+
+        // Footer
+        GameObject footObj = new GameObject("Footer");
+        footObj.transform.SetParent(root.transform, false);
+        footObj.transform.localPosition = new Vector3(0, -0.1f, 0.006f);
+        footObj.transform.localRotation = Quaternion.Euler(0, 0, tilt);
+        TextMesh footTm = footObj.AddComponent<TextMesh>();
+        footTm.text = poster[3];
+        footTm.fontSize = 30;
+        footTm.characterSize = 0.007f;
+        footTm.anchor = TextAnchor.MiddleCenter;
+        footTm.alignment = TextAlignment.Center;
+        footTm.color = headerCol * 0.8f;
+        footTm.fontStyle = FontStyle.Bold;
+
+        // Tape/pin at top (holding poster to wall)
+        Material tapeMat = MakeURPMat("Gross_Tape", new Color(0.75f, 0.7f, 0.55f, 0.8f), 0f, 0.3f);
+        AddPrimChild(root, "Tape", PrimitiveType.Cube, new Vector3(0, 0.14f, 0.005f),
+            Quaternion.Euler(0, 0, 8), new Vector3(0.08f, 0.015f, 0.002f), tapeMat);
+
+        // Coffee stain ring (authentic sewer posting)
+        Material stainMat = MakeURPMat("Gross_CoffeeRing", new Color(0.45f, 0.3f, 0.15f, 0.3f), 0f, 0.1f);
+        AddPrimChild(root, "Stain", PrimitiveType.Cylinder, new Vector3(0.05f, -0.06f, 0.004f),
+            Quaternion.Euler(90, 0, 0), new Vector3(0.04f, 0.001f, 0.04f), stainMat);
+
+        RemoveAllColliders(root);
+        root.transform.localScale = Vector3.one * 2f;
         GameObject prefab = PrefabUtility.SaveAsPrefabAsset(root, path);
         Object.DestroyImmediate(root);
         return prefab;
@@ -1746,6 +2034,17 @@ public class SceneBootstrapper
     {
         foreach (Collider c in obj.GetComponentsInChildren<Collider>())
             Object.DestroyImmediate(c);
+    }
+
+    static Transform FindDeepChild(Transform parent, string name)
+    {
+        foreach (Transform child in parent)
+        {
+            if (child.name == name) return child;
+            Transform found = FindDeepChild(child, name);
+            if (found != null) return found;
+        }
+        return null;
     }
 
     static GameObject EnsureSceneryPrefab(string name, string modelPath, Vector3 scale, Color fallbackColor)
@@ -2119,67 +2418,86 @@ public class SceneBootstrapper
     static GameObject CreateDropZonePrefab(GameObject ringPrefab)
     {
         string prefabPath = "Assets/Prefabs/DropZone.prefab";
-        GameObject root = new GameObject("DropZone");
+        GameObject root = new GameObject("UnderwaterZone");
 
-        // Visual: drain grate opening in the pipe floor
-        Material drainMat = MakeURPMat("DropZone_Drain", new Color(0.2f, 0.18f, 0.15f), 0.5f, 0.4f);
-        drainMat.EnableKeyword("_EMISSION");
-        drainMat.SetColor("_EmissionColor", new Color(0.1f, 0.3f, 0.6f) * 1.5f);
-        EditorUtility.SetDirty(drainMat);
+        // Visual: rising water wall - murky blue-green
+        Material waterWallMat = MakeURPMat("Underwater_Wall", new Color(0.08f, 0.25f, 0.18f, 0.7f), 0.3f, 0.85f);
+        waterWallMat.EnableKeyword("_EMISSION");
+        waterWallMat.SetColor("_EmissionColor", new Color(0.05f, 0.2f, 0.15f) * 1.2f);
+        waterWallMat.SetFloat("_Surface", 1);
+        waterWallMat.SetFloat("_Blend", 0);
+        waterWallMat.SetOverrideTag("RenderType", "Transparent");
+        waterWallMat.SetInt("_SrcBlend", (int)UnityEngine.Rendering.BlendMode.SrcAlpha);
+        waterWallMat.SetInt("_DstBlend", (int)UnityEngine.Rendering.BlendMode.OneMinusSrcAlpha);
+        waterWallMat.SetInt("_ZWrite", 0);
+        waterWallMat.EnableKeyword("_SURFACE_TYPE_TRANSPARENT");
+        waterWallMat.renderQueue = 3000;
+        EditorUtility.SetDirty(waterWallMat);
 
-        // Drain ring (large disc on pipe floor)
-        AddPrimChild(root, "DrainRing", PrimitiveType.Cylinder,
-            Vector3.zero, Quaternion.identity,
-            new Vector3(2.5f, 0.1f, 2.5f), drainMat);
+        // Rising water disc (fills the pipe cross-section)
+        AddPrimChild(root, "WaterWall", PrimitiveType.Cylinder,
+            new Vector3(0, 0, 1f), Quaternion.Euler(90f, 0, 0),
+            new Vector3(3.5f, 0.3f, 3.5f), waterWallMat);
 
-        // Inner glow - cyan whirlpool effect
-        Material whirlMat = MakeURPMat("DropZone_Whirl", new Color(0.1f, 0.5f, 0.8f, 0.6f), 0f, 0.9f);
-        whirlMat.EnableKeyword("_EMISSION");
-        whirlMat.SetColor("_EmissionColor", new Color(0.2f, 0.6f, 1f) * 0.8f);
-        whirlMat.SetFloat("_Surface", 1);
-        whirlMat.SetFloat("_Blend", 0);
-        whirlMat.SetOverrideTag("RenderType", "Transparent");
-        whirlMat.SetInt("_SrcBlend", (int)UnityEngine.Rendering.BlendMode.SrcAlpha);
-        whirlMat.SetInt("_DstBlend", (int)UnityEngine.Rendering.BlendMode.OneMinusSrcAlpha);
-        whirlMat.SetInt("_ZWrite", 0);
-        whirlMat.EnableKeyword("_SURFACE_TYPE_TRANSPARENT");
-        whirlMat.renderQueue = 3000;
-        EditorUtility.SetDirty(whirlMat);
+        // Bubble clusters on the water surface
+        Material bubbleMat = MakeURPMat("Underwater_Bubble", new Color(0.4f, 0.7f, 0.6f, 0.4f), 0f, 0.95f);
+        bubbleMat.EnableKeyword("_EMISSION");
+        bubbleMat.SetColor("_EmissionColor", new Color(0.3f, 0.6f, 0.5f) * 0.6f);
+        bubbleMat.SetFloat("_Surface", 1);
+        bubbleMat.SetFloat("_Blend", 0);
+        bubbleMat.SetOverrideTag("RenderType", "Transparent");
+        bubbleMat.SetInt("_SrcBlend", (int)UnityEngine.Rendering.BlendMode.SrcAlpha);
+        bubbleMat.SetInt("_DstBlend", (int)UnityEngine.Rendering.BlendMode.OneMinusSrcAlpha);
+        bubbleMat.SetInt("_ZWrite", 0);
+        bubbleMat.EnableKeyword("_SURFACE_TYPE_TRANSPARENT");
+        bubbleMat.renderQueue = 3000;
+        EditorUtility.SetDirty(bubbleMat);
 
-        AddPrimChild(root, "WhirlPool", PrimitiveType.Cylinder,
-            new Vector3(0, 0.05f, 0), Quaternion.identity,
-            new Vector3(2f, 0.05f, 2f), whirlMat);
-
-        // Warning bars around drain
-        Material warnMat = MakeURPMat("DropZone_Warn", new Color(1f, 0.7f, 0.1f), 0.2f, 0.4f);
-        warnMat.EnableKeyword("_EMISSION");
-        warnMat.SetColor("_EmissionColor", new Color(1f, 0.5f, 0f) * 1.5f);
-        EditorUtility.SetDirty(warnMat);
-
-        for (int i = 0; i < 4; i++)
+        for (int i = 0; i < 8; i++)
         {
-            float angle = i * 90f * Mathf.Deg2Rad;
-            Vector3 pos = new Vector3(Mathf.Cos(angle) * 1.4f, 0.15f, Mathf.Sin(angle) * 1.4f);
-            AddPrimChild(root, $"WarnPost{i}", PrimitiveType.Cylinder,
+            float angle = (i / 8f) * Mathf.PI * 2f + Random.Range(-0.3f, 0.3f);
+            float r = Random.Range(0.5f, 1.5f);
+            Vector3 pos = new Vector3(Mathf.Cos(angle) * r, Mathf.Sin(angle) * r, 0.5f);
+            float bs = Random.Range(0.15f, 0.35f);
+            AddPrimChild(root, $"Bubble{i}", PrimitiveType.Sphere,
                 pos, Quaternion.identity,
-                new Vector3(0.15f, 0.3f, 0.15f), warnMat);
+                Vector3.one * bs, bubbleMat);
         }
 
-        // Trigger collider
-        BoxCollider col = root.AddComponent<BoxCollider>();
+        // "DIVE!" warning text sign (faces player)
+        GameObject signObj = new GameObject("DiveSign");
+        signObj.transform.SetParent(root.transform, false);
+        signObj.transform.localPosition = new Vector3(0, 1.5f, -2f);
+        TextMesh tm = signObj.AddComponent<TextMesh>();
+        tm.text = "DIVE!";
+        tm.fontSize = 48;
+        tm.characterSize = 0.15f;
+        tm.alignment = TextAlignment.Center;
+        tm.anchor = TextAnchor.MiddleCenter;
+        tm.color = new Color(0.2f, 0.8f, 0.9f);
+        tm.fontStyle = FontStyle.Bold;
+
+        // Trigger collider - must span entire pipe cross-section so player hits it
+        // Player rides the wall at ~3m from center, so radius must cover that
+        SphereCollider col = root.AddComponent<SphereCollider>();
         col.isTrigger = true;
-        col.center = new Vector3(0, 0.5f, 0);
-        col.size = new Vector3(3f, 2f, 3f);
+        col.center = Vector3.zero;
+        col.radius = 5f; // covers entire pipe diameter (player at 3m, pipe at 3.5m)
 
         VerticalDrop drop = root.AddComponent<VerticalDrop>();
         drop.ringPrefab = ringPrefab;
-        drop.dropDuration = 12f;
-        drop.dropSpeed = 18f;
+        drop.swimDuration = 14f;
+        drop.swimSpeed = 8f;
+        drop.moveRadius = 2.8f;
+        drop.moveSpeed = 12f;
+        drop.plungeSpeedBoost = 2.0f;
+        drop.plungeBoostDuration = 4f;
+        drop.obstacleCount = 25;
         drop.ringCount = 20;
 
         GameObject prefab = PrefabUtility.SaveAsPrefabAsset(root, prefabPath);
         Object.DestroyImmediate(root);
-        Debug.Log("TTR: Created Drop Zone prefab (freefall with rings)");
+        Debug.Log("TTR: Created Underwater Zone prefab (swim + plunge flush)");
         return prefab;
     }
 
@@ -2416,7 +2734,7 @@ public class SceneBootstrapper
         // === COLLIDER ===
         SphereCollider col = root.AddComponent<SphereCollider>();
         col.isTrigger = true;
-        col.radius = 0.5f; // generous trigger radius - still easy to collect
+        col.radius = 1.0f; // very generous trigger radius - easy to collect while sliding past
 
         root.AddComponent<Collectible>();
         root.tag = "Collectible";
@@ -2555,7 +2873,7 @@ public class SceneBootstrapper
         snake.transform.position = new Vector3(1f, -3f, -5f);
 
         // Load visual model as child (uses LoadModel for GLB preference)
-        GameObject modelAsset = LoadModel("Assets/Models/MrCorny.fbx");
+        GameObject modelAsset = LoadModel("Assets/Models/MrCorny_Rigged.fbx");
 
         if (modelAsset != null)
         {
@@ -2624,6 +2942,9 @@ public class SceneBootstrapper
                 EditorUtility.SetDirty(r.sharedMaterial);
             }
         }
+
+        // Save gallery prefab for Smooth Snake
+        SaveRacerGalleryPrefab(snake, "SmoothSnake");
 
         Debug.Log("TTR: Created Smooth Snake AI racer (dark MrCorny model, root/child)!");
     }
@@ -2695,7 +3016,7 @@ public class SceneBootstrapper
         };
 
         RacerAI[] aiRacers = new RacerAI[4];
-        GameObject modelAsset = LoadModel("Assets/Models/MrCorny.fbx");
+        GameObject modelAsset = LoadModel("Assets/Models/MrCorny_Rigged.fbx");
 
         for (int i = 0; i < 4; i++)
         {
@@ -2730,6 +3051,9 @@ public class SceneBootstrapper
 
                 // Add face based on preset personality
                 AddRacerFace(model, presets[i], racerColors[i]);
+
+                // Save a gallery prefab for this racer (visual only, no AI/physics)
+                SaveRacerGalleryPrefab(racer, presets[i]);
             }
             else
             {
@@ -2737,6 +3061,7 @@ public class SceneBootstrapper
                 Material mat = MakeURPMat($"Racer_{presets[i]}_Body", racerColors[i], 0.1f, 0.65f);
                 AddPrimChild(racer, "Body", PrimitiveType.Capsule, Vector3.zero,
                     Quaternion.Euler(90, 0, 0), new Vector3(0.5f, 1f, 0.4f), mat);
+                SaveRacerGalleryPrefab(racer, presets[i]);
             }
 
             // Collider
@@ -2764,6 +3089,7 @@ public class SceneBootstrapper
         RaceManager rm = rmObj.AddComponent<RaceManager>();
         rm.playerController = playerController;
         rm.aiRacers = aiRacers;
+        rm.pipeGen = pipeGen;
         rm.raceDistance = 1000f;
 
         // ---- Race Leaderboard (on the game canvas) ----
@@ -2799,7 +3125,7 @@ public class SceneBootstrapper
         Debug.Log("TTR: Created Brown Town Grand Prix race system! 4 AI racers + leaderboard + finish line.");
     }
 
-    /// <summary>Add unique face features per AI racer personality.</summary>
+    /// <summary>Add unique face features per AI racer personality (eyes, brows, mouth, nostrils).</summary>
     static void AddRacerFace(GameObject model, string preset, Color bodyColor)
     {
         FaceBounds fb = ComputeFaceBounds(model, rear: true);
@@ -2810,6 +3136,7 @@ public class SceneBootstrapper
         eyeSize = Mathf.Clamp(eyeSize, 0.1f, 0.7f);
         float eyeGap = Mathf.Max(sideExt * 0.22f, 0.07f);
         Vector3 eyeBase = fb.frontPos + upV * (upExt * 0.3f);
+        Vector3 mouthBase = fb.frontPos - upV * (upExt * 0.12f);
 
         // Shared materials
         Material whiteMat = MakeURPMat($"Racer_{preset}_EyeWhite", Color.white, 0f, 0.85f);
@@ -2817,11 +3144,25 @@ public class SceneBootstrapper
         whiteMat.SetColor("_EmissionColor", new Color(0.9f, 0.9f, 0.9f));
         EditorUtility.SetDirty(whiteMat);
         Material pupilMat = MakeURPMat($"Racer_{preset}_Pupil", new Color(0.02f, 0.02f, 0.02f), 0f, 0.9f);
+        Material mouthMat = MakeURPMat($"Racer_{preset}_Mouth", new Color(0.15f, 0.02f, 0.02f), 0f, 0.4f);
+        Material toothMat = MakeURPMat($"Racer_{preset}_Tooth", new Color(0.95f, 0.92f, 0.85f), 0.1f, 0.9f);
+        Material nostrilMat = MakeURPMat($"Racer_{preset}_Nostril", new Color(0.12f, 0.06f, 0.03f), 0f, 0.15f);
+
+        // Nostrils (shared by all racers)
+        float nostrilGap = eyeGap * 0.35f;
+        Vector3 nostrilBase = fb.frontPos + upV * (upExt * 0.05f);
+        AddPrimChild(model, "LeftNostril", PrimitiveType.Sphere,
+            nostrilBase - sideV * nostrilGap + fwd * (eyeSize * 0.2f),
+            Quaternion.identity, Vector3.one * eyeSize * 0.18f, nostrilMat);
+        AddPrimChild(model, "RightNostril", PrimitiveType.Sphere,
+            nostrilBase + sideV * nostrilGap + fwd * (eyeSize * 0.2f),
+            Quaternion.identity, Vector3.one * eyeSize * 0.18f, nostrilMat);
 
         switch (preset)
         {
             case "SkidmarkSteve":
-                // Angry brow, big wide eyes, mean look
+            {
+                // Angry brow, big wide eyes, snarling grimace with teeth
                 AddPrimChild(model, "LeftEye", PrimitiveType.Sphere,
                     eyeBase - sideV * eyeGap, Quaternion.identity,
                     new Vector3(eyeSize * 1.1f, eyeSize * 0.9f, eyeSize * 0.7f), whiteMat);
@@ -2834,36 +3175,59 @@ public class SceneBootstrapper
                 AddPrimChild(model, "RightPupil", PrimitiveType.Sphere,
                     eyeBase + sideV * eyeGap + fwd * (eyeSize * 0.3f),
                     Quaternion.identity, Vector3.one * eyeSize * 0.45f, pupilMat);
-                // Angry brows
+                // Angry V-shaped brows
                 Material browMat = MakeURPMat($"Racer_Steve_Brow", new Color(0.3f, 0.15f, 0.05f), 0f, 0.5f);
                 AddPrimChild(model, "LeftBrow", PrimitiveType.Cube,
                     eyeBase - sideV * eyeGap + upV * (eyeSize * 0.55f),
-                    Quaternion.Euler(0, 0, -20),
-                    new Vector3(eyeSize * 0.8f, eyeSize * 0.15f, eyeSize * 0.3f), browMat);
+                    Quaternion.Euler(0, 0, -25),
+                    new Vector3(eyeSize * 0.85f, eyeSize * 0.18f, eyeSize * 0.3f), browMat);
                 AddPrimChild(model, "RightBrow", PrimitiveType.Cube,
                     eyeBase + sideV * eyeGap + upV * (eyeSize * 0.55f),
-                    Quaternion.Euler(0, 0, 20),
-                    new Vector3(eyeSize * 0.8f, eyeSize * 0.15f, eyeSize * 0.3f), browMat);
+                    Quaternion.Euler(0, 0, 25),
+                    new Vector3(eyeSize * 0.85f, eyeSize * 0.18f, eyeSize * 0.3f), browMat);
+                // Snarling mouth — wide, showing teeth
+                AddPrimChild(model, "Mouth", PrimitiveType.Cube,
+                    mouthBase + fwd * (eyeSize * 0.15f),
+                    Quaternion.identity,
+                    new Vector3(eyeSize * 1.2f, eyeSize * 0.25f, eyeSize * 0.4f), mouthMat);
+                // Gritted teeth
+                for (int t = 0; t < 4; t++)
+                {
+                    float tx = -eyeSize * 0.35f + t * eyeSize * 0.24f;
+                    AddPrimChild(model, $"Tooth{t}", PrimitiveType.Cube,
+                        mouthBase + sideV * tx + fwd * (eyeSize * 0.25f) + upV * (eyeSize * 0.05f),
+                        Quaternion.identity,
+                        new Vector3(eyeSize * 0.15f, eyeSize * 0.15f, eyeSize * 0.12f), toothMat);
+                }
                 break;
+            }
 
             case "PrincessPlop":
-                // Big sparkly eyes, eyelashes
+            {
+                // Big sparkly eyes, eyelashes, cute kissy lips
                 float pEyeSize = eyeSize * 1.2f;
+                Material irisMat = MakeURPMat("Racer_Plop_Iris", new Color(0.3f, 0.1f, 0.4f), 0f, 0.9f);
                 AddPrimChild(model, "LeftEye", PrimitiveType.Sphere,
                     eyeBase - sideV * eyeGap, Quaternion.identity,
                     new Vector3(pEyeSize, pEyeSize * 1.1f, pEyeSize * 0.7f), whiteMat);
                 AddPrimChild(model, "LeftPupil", PrimitiveType.Sphere,
                     eyeBase - sideV * eyeGap + fwd * (pEyeSize * 0.3f),
-                    Quaternion.identity, Vector3.one * pEyeSize * 0.5f,
-                    MakeURPMat("Racer_Plop_Pupil", new Color(0.3f, 0.1f, 0.4f), 0f, 0.9f));
+                    Quaternion.identity, Vector3.one * pEyeSize * 0.5f, irisMat);
+                // Sparkle in left eye
+                Material sparkleMat = MakeURPMat("Racer_Plop_Sparkle", Color.white, 0f, 0.95f);
+                AddPrimChild(model, "LeftSparkle", PrimitiveType.Sphere,
+                    eyeBase - sideV * eyeGap + fwd * (pEyeSize * 0.35f) + upV * (pEyeSize * 0.15f) + sideV * (pEyeSize * 0.1f),
+                    Quaternion.identity, Vector3.one * pEyeSize * 0.15f, sparkleMat);
                 AddPrimChild(model, "RightEye", PrimitiveType.Sphere,
                     eyeBase + sideV * eyeGap, Quaternion.identity,
                     new Vector3(pEyeSize, pEyeSize * 1.1f, pEyeSize * 0.7f), whiteMat);
                 AddPrimChild(model, "RightPupil", PrimitiveType.Sphere,
                     eyeBase + sideV * eyeGap + fwd * (pEyeSize * 0.3f),
-                    Quaternion.identity, Vector3.one * pEyeSize * 0.5f,
-                    MakeURPMat("Racer_Plop_Pupil2", new Color(0.3f, 0.1f, 0.4f), 0f, 0.9f));
-                // Eyelashes (thin cubes)
+                    Quaternion.identity, Vector3.one * pEyeSize * 0.5f, irisMat);
+                AddPrimChild(model, "RightSparkle", PrimitiveType.Sphere,
+                    eyeBase + sideV * eyeGap + fwd * (pEyeSize * 0.35f) + upV * (pEyeSize * 0.15f) - sideV * (pEyeSize * 0.1f),
+                    Quaternion.identity, Vector3.one * pEyeSize * 0.15f, sparkleMat);
+                // Long eyelashes
                 Material lashMat = MakeURPMat("Racer_Plop_Lash", new Color(0.1f, 0.05f, 0.05f), 0f, 0.5f);
                 AddPrimChild(model, "LeftLash", PrimitiveType.Cube,
                     eyeBase - sideV * eyeGap + upV * (pEyeSize * 0.5f),
@@ -2873,10 +3237,30 @@ public class SceneBootstrapper
                     eyeBase + sideV * eyeGap + upV * (pEyeSize * 0.5f),
                     Quaternion.Euler(0, 0, 10),
                     new Vector3(pEyeSize * 0.9f, pEyeSize * 0.08f, pEyeSize * 0.3f), lashMat);
+                // Cute kissy lips — small puckered mouth
+                Material lipMat = MakeURPMat("Racer_Plop_Lip", new Color(0.9f, 0.4f, 0.5f), 0f, 0.5f);
+                AddPrimChild(model, "UpperLip", PrimitiveType.Sphere,
+                    mouthBase + fwd * (eyeSize * 0.2f) + upV * (eyeSize * 0.03f),
+                    Quaternion.identity,
+                    new Vector3(eyeSize * 0.4f, eyeSize * 0.2f, eyeSize * 0.25f), lipMat);
+                AddPrimChild(model, "LowerLip", PrimitiveType.Sphere,
+                    mouthBase + fwd * (eyeSize * 0.2f) - upV * (eyeSize * 0.06f),
+                    Quaternion.identity,
+                    new Vector3(eyeSize * 0.35f, eyeSize * 0.18f, eyeSize * 0.22f), lipMat);
+                // Blush spots on cheeks
+                Material blushMat = MakeURPMat("Racer_Plop_Blush", new Color(0.95f, 0.55f, 0.6f, 0.6f), 0f, 0.3f);
+                AddPrimChild(model, "LeftBlush", PrimitiveType.Sphere,
+                    eyeBase - sideV * (eyeGap * 1.6f) - upV * (eyeSize * 0.2f),
+                    Quaternion.identity, new Vector3(eyeSize * 0.4f, eyeSize * 0.25f, eyeSize * 0.15f), blushMat);
+                AddPrimChild(model, "RightBlush", PrimitiveType.Sphere,
+                    eyeBase + sideV * (eyeGap * 1.6f) - upV * (eyeSize * 0.2f),
+                    Quaternion.identity, new Vector3(eyeSize * 0.4f, eyeSize * 0.25f, eyeSize * 0.15f), blushMat);
                 break;
+            }
 
             case "TheLog":
-                // Small, squinty, unfazed eyes - half-lid
+            {
+                // Small, squinty, unfazed eyes with flat unimpressed mouth
                 float lEyeSize = eyeSize * 0.8f;
                 Material lidMat = MakeURPMat("Racer_Log_Lid", new Color(0.25f, 0.15f, 0.06f), 0f, 0.5f);
                 AddPrimChild(model, "LeftEye", PrimitiveType.Sphere,
@@ -2899,10 +3283,17 @@ public class SceneBootstrapper
                     eyeBase + sideV * eyeGap + upV * (lEyeSize * 0.15f),
                     Quaternion.identity,
                     new Vector3(lEyeSize * 1.1f, lEyeSize * 0.35f, lEyeSize * 0.7f), lidMat);
+                // Flat unimpressed line mouth — "meh"
+                AddPrimChild(model, "Mouth", PrimitiveType.Cube,
+                    mouthBase + fwd * (eyeSize * 0.15f),
+                    Quaternion.identity,
+                    new Vector3(eyeSize * 0.8f, eyeSize * 0.08f, eyeSize * 0.2f), mouthMat);
                 break;
+            }
 
             case "LilSquirt":
-                // Huge wild googly eyes, cross-eyed
+            {
+                // Huge wild googly eyes, cross-eyed, big goofy grin
                 float sEyeSize = eyeSize * 1.3f;
                 AddPrimChild(model, "LeftEye", PrimitiveType.Sphere,
                     eyeBase - sideV * (eyeGap * 1.2f), Quaternion.identity,
@@ -2916,7 +3307,28 @@ public class SceneBootstrapper
                 AddPrimChild(model, "RightPupil", PrimitiveType.Sphere,
                     eyeBase + sideV * (eyeGap * 1.2f) + fwd * (sEyeSize * 0.3f) - sideV * (sEyeSize * 0.15f),
                     Quaternion.identity, Vector3.one * sEyeSize * 0.5f, pupilMat);
+                // Big goofy grin — wide curved mouth with buck teeth
+                AddPrimChild(model, "Mouth", PrimitiveType.Sphere,
+                    mouthBase + fwd * (eyeSize * 0.1f),
+                    Quaternion.identity,
+                    new Vector3(eyeSize * 1.3f, eyeSize * 0.4f, eyeSize * 0.35f), mouthMat);
+                // Two big buck teeth
+                AddPrimChild(model, "LeftTooth", PrimitiveType.Cube,
+                    mouthBase + fwd * (eyeSize * 0.2f) - sideV * (eyeSize * 0.1f) + upV * (eyeSize * 0.08f),
+                    Quaternion.identity,
+                    new Vector3(eyeSize * 0.2f, eyeSize * 0.22f, eyeSize * 0.15f), toothMat);
+                AddPrimChild(model, "RightTooth", PrimitiveType.Cube,
+                    mouthBase + fwd * (eyeSize * 0.2f) + sideV * (eyeSize * 0.1f) + upV * (eyeSize * 0.08f),
+                    Quaternion.identity,
+                    new Vector3(eyeSize * 0.2f, eyeSize * 0.22f, eyeSize * 0.15f), toothMat);
+                // Tongue sticking out
+                Material tongueMat = MakeURPMat("Racer_Squirt_Tongue", new Color(0.85f, 0.35f, 0.35f), 0f, 0.4f);
+                AddPrimChild(model, "Tongue", PrimitiveType.Sphere,
+                    mouthBase + fwd * (eyeSize * 0.25f) - upV * (eyeSize * 0.15f),
+                    Quaternion.identity,
+                    new Vector3(eyeSize * 0.35f, eyeSize * 0.15f, eyeSize * 0.25f), tongueMat);
                 break;
+            }
         }
     }
 
@@ -2967,6 +3379,97 @@ public class SceneBootstrapper
         }
     }
 
+    // ===== PROCEDURAL CORN KERNELS =====
+    /// <summary>
+    /// Adds raised yellow corn kernel nuggets on the poop body surface.
+    /// Called when the FBX model doesn't have recognizable corn kernel sub-objects.
+    /// Kernels are irregularly shaped spheres placed at semi-random positions on the body.
+    /// </summary>
+    static void AddProceduralCornKernels(GameObject model, Color cornYellow, Color cornShadow)
+    {
+        // Compute body bounds (skip face features)
+        Bounds bodyBounds = new Bounds(model.transform.position, Vector3.zero);
+        bool hasBounds = false;
+        foreach (Renderer r in model.GetComponentsInChildren<Renderer>())
+        {
+            string gn = r.gameObject.name;
+            if (gn.Contains("Eye") || gn.Contains("Pupil") || gn.Contains("Mouth") ||
+                gn.Contains("Brow") || gn.Contains("Lid") || gn.Contains("Stache") ||
+                gn.Contains("Arm") || gn.Contains("Hand") || gn.Contains("Nostril") ||
+                gn.Contains("Tooth") || gn.Contains("Tongue") || gn.Contains("Lip") ||
+                gn.Contains("Cheek") || gn.Contains("Sweat") || gn.Contains("Spiral") ||
+                gn.Contains("Sparkle") || gn.Contains("Lash"))
+                continue;
+            if (!hasBounds) { bodyBounds = r.bounds; hasBounds = true; }
+            else bodyBounds.Encapsulate(r.bounds);
+        }
+        if (!hasBounds) return;
+
+        // Corn kernel material - bright yellow with slight emission for visibility
+        Material kernelMat = MakeURPMat("CornKernel_Proc", cornYellow, 0.05f, 0.45f);
+        kernelMat.EnableKeyword("_EMISSION");
+        kernelMat.SetColor("_EmissionColor", cornYellow * 0.12f);
+        EditorUtility.SetDirty(kernelMat);
+
+        // Darker underside material for depth
+        Material kernelDarkMat = MakeURPMat("CornKernel_ProcShadow", cornShadow, 0.02f, 0.35f);
+
+        // Place kernels at semi-random positions around the body surface
+        // Use a fixed seed for reproducibility across rebuilds
+        Random.State oldState = Random.state;
+        Random.InitState(42);
+
+        Vector3 center = model.transform.InverseTransformPoint(bodyBounds.center);
+        Vector3 extents = bodyBounds.size;
+        // Convert extents to local space scale
+        float scaleInv = 1f / model.transform.lossyScale.x;
+        extents *= scaleInv;
+
+        int kernelCount = 14; // enough to look corny but not overwhelming
+        for (int i = 0; i < kernelCount; i++)
+        {
+            // Distribute kernels around the body using spherical coordinates
+            float theta = Random.Range(0f, Mathf.PI * 2f);
+            float phi = Random.Range(0.25f, 0.75f); // avoid top/bottom poles
+            float heightT = Random.Range(-0.3f, 0.3f); // along body length
+
+            // Place kernels AT the body surface — 0.28x extents so they're half-embedded
+            // (0.48x was too far out, causing them to float away from the body)
+            float radiusX = extents.x * 0.28f;
+            float radiusZ = extents.z * 0.28f;
+
+            Vector3 localPos = center + new Vector3(
+                Mathf.Cos(theta) * radiusX * Mathf.Sin(phi * Mathf.PI),
+                heightT * extents.y,
+                Mathf.Sin(theta) * radiusZ * Mathf.Sin(phi * Mathf.PI)
+            );
+
+            // Kernel size — each corn nugget pokes out visibly
+            float baseSize = Random.Range(0.15f, 0.28f);
+            Vector3 kernelScale = new Vector3(
+                baseSize * Random.Range(0.8f, 1.2f),
+                baseSize * Random.Range(0.7f, 1.1f),
+                baseSize * Random.Range(0.8f, 1.2f)
+            );
+
+            // Orient each kernel to point outward from the body center
+            Vector3 outward = (localPos - center).normalized;
+            Quaternion rot = Quaternion.LookRotation(outward) *
+                Quaternion.Euler(Random.Range(-20f, 20f), Random.Range(-20f, 20f), 0);
+
+            GameObject kernel = AddPrimChild(model, $"CornKernel_{i}", PrimitiveType.Sphere,
+                localPos, rot, kernelScale, kernelMat);
+
+            // Add a tiny darker ring at the base of each kernel for depth
+            AddPrimChild(kernel, "Shadow", PrimitiveType.Sphere,
+                new Vector3(0, 0, -0.2f), Quaternion.identity,
+                new Vector3(1.1f, 1.1f, 0.3f), kernelDarkMat);
+        }
+
+        Random.state = oldState;
+        Debug.Log($"TTR: Added {kernelCount} procedural corn kernels to MrCorny body");
+    }
+
     // ===== MR. CORNY FACE FEATURES =====
     /// <summary>
     /// Creates googly eyes, pupils, and corn-stache using primitive spheres positioned
@@ -3003,6 +3506,54 @@ public class SceneBootstrapper
             fb.fwd * 0.35f, Quaternion.identity,
             Vector3.one * 0.45f, pupilMat);
 
+        // === IRISES (colored ring between white eye and black pupil) ===
+        Material irisMat = MakeURPMat("MrCorny_Iris", new Color(0.55f, 0.35f, 0.12f), 0f, 0.6f);
+        irisMat.EnableKeyword("_EMISSION");
+        irisMat.SetColor("_EmissionColor", new Color(0.55f, 0.35f, 0.12f) * 0.3f);
+        EditorUtility.SetDirty(irisMat);
+
+        GameObject leftIrisObj = AddPrimChild(leftEye, "LeftIris", PrimitiveType.Sphere,
+            fb.fwd * 0.32f, Quaternion.identity,
+            Vector3.one * 0.55f, irisMat);
+        GameObject rightIrisObj = AddPrimChild(rightEye, "RightIris", PrimitiveType.Sphere,
+            fb.fwd * 0.32f, Quaternion.identity,
+            Vector3.one * 0.55f, irisMat);
+
+        // === EYE SPARKLE HIGHLIGHTS (tiny bright spheres) ===
+        Material sparkleMat = MakeURPMat("MrCorny_Sparkle", Color.white, 0f, 0.95f);
+        sparkleMat.EnableKeyword("_EMISSION");
+        sparkleMat.SetColor("_EmissionColor", Color.white * 2f);
+        EditorUtility.SetDirty(sparkleMat);
+
+        AddPrimChild(leftEye, "LeftSparkle", PrimitiveType.Sphere,
+            fb.fwd * 0.4f + fb.upV * 0.12f + fb.sideV * 0.08f, Quaternion.identity,
+            Vector3.one * 0.1f, sparkleMat);
+        AddPrimChild(rightEye, "RightSparkle", PrimitiveType.Sphere,
+            fb.fwd * 0.4f + fb.upV * 0.12f - fb.sideV * 0.08f, Quaternion.identity,
+            Vector3.one * 0.1f, sparkleMat);
+
+        // === EYELIDS (half-dome over each eye) ===
+        Material eyelidMat = MakeURPMat("MrCorny_Eyelid", new Color(0.48f, 0.3f, 0.12f), 0f, 0.3f);
+        GameObject leftEyelid = AddPrimChild(model, "LeftEyelid", PrimitiveType.Sphere,
+            eyeBase - fb.sideV * fb.eyeGap + fb.upV * (eyeSize * 0.35f) + fb.fwd * 0.1f,
+            Quaternion.identity,
+            new Vector3(eyeSize * 1.05f, eyeSize * 0.35f, eyeSize * 0.6f), eyelidMat);
+        GameObject rightEyelid = AddPrimChild(model, "RightEyelid", PrimitiveType.Sphere,
+            eyeBase + fb.sideV * fb.eyeGap + fb.upV * (eyeSize * 0.35f) + fb.fwd * 0.1f,
+            Quaternion.identity,
+            new Vector3(eyeSize * 1.05f, eyeSize * 0.35f, eyeSize * 0.6f), eyelidMat);
+
+        // === EYEBROWS (expressive capsules above eyelids) ===
+        Material browMat = MakeURPMat("MrCorny_Brow", new Color(0.3f, 0.18f, 0.08f), 0f, 0.3f);
+        GameObject leftBrow = AddPrimChild(model, "LeftBrow", PrimitiveType.Capsule,
+            eyeBase - fb.sideV * fb.eyeGap + fb.upV * (eyeSize * 0.55f),
+            Quaternion.Euler(0, 0, 8),
+            new Vector3(eyeSize * 0.9f, eyeSize * 0.12f, eyeSize * 0.15f), browMat);
+        GameObject rightBrow = AddPrimChild(model, "RightBrow", PrimitiveType.Capsule,
+            eyeBase + fb.sideV * fb.eyeGap + fb.upV * (eyeSize * 0.55f),
+            Quaternion.Euler(0, 0, -8),
+            new Vector3(eyeSize * 0.9f, eyeSize * 0.12f, eyeSize * 0.15f), browMat);
+
         // === CORN-STACHE (two curved corn-kernel bars + bridge) ===
         Vector3 stacheCenter = fb.frontPos - fb.upV * (fb.upExt * 0.05f);
         GameObject stacheBridge = AddPrimChild(model, "StacheBridge", PrimitiveType.Cube,
@@ -3016,6 +3567,28 @@ public class SceneBootstrapper
             stacheCenter + fb.sideV * (eyeSize * 0.35f) - fb.upV * (eyeSize * 0.08f),
             Quaternion.Euler(0, 0, -25),
             new Vector3(eyeSize * 0.15f, eyeSize * 0.3f, eyeSize * 0.15f), stacheMat);
+
+        // === STACHE CURL TIPS (refined ends) ===
+        GameObject stacheTipL = AddPrimChild(model, "StacheTipL", PrimitiveType.Sphere,
+            stacheCenter - fb.sideV * (eyeSize * 0.58f) + fb.upV * (eyeSize * 0.02f),
+            Quaternion.identity,
+            Vector3.one * (eyeSize * 0.1f), stacheMat);
+        GameObject stacheTipR = AddPrimChild(model, "StacheTipR", PrimitiveType.Sphere,
+            stacheCenter + fb.sideV * (eyeSize * 0.58f) + fb.upV * (eyeSize * 0.02f),
+            Quaternion.identity,
+            Vector3.one * (eyeSize * 0.1f), stacheMat);
+
+        // === NOSTRILS (two small dark indentations) ===
+        Material nostrilMat = MakeURPMat("MrCorny_Nostril", new Color(0.12f, 0.06f, 0.03f), 0f, 0.15f);
+        Vector3 nostrilCenter = fb.frontPos + fb.upV * (fb.upExt * 0.12f);
+        GameObject nostrilL = AddPrimChild(model, "LeftNostril", PrimitiveType.Sphere,
+            nostrilCenter - fb.sideV * (eyeSize * 0.12f),
+            Quaternion.identity,
+            new Vector3(eyeSize * 0.1f, eyeSize * 0.08f, eyeSize * 0.08f), nostrilMat);
+        GameObject nostrilR = AddPrimChild(model, "RightNostril", PrimitiveType.Sphere,
+            nostrilCenter + fb.sideV * (eyeSize * 0.12f),
+            Quaternion.identity,
+            new Vector3(eyeSize * 0.1f, eyeSize * 0.08f, eyeSize * 0.08f), nostrilMat);
 
         // === EXPRESSIVE MOUTH WITH JAW GROUPS ===
         Material mouthMat = MakeURPMat("MrCorny_Mouth", new Color(0.15f, 0.02f, 0.02f), 0f, 0.4f);
@@ -3098,6 +3671,56 @@ public class SceneBootstrapper
             Quaternion.identity,
             new Vector3(eyeSize * 0.15f, eyeSize * 0.12f, eyeSize * 0.1f), cheekMat);
 
+        // === STUBBY ARMS (comical little arms on sides near face) ===
+        Material armMat = MakeURPMat("MrCorny_Arm", new Color(0.48f, 0.3f, 0.12f), 0f, 0.3f);
+        Material handMat = MakeURPMat("MrCorny_Hand", new Color(0.58f, 0.38f, 0.18f), 0f, 0.35f);
+
+        float armRad = eyeSize * 0.13f;
+        float armHalfLen = eyeSize * 0.22f;
+        Vector3 shoulderL = fb.frontPos - fb.sideV * (fb.sideExt * 0.55f) - fb.upV * (fb.upExt * 0.05f);
+        Vector3 shoulderR = fb.frontPos + fb.sideV * (fb.sideExt * 0.55f) - fb.upV * (fb.upExt * 0.05f);
+
+        // Left arm
+        GameObject leftUpperArm = AddPrimChild(model, "LeftUpperArm", PrimitiveType.Capsule,
+            shoulderL, Quaternion.Euler(0, 0, 70),
+            new Vector3(armRad, armHalfLen, armRad), armMat);
+        GameObject leftForearm = AddPrimChild(model, "LeftForearm", PrimitiveType.Capsule,
+            shoulderL - fb.sideV * (eyeSize * 0.35f) - fb.upV * (eyeSize * 0.15f),
+            Quaternion.Euler(0, 0, 55),
+            new Vector3(armRad * 0.85f, armHalfLen * 0.8f, armRad * 0.85f), armMat);
+        GameObject leftHandObj = AddPrimChild(model, "LeftHand", PrimitiveType.Sphere,
+            shoulderL - fb.sideV * (eyeSize * 0.6f) - fb.upV * (eyeSize * 0.35f),
+            Quaternion.identity,
+            Vector3.one * (eyeSize * 0.14f), handMat);
+
+        // Right arm (mirrored)
+        GameObject rightUpperArm = AddPrimChild(model, "RightUpperArm", PrimitiveType.Capsule,
+            shoulderR, Quaternion.Euler(0, 0, -70),
+            new Vector3(armRad, armHalfLen, armRad), armMat);
+        GameObject rightForearm = AddPrimChild(model, "RightForearm", PrimitiveType.Capsule,
+            shoulderR + fb.sideV * (eyeSize * 0.35f) - fb.upV * (eyeSize * 0.15f),
+            Quaternion.Euler(0, 0, -55),
+            new Vector3(armRad * 0.85f, armHalfLen * 0.8f, armRad * 0.85f), armMat);
+        GameObject rightHandObj = AddPrimChild(model, "RightHand", PrimitiveType.Sphere,
+            shoulderR + fb.sideV * (eyeSize * 0.6f) - fb.upV * (eyeSize * 0.35f),
+            Quaternion.identity,
+            Vector3.one * (eyeSize * 0.14f), handMat);
+
+        // === SWEAT DROPS (visible at high speed, start at full scale - animator hides them) ===
+        Material sweatMat = MakeURPMat("MrCorny_Sweat", new Color(0.7f, 0.85f, 1f), 0f, 0.9f);
+        sweatMat.EnableKeyword("_EMISSION");
+        sweatMat.SetColor("_EmissionColor", new Color(0.6f, 0.8f, 1f) * 0.5f);
+        EditorUtility.SetDirty(sweatMat);
+
+        Vector3 sweatBaseL = eyeBase - fb.sideV * (fb.eyeGap + eyeSize * 0.3f) + fb.upV * (eyeSize * 0.5f);
+        Vector3 sweatBaseR = eyeBase + fb.sideV * (fb.eyeGap + eyeSize * 0.3f) + fb.upV * (eyeSize * 0.5f);
+        GameObject sweatObjL = AddPrimChild(model, "SweatL", PrimitiveType.Capsule,
+            sweatBaseL, Quaternion.identity,
+            new Vector3(eyeSize * 0.06f, eyeSize * 0.12f, eyeSize * 0.06f), sweatMat);
+        GameObject sweatObjR = AddPrimChild(model, "SweatR", PrimitiveType.Capsule,
+            sweatBaseR, Quaternion.identity,
+            new Vector3(eyeSize * 0.06f, eyeSize * 0.12f, eyeSize * 0.06f), sweatMat);
+
         // === HYPNOTIC SPIRAL DISCS (disabled by default, enabled at 5x speed) ===
         Material spiralWhite = MakeURPMat("MrCorny_SpiralW", Color.white, 0f, 0.9f);
         spiralWhite.EnableKeyword("_EMISSION");
@@ -3112,6 +3735,33 @@ public class SceneBootstrapper
         GameObject hypnoR = CreateHypnoDisc(rightEye, "HypnoDiscR", fb.fwd, eyeSize,
             spiralWhite, spiralBlack);
         hypnoR.SetActive(false);
+
+        // === REPARENT FACE TO HEAD BONE (so face follows slither deformation) ===
+        // TurdSlither deforms spine bones in LateUpdate, which moves the mesh surface.
+        // Face parts must be children of the LAST spine bone (head) so they track properly.
+        Transform headBone = null;
+        for (int i = 19; i >= 0; i--)
+        {
+            Transform bone = FindDeepChild(model.transform, $"Spine_{i:D2}");
+            if (bone != null) { headBone = bone; break; }
+        }
+        if (headBone != null)
+        {
+            // Reparent top-level face parts from model root → head bone, preserving world pos
+            GameObject[] faceParts = {
+                leftEye, rightEye, mouthGroup, stacheBridge, stacheL, stacheR,
+                leftEyelid, rightEyelid, leftBrow, rightBrow,
+                nostrilL, nostrilR, stacheTipL, stacheTipR,
+                leftUpperArm, leftForearm, leftHandObj, rightUpperArm, rightForearm, rightHandObj,
+                sweatObjL, sweatObjR
+            };
+            foreach (var part in faceParts)
+            {
+                if (part != null)
+                    part.transform.SetParent(headBone, worldPositionStays: true);
+            }
+            Debug.Log($"TTR: Reparented {faceParts.Length} face parts to head bone '{headBone.name}'");
+        }
 
         // Wire up face animator with all new references
         MrCornyFaceAnimator anim = model.AddComponent<MrCornyFaceAnimator>();
@@ -3130,9 +3780,17 @@ public class SceneBootstrapper
         anim.cheekR = cheekR.transform;
         anim.hypnoDiscL = hypnoL.transform;
         anim.hypnoDiscR = hypnoR.transform;
+        anim.leftIris = leftIrisObj.transform;
+        anim.rightIris = rightIrisObj.transform;
+        anim.leftEyelid = leftEyelid.transform;
+        anim.rightEyelid = rightEyelid.transform;
+        anim.leftBrow = leftBrow.transform;
+        anim.rightBrow = rightBrow.transform;
+        anim.sweatL = sweatObjL.transform;
+        anim.sweatR = sweatObjR.transform;
 
-        Debug.Log($"TTR: Added MrCorny face with expressive mouth+jaws+hypno via ComputeFaceBounds (eyeSize={eyeSize:F2}, " +
-            $"frontPos={fb.frontPos}, fwdExt={fb.fwdExt:F2})");
+        Debug.Log($"TTR: Added MrCorny face with enhanced details (irises, eyelids, brows, nostrils, arms, sweat) eyeSize={eyeSize:F2}, " +
+            $"frontPos={fb.frontPos}, fwdExt={fb.fwdExt:F2}");
     }
 
     /// <summary>
@@ -3612,24 +4270,37 @@ public class SceneBootstrapper
     /// </summary>
     static FaceBounds ComputeFaceBounds(GameObject model, bool rear = false)
     {
-        // Step 1: Get world-space bounds of the body mesh only (skip face feature primitives)
+        // Step 1: Get world-space bounds of the BODY mesh only.
+        // Skip Unity primitives (procedural face features) and GLB face meshes (Eye/Pupil/Mouth).
         Bounds worldBounds = new Bounds(model.transform.position, Vector3.one * 0.01f);
         bool hasBounds = false;
         foreach (Renderer r in model.GetComponentsInChildren<Renderer>())
         {
+            // Skip Unity primitives (procedural face features from AddMrCornyFace etc.)
             MeshFilter mf = r.GetComponent<MeshFilter>();
             if (mf != null && mf.sharedMesh != null)
             {
                 string mn = mf.sharedMesh.name;
                 if (mn == "Sphere" || mn == "Capsule" || mn == "Cube" ||
                     mn == "Quad" || mn == "Cylinder")
-                    continue; // Skip Unity primitives = face features
+                    continue;
             }
+            // Skip GLB face meshes - they can shift body bounds and misposition procedural face
+            // Skip GLB face meshes - they shift body bounds and misposition procedural face
+            string goName = r.gameObject.name;
+            if (goName.Contains("Eye") || goName.Contains("Pupil") || goName.Contains("Mouth")
+                || goName.Contains("Mustache") || goName.Contains("Stache"))
+                continue;
+
+            Debug.Log($"TTR: FaceBounds including renderer '{goName}' type={r.GetType().Name} bounds={r.bounds.center} size={r.bounds.size}");
             if (!hasBounds) { worldBounds = r.bounds; hasBounds = true; }
             else worldBounds.Encapsulate(r.bounds);
         }
         if (!hasBounds)
+        {
+            Debug.LogWarning("TTR: ComputeFaceBounds - NO valid body renderers found! Using model position fallback.");
             worldBounds = new Bounds(model.transform.position, Vector3.one * 0.1f);
+        }
 
         // Step 2: Detect model's actual orientation from bounding box geometry.
         // The LONGEST AABB axis = body length direction (forward).
@@ -4394,6 +5065,308 @@ public class SceneBootstrapper
         return prefab;
     }
 
+    // ===== SEWER SPIDER OBSTACLE =====
+    /// <summary>
+    /// Giant sewer spider - dark body, 8 spindly legs, red eyes, web strand.
+    /// Hangs from ceiling and drops down when player approaches.
+    /// </summary>
+    static GameObject CreateSewerSpiderPrefab()
+    {
+        string prefabPath = "Assets/Prefabs/SewerSpider.prefab";
+        GameObject root = new GameObject("SewerSpider");
+
+        // Materials
+        Material bodyMat = MakeURPMat("Spider_Body", new Color(0.12f, 0.1f, 0.08f), 0.05f, 0.4f);
+        Material legMat = MakeURPMat("Spider_Leg", new Color(0.15f, 0.12f, 0.08f), 0.05f, 0.35f);
+        Material abdomenMat = MakeURPMat("Spider_Abdomen", new Color(0.1f, 0.08f, 0.06f), 0.05f, 0.5f);
+        abdomenMat.EnableKeyword("_EMISSION");
+        abdomenMat.SetColor("_EmissionColor", new Color(0.04f, 0.01f, 0.01f));
+        EditorUtility.SetDirty(abdomenMat);
+        Material eyeMat = MakeURPMat("Spider_EyeRed", new Color(0.9f, 0.1f, 0.05f), 0f, 0.9f);
+        eyeMat.EnableKeyword("_EMISSION");
+        eyeMat.SetColor("_EmissionColor", new Color(0.8f, 0.05f, 0.02f) * 2f);
+        EditorUtility.SetDirty(eyeMat);
+        Material whiteMat = MakeURPMat("Spider_EyeW", new Color(0.85f, 0.82f, 0.75f), 0f, 0.8f);
+        Material webMat = MakeURPMat("Spider_Web", new Color(0.8f, 0.8f, 0.75f, 0.6f), 0f, 0.3f);
+        Material fangMat = MakeURPMat("Spider_Fang", new Color(0.2f, 0.18f, 0.12f), 0.1f, 0.6f);
+
+        // Cephalothorax (front body)
+        AddPrimChild(root, "Body", PrimitiveType.Sphere, new Vector3(0, 0, 0.2f),
+            Quaternion.identity, new Vector3(0.8f, 0.5f, 0.7f), bodyMat);
+
+        // Abdomen (rear, larger and rounder)
+        AddPrimChild(root, "Abdomen", PrimitiveType.Sphere, new Vector3(0, 0.05f, -0.5f),
+            Quaternion.identity, new Vector3(1.1f, 0.9f, 1.3f), abdomenMat);
+
+        // Skull marking on abdomen (lighter shape)
+        Material markMat = MakeURPMat("Spider_Mark", new Color(0.25f, 0.15f, 0.08f), 0f, 0.3f);
+        AddPrimChild(root, "Mark", PrimitiveType.Sphere, new Vector3(0, 0.35f, -0.45f),
+            Quaternion.identity, new Vector3(0.3f, 0.12f, 0.3f), markMat);
+
+        // 8 eyes (4 pairs, front-facing, spiders have lots of eyes!)
+        float[] eyeX = { -0.12f, 0.12f, -0.2f, 0.2f, -0.08f, 0.08f, -0.15f, 0.15f };
+        float[] eyeY = { 0.18f, 0.18f, 0.12f, 0.12f, 0.25f, 0.25f, 0.08f, 0.08f };
+        float[] eyeSize = { 0.1f, 0.1f, 0.08f, 0.08f, 0.06f, 0.06f, 0.07f, 0.07f };
+        for (int e = 0; e < 8; e++)
+        {
+            AddPrimChild(root, $"Eye{e}", PrimitiveType.Sphere,
+                new Vector3(eyeX[e], eyeY[e], 0.5f), Quaternion.identity,
+                Vector3.one * eyeSize[e], e < 4 ? whiteMat : eyeMat);
+            if (e < 4)
+            {
+                // Main eyes get red pupils
+                AddPrimChild(root, $"Pupil{e}", PrimitiveType.Sphere,
+                    new Vector3(eyeX[e], eyeY[e], 0.54f), Quaternion.identity,
+                    Vector3.one * (eyeSize[e] * 0.5f), eyeMat);
+            }
+        }
+
+        // Fangs (chelicerae)
+        AddPrimChild(root, "FangL", PrimitiveType.Capsule, new Vector3(-0.08f, -0.1f, 0.55f),
+            Quaternion.Euler(15, 0, 10), new Vector3(0.06f, 0.12f, 0.05f), fangMat);
+        AddPrimChild(root, "FangR", PrimitiveType.Capsule, new Vector3(0.08f, -0.1f, 0.55f),
+            Quaternion.Euler(15, 0, -10), new Vector3(0.06f, 0.12f, 0.05f), fangMat);
+
+        // 8 spindly legs (4 per side)
+        float[] legAngles = { 30f, 55f, 80f, 105f };
+        for (int side = -1; side <= 1; side += 2)
+        {
+            for (int i = 0; i < 4; i++)
+            {
+                float angle = legAngles[i] * Mathf.Deg2Rad;
+                float lx = side * 0.3f;
+                float lz = 0.1f - i * 0.18f;
+                string sideStr = side < 0 ? "L" : "R";
+
+                // Upper segment
+                AddPrimChild(root, $"Leg{sideStr}{i}", PrimitiveType.Capsule,
+                    new Vector3(lx, 0.1f, lz),
+                    Quaternion.Euler(0, 0, side * (40 + i * 5)),
+                    new Vector3(0.04f, 0.35f, 0.04f), legMat);
+
+                // Lower segment (bent downward)
+                AddPrimChild(root, $"Leg{sideStr}{i}_Lower", PrimitiveType.Capsule,
+                    new Vector3(lx + side * 0.4f, -0.2f, lz),
+                    Quaternion.Euler(0, 0, side * (15 + i * 3)),
+                    new Vector3(0.03f, 0.3f, 0.03f), legMat);
+            }
+        }
+
+        // Web strand above (connects to ceiling)
+        AddPrimChild(root, "WebStrand", PrimitiveType.Cylinder, new Vector3(0, 1.2f, -0.2f),
+            Quaternion.identity, new Vector3(0.02f, 1f, 0.02f), webMat);
+
+        SphereCollider col = root.AddComponent<SphereCollider>();
+        col.isTrigger = true; col.radius = 0.9f;
+        root.AddComponent<Obstacle>(); root.tag = "Obstacle";
+        root.AddComponent<SewerSpiderBehavior>();
+        root.transform.localScale = Vector3.one * 0.55f;
+
+        GameObject prefab = PrefabUtility.SaveAsPrefabAsset(root, prefabPath);
+        Object.DestroyImmediate(root);
+        Debug.Log("TTR: Created Sewer Spider with 8 eyes, 8 legs, fangs, and web strand!");
+        return prefab;
+    }
+
+    // ===== TOXIC FROG OBSTACLE =====
+    /// <summary>
+    /// Fat toxic frog - squat body, big googly eyes, throat pouch, 4 legs, hidden tongue.
+    /// Hops periodically and lashes tongue on player hit.
+    /// </summary>
+    static GameObject CreateToxicFrogPrefab()
+    {
+        string prefabPath = "Assets/Prefabs/ToxicFrog.prefab";
+        GameObject root = new GameObject("ToxicFrog");
+
+        // Materials
+        Material skinMat = MakeURPMat("Frog_Skin", new Color(0.15f, 0.5f, 0.08f), 0.05f, 0.65f);
+        skinMat.EnableKeyword("_EMISSION");
+        skinMat.SetColor("_EmissionColor", new Color(0.03f, 0.15f, 0.02f));
+        EditorUtility.SetDirty(skinMat);
+        Material bellyMat = MakeURPMat("Frog_Belly", new Color(0.55f, 0.7f, 0.25f), 0f, 0.5f);
+        Material throatMat = MakeURPMat("Frog_Throat", new Color(0.7f, 0.4f, 0.15f), 0f, 0.6f);
+        throatMat.EnableKeyword("_EMISSION");
+        throatMat.SetColor("_EmissionColor", new Color(0.2f, 0.1f, 0.02f));
+        EditorUtility.SetDirty(throatMat);
+        Material tongueMat = MakeURPMat("Frog_Tongue", new Color(0.85f, 0.3f, 0.35f), 0f, 0.7f);
+        Material wartMat = MakeURPMat("Frog_Wart", new Color(0.2f, 0.55f, 0.12f), 0.1f, 0.5f);
+        Material whiteMat = MakeURPMat("Frog_EyeW", Color.white, 0f, 0.85f);
+        whiteMat.EnableKeyword("_EMISSION");
+        whiteMat.SetColor("_EmissionColor", new Color(0.5f, 0.5f, 0.5f));
+        EditorUtility.SetDirty(whiteMat);
+        Material pupilMat = MakeURPMat("Frog_Pupil", new Color(0.02f, 0.02f, 0.02f), 0f, 0.95f);
+        Material legMat = MakeURPMat("Frog_Leg", new Color(0.12f, 0.42f, 0.06f), 0.05f, 0.55f);
+
+        // Squat wide body
+        AddPrimChild(root, "Body", PrimitiveType.Sphere, Vector3.zero,
+            Quaternion.identity, new Vector3(1.8f, 1.0f, 1.6f), skinMat);
+
+        // Lighter belly
+        AddPrimChild(root, "Belly", PrimitiveType.Sphere, new Vector3(0, -0.15f, 0.1f),
+            Quaternion.identity, new Vector3(1.5f, 0.7f, 1.3f), bellyMat);
+
+        // Throat pouch (inflates during idle)
+        AddPrimChild(root, "Throat", PrimitiveType.Sphere, new Vector3(0, -0.2f, 0.65f),
+            Quaternion.identity, new Vector3(0.7f, 0.5f, 0.5f), throatMat);
+
+        // Tongue (hidden by default, extends on hit)
+        AddPrimChild(root, "Tongue", PrimitiveType.Capsule, new Vector3(0, -0.1f, 0.8f),
+            Quaternion.Euler(90, 0, 0), new Vector3(0.12f, 0.4f, 0.08f), tongueMat);
+
+        // Big googly eyes on top (frog style, bulging up)
+        for (int side = -1; side <= 1; side += 2)
+        {
+            float x = side * 0.35f;
+            AddPrimChild(root, side < 0 ? "EyeL" : "EyeR", PrimitiveType.Sphere,
+                new Vector3(x, 0.55f, 0.35f), Quaternion.identity,
+                new Vector3(0.45f, 0.45f, 0.45f), whiteMat);
+            AddPrimChild(root, side < 0 ? "PupilL" : "PupilR", PrimitiveType.Sphere,
+                new Vector3(x, 0.55f, 0.55f), Quaternion.identity,
+                new Vector3(0.22f, 0.26f, 0.15f), pupilMat);
+        }
+
+        // 4 legs (front pair shorter, rear pair longer for hopping)
+        float[] legX = { -0.7f, 0.7f, -0.75f, 0.75f };
+        float[] legZ = { 0.3f, 0.3f, -0.4f, -0.4f };
+        float[] legLen = { 0.25f, 0.25f, 0.35f, 0.35f };
+        string[] legNames = { "LegFL", "LegFR", "LegRL", "LegRR" };
+        for (int i = 0; i < 4; i++)
+        {
+            // Upper leg
+            AddPrimChild(root, legNames[i], PrimitiveType.Capsule,
+                new Vector3(legX[i], -0.15f, legZ[i]),
+                Quaternion.Euler(0, 0, legX[i] > 0 ? 35 : -35),
+                new Vector3(0.18f, legLen[i], 0.14f), legMat);
+            // Foot (webbed paddle)
+            AddPrimChild(root, legNames[i] + "_Foot", PrimitiveType.Sphere,
+                new Vector3(legX[i] * 1.3f, -0.4f, legZ[i] + 0.05f),
+                Quaternion.identity, new Vector3(0.2f, 0.06f, 0.25f), legMat);
+        }
+
+        // Warts (bumpy texture dots)
+        for (int w = 0; w < 8; w++)
+        {
+            float angle = w * 45f * Mathf.Deg2Rad;
+            float wx = Mathf.Cos(angle) * 0.6f;
+            float wz = Mathf.Sin(angle) * 0.5f;
+            float wy = Random.Range(0.1f, 0.4f);
+            AddPrimChild(root, $"Wart{w}", PrimitiveType.Sphere,
+                new Vector3(wx, wy, wz), Quaternion.identity,
+                new Vector3(0.08f, 0.06f, 0.08f), wartMat);
+        }
+
+        SphereCollider col = root.AddComponent<SphereCollider>();
+        col.isTrigger = true; col.radius = 0.85f;
+        root.AddComponent<Obstacle>(); root.tag = "Obstacle";
+        root.AddComponent<ToxicFrogBehavior>();
+        root.transform.localScale = Vector3.one * 0.6f;
+
+        GameObject prefab = PrefabUtility.SaveAsPrefabAsset(root, prefabPath);
+        Object.DestroyImmediate(root);
+        Debug.Log("TTR: Created Toxic Frog with throat pouch, legs, tongue, and warts!");
+        return prefab;
+    }
+
+    // ===== SEWER JELLYFISH OBSTACLE =====
+    /// <summary>
+    /// Translucent sewer jellyfish - pulsing bell dome, trailing tentacles, bioluminescent glow.
+    /// Drifts gently and stings on contact.
+    /// </summary>
+    static GameObject CreateSewerJellyfishPrefab()
+    {
+        string prefabPath = "Assets/Prefabs/SewerJellyfish.prefab";
+        GameObject root = new GameObject("SewerJellyfish");
+
+        // Materials - translucent / glowy
+        Material bellMat = MakeURPMat("Jelly_Bell", new Color(0.2f, 0.6f, 0.5f, 0.7f), 0f, 0.9f);
+        bellMat.EnableKeyword("_EMISSION");
+        bellMat.SetColor("_EmissionColor", new Color(0.08f, 0.5f, 0.35f) * 2f);
+        EditorUtility.SetDirty(bellMat);
+        Material innerMat = MakeURPMat("Jelly_Inner", new Color(0.3f, 0.8f, 0.6f), 0f, 0.95f);
+        innerMat.EnableKeyword("_EMISSION");
+        innerMat.SetColor("_EmissionColor", new Color(0.15f, 0.7f, 0.5f) * 3f);
+        EditorUtility.SetDirty(innerMat);
+        Material tentMat = MakeURPMat("Jelly_Tentacle", new Color(0.25f, 0.55f, 0.45f, 0.6f), 0f, 0.8f);
+        tentMat.EnableKeyword("_EMISSION");
+        tentMat.SetColor("_EmissionColor", new Color(0.05f, 0.3f, 0.2f) * 1.5f);
+        EditorUtility.SetDirty(tentMat);
+        Material whiteMat = MakeURPMat("Jelly_EyeW", Color.white, 0f, 0.9f);
+        whiteMat.EnableKeyword("_EMISSION");
+        whiteMat.SetColor("_EmissionColor", new Color(0.6f, 0.6f, 0.6f));
+        EditorUtility.SetDirty(whiteMat);
+        Material pupilMat = MakeURPMat("Jelly_Pupil", new Color(0.02f, 0.02f, 0.02f), 0f, 0.95f);
+        Material spotMat = MakeURPMat("Jelly_Spot", new Color(0.35f, 0.75f, 0.6f), 0f, 0.85f);
+        spotMat.EnableKeyword("_EMISSION");
+        spotMat.SetColor("_EmissionColor", new Color(0.1f, 0.4f, 0.3f) * 2f);
+        EditorUtility.SetDirty(spotMat);
+
+        // Bell dome (wider than tall, mushroom cap shape)
+        AddPrimChild(root, "Bell", PrimitiveType.Sphere, new Vector3(0, 0.3f, 0),
+            Quaternion.identity, new Vector3(1.8f, 1.2f, 1.8f), bellMat);
+
+        // Inner glow core
+        AddPrimChild(root, "InnerCore", PrimitiveType.Sphere, new Vector3(0, 0.2f, 0),
+            Quaternion.identity, new Vector3(1.0f, 0.7f, 1.0f), innerMat);
+
+        // Glowing spots on bell surface
+        for (int s = 0; s < 6; s++)
+        {
+            float angle = s * 60f * Mathf.Deg2Rad;
+            float sx = Mathf.Cos(angle) * 0.6f;
+            float sz = Mathf.Sin(angle) * 0.6f;
+            AddPrimChild(root, $"Spot{s}", PrimitiveType.Sphere,
+                new Vector3(sx, 0.45f + Random.Range(-0.1f, 0.1f), sz),
+                Quaternion.identity, new Vector3(0.12f, 0.08f, 0.12f), spotMat);
+        }
+
+        // Tiny googly eyes underneath the bell
+        for (int side = -1; side <= 1; side += 2)
+        {
+            float x = side * 0.25f;
+            AddPrimChild(root, side < 0 ? "EyeL" : "EyeR", PrimitiveType.Sphere,
+                new Vector3(x, -0.05f, 0.3f), Quaternion.identity,
+                new Vector3(0.2f, 0.2f, 0.2f), whiteMat);
+            AddPrimChild(root, side < 0 ? "PupilL" : "PupilR", PrimitiveType.Sphere,
+                new Vector3(x, -0.05f, 0.4f), Quaternion.identity,
+                new Vector3(0.1f, 0.12f, 0.06f), pupilMat);
+        }
+
+        // 8 trailing tentacles
+        for (int t = 0; t < 8; t++)
+        {
+            float angle = t * 45f * Mathf.Deg2Rad;
+            float tx = Mathf.Cos(angle) * 0.45f;
+            float tz = Mathf.Sin(angle) * 0.45f;
+            float tentLen = Random.Range(0.5f, 0.8f);
+            AddPrimChild(root, $"Tentacle{t}", PrimitiveType.Capsule,
+                new Vector3(tx, -0.5f - t * 0.03f, tz),
+                Quaternion.Euler(Random.Range(-10f, 10f), 0, Random.Range(-10f, 10f)),
+                new Vector3(0.06f, tentLen, 0.06f), tentMat);
+        }
+
+        // Frilly rim around bell edge
+        for (int f = 0; f < 12; f++)
+        {
+            float angle = f * 30f * Mathf.Deg2Rad;
+            float fx = Mathf.Cos(angle) * 0.8f;
+            float fz = Mathf.Sin(angle) * 0.8f;
+            AddPrimChild(root, $"Frill{f}", PrimitiveType.Sphere,
+                new Vector3(fx, -0.1f, fz), Quaternion.identity,
+                new Vector3(0.15f, 0.08f, 0.1f), tentMat);
+        }
+
+        SphereCollider col = root.AddComponent<SphereCollider>();
+        col.isTrigger = true; col.radius = 0.9f;
+        root.AddComponent<Obstacle>(); root.tag = "Obstacle";
+        root.AddComponent<SewerJellyfishBehavior>();
+        root.transform.localScale = Vector3.one * 0.7f;
+
+        GameObject prefab = PrefabUtility.SaveAsPrefabAsset(root, prefabPath);
+        Object.DestroyImmediate(root);
+        Debug.Log("TTR: Created Sewer Jellyfish with pulsing bell, tentacles, and bioluminescent glow!");
+        return prefab;
+    }
+
     /// <summary>
     /// Helper: creates a primitive child, removes its collider, applies material.
     /// </summary>
@@ -4988,17 +5961,38 @@ public class SceneBootstrapper
         galleryCam.enabled = false;
         gallery.galleryCamera = galleryCam;
 
-        // Gallery light (3-point for good model viewing)
+        // Gallery lighting - 3-point setup for good model viewing
+        // Key light (main, warm)
         GameObject lightObj = new GameObject("GalleryLight");
         lightObj.transform.SetParent(galleryRoot.transform);
         lightObj.transform.position = stagePos + new Vector3(-2, 4, -3);
         lightObj.transform.LookAt(stagePos);
         Light galleryLight = lightObj.AddComponent<Light>();
         galleryLight.type = LightType.Directional;
-        galleryLight.intensity = 2f;
-        galleryLight.color = new Color(1f, 0.95f, 0.9f);
+        galleryLight.intensity = 3.5f;
+        galleryLight.color = new Color(1f, 0.97f, 0.92f);
         galleryLight.enabled = false;
         gallery.galleryLight = galleryLight;
+
+        // Fill light (softer, cool, from the other side)
+        GameObject fillObj = new GameObject("GalleryFillLight");
+        fillObj.transform.SetParent(lightObj.transform); // child of key light so enable/disable propagates
+        fillObj.transform.position = stagePos + new Vector3(3, 2, -2);
+        fillObj.transform.LookAt(stagePos);
+        Light fillLight = fillObj.AddComponent<Light>();
+        fillLight.type = LightType.Directional;
+        fillLight.intensity = 1.5f;
+        fillLight.color = new Color(0.8f, 0.85f, 1f);
+
+        // Rim light (from behind, adds edge definition)
+        GameObject rimObj = new GameObject("GalleryRimLight");
+        rimObj.transform.SetParent(lightObj.transform);
+        rimObj.transform.position = stagePos + new Vector3(0, 3, 4);
+        rimObj.transform.LookAt(stagePos);
+        Light rimLight = rimObj.AddComponent<Light>();
+        rimLight.type = LightType.Directional;
+        rimLight.intensity = 2f;
+        rimLight.color = new Color(1f, 0.95f, 0.85f);
 
         // Gallery UI Panel
         GameObject galleryPanel = MakePanel(canvas.transform, "GalleryPanel",
@@ -5110,6 +6104,23 @@ public class SceneBootstrapper
         };
         foreach (var s in skins)
             gallery.RegisterAsset(s.name, s.desc, "Characters", mrCornyGallery, 0.17f, s.col);
+
+        // Smooth Snake (standalone AI racer)
+        gallery.RegisterAsset("Smooth Snake", "The smuggest turd in the sewer. Half-lidded and unimpressed.",
+            "Characters", "Assets/Prefabs/Racer_SmoothSnake_Gallery.prefab", 0.16f, new Color(0.25f, 0.15f, 0.08f));
+
+        // AI Racers (with unique faces and expressions)
+        var racers = new (string preset, string name, string desc, Color col)[] {
+            ("SkidmarkSteve", "Skidmark Steve", "Angry racer with a snarl. Leaves marks everywhere.", new Color(0.7f, 0.35f, 0.1f)),
+            ("PrincessPlop", "Princess Plop", "Glamorous turd with sparkly eyes and kissy lips.", new Color(0.85f, 0.5f, 0.75f)),
+            ("TheLog", "The Log", "Stoic and unfazed. Nothing impresses this turd.", new Color(0.4f, 0.25f, 0.1f)),
+            ("LilSquirt", "Lil' Squirt", "Wild googly eyes and a goofy grin. Unpredictable!", new Color(0.9f, 0.8f, 0.3f)),
+        };
+        foreach (var r in racers)
+        {
+            string racerPrefab = $"Assets/Prefabs/Racer_{r.preset}_Gallery.prefab";
+            gallery.RegisterAsset(r.name, r.desc, "Characters", racerPrefab, 0.15f, r.col);
+        }
 
         // === OBSTACLES ===
         var obstacles = new (string name, string desc, string path)[] {
@@ -5488,6 +6499,11 @@ public class SceneBootstrapper
             cSh.effectDistance = new Vector2(2, -3);
         }
 
+        // HUD speed indicator - bottom-left, sewer-mph style
+        Text speedText = MakeStretchText(canvasObj.transform, "SpeedText", "0 SMPH",
+            22, TextAnchor.LowerLeft, new Color(0.3f, 1f, 0.4f, 0.85f),
+            new Vector2(0.02f, 0.015f), new Vector2(0.22f, 0.05f), true);
+
         // HUD wallet text (left side, below tracker)
         Text walletText = MakeStretchText(canvasObj.transform, "WalletText", "0",
             28, TextAnchor.UpperLeft, new Color(1f, 0.85f, 0.2f),
@@ -5548,6 +6564,17 @@ public class SceneBootstrapper
         ui.restartButton = restartButton;
         ui.multiplierText = multiplierText;
         ui.coinCountText = coinCountText;
+        ui.speedText = speedText;
+
+        // Screen Effects overlay (hit flash, speed vignette)
+        GameObject sfxOverlay = new GameObject("ScreenEffects");
+        sfxOverlay.transform.SetParent(canvasObj.transform, false);
+        RectTransform sfxRt = sfxOverlay.AddComponent<RectTransform>();
+        sfxRt.anchorMin = Vector2.zero;
+        sfxRt.anchorMax = Vector2.one;
+        sfxRt.offsetMin = Vector2.zero;
+        sfxRt.offsetMax = Vector2.zero;
+        sfxOverlay.AddComponent<ScreenEffects>();
 
         return ui;
     }

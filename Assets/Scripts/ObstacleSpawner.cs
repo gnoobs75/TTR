@@ -108,10 +108,47 @@ public class ObstacleSpawner : MonoBehaviour
     {
         float currentChance = Mathf.Min(obstacleChance + dist * difficultyRamp * 0.001f, 0.7f);
 
+        // Fork density modifier: if in a fork zone, adjust spawn rates
+        float coinMult = 1f;
+        float obstacleMult = 1f;
+        if (_tc != null && _tc.CurrentFork != null)
+        {
+            coinMult = _tc.CurrentFork.GetCoinMultiplier();
+            obstacleMult = _tc.CurrentFork.GetObstacleMultiplier();
+            currentChance *= obstacleMult;
+        }
+
         if (_pipeGen != null)
         {
             Vector3 center, forward, right, up;
-            _pipeGen.GetPathFrame(dist, out center, out forward, out right, out up);
+
+            // Branch-aware: spawn on the player's current branch path
+            PipeFork fork = _tc != null ? _tc.CurrentFork : null;
+            int branch = _tc != null ? _tc.ForkBranch : -1;
+
+            if (fork != null && branch >= 0)
+            {
+                Vector3 mainC, mainF, mainR, mainU;
+                _pipeGen.GetPathFrame(dist, out mainC, out mainF, out mainR, out mainU);
+
+                Vector3 bC, bF, bR, bU;
+                if (fork.GetBranchFrame(branch, dist, out bC, out bF, out bR, out bU))
+                {
+                    float blend = fork.GetBranchBlend(dist);
+                    center = Vector3.Lerp(mainC, bC, blend);
+                    forward = Vector3.Slerp(mainF, bF, blend).normalized;
+                    right = Vector3.Slerp(mainR, bR, blend).normalized;
+                    up = Vector3.Slerp(mainU, bU, blend).normalized;
+                }
+                else
+                {
+                    center = mainC; forward = mainF; right = mainR; up = mainU;
+                }
+            }
+            else
+            {
+                _pipeGen.GetPathFrame(dist, out center, out forward, out right, out up);
+            }
 
             if (Random.value < currentChance && obstaclePrefabs != null && obstaclePrefabs.Length > 0)
             {
@@ -119,7 +156,10 @@ public class ObstacleSpawner : MonoBehaviour
             }
             else if (coinPrefab != null)
             {
+                // In risky fork: spawn extra coin trails
                 SpawnCoinTrailAlongPath(dist);
+                if (coinMult > 1.5f && Random.value < 0.4f)
+                    SpawnCoinTrailAlongPath(dist + 5f); // bonus trail
             }
         }
     }
@@ -162,10 +202,18 @@ public class ObstacleSpawner : MonoBehaviour
         }
 
         float angle = angleDeg * Mathf.Deg2Rad;
+        // Use smaller radius when in a fork branch
+        PipeFork fork = _tc != null ? _tc.CurrentFork : null;
+        int branch = _tc != null ? _tc.ForkBranch : -1;
+        float effectivePipeRadius = pipeRadius;
+        if (fork != null && branch >= 0)
+            effectivePipeRadius = Mathf.Lerp(pipeRadius, fork.branchPipeRadius,
+                fork.GetBranchBlend(dist));
+
         // Mines float near the water surface (closer to pipe wall = lower in water)
         float spawnRadius = isMine
-            ? pipeRadius * 0.82f  // at water surface level
-            : pipeRadius * Random.Range(0.55f, 0.75f);
+            ? effectivePipeRadius * 0.82f
+            : effectivePipeRadius * Random.Range(0.55f, 0.75f);
 
         Vector3 pos = center + (right * Mathf.Cos(angle) + up * Mathf.Sin(angle)) * spawnRadius;
 
@@ -187,26 +235,220 @@ public class ObstacleSpawner : MonoBehaviour
             rat.spawnDistToCenter = spawnRadius;
     }
 
+    // Pattern types for coin trails - spiral around the pipe, not just bottom!
+    enum CoinPattern { Straight, Spiral, HalfLoop, FullLoop, SCurve, WallRun, CeilingArc }
+
     void SpawnCoinTrailAlongPath(float startDist)
     {
         if (coinPrefab == null || _pipeGen == null) return;
 
-        // Coins form a clear line along the player's path
-        // Placed at player running height, near the bottom of the pipe
-        // Slight left/right offset for variety
-        float sideOffset = Random.Range(-1.2f, 1.2f);
+        // Pick pattern - cycle through them with some randomness
+        // Early game (< 60m) only straight/wall runs, later game gets loops and spirals
+        CoinPattern pattern;
+        if (startDist < 60f)
+        {
+            pattern = Random.value < 0.6f ? CoinPattern.Straight : CoinPattern.WallRun;
+        }
+        else
+        {
+            // Weighted random from all patterns, favoring spirals and loops
+            float roll = Random.value;
+            if (roll < 0.12f)
+                pattern = CoinPattern.Straight;
+            else if (roll < 0.30f)
+                pattern = CoinPattern.Spiral;
+            else if (roll < 0.45f)
+                pattern = CoinPattern.HalfLoop;
+            else if (roll < 0.60f)
+                pattern = CoinPattern.FullLoop;
+            else if (roll < 0.75f)
+                pattern = CoinPattern.SCurve;
+            else if (roll < 0.88f)
+                pattern = CoinPattern.WallRun;
+            else
+                pattern = CoinPattern.CeilingArc;
+        }
+
+        switch (pattern)
+        {
+            case CoinPattern.Straight:
+                SpawnCoinsStraight(startDist);
+                break;
+            case CoinPattern.Spiral:
+                SpawnCoinsSpiral(startDist);
+                break;
+            case CoinPattern.HalfLoop:
+                SpawnCoinsHalfLoop(startDist);
+                break;
+            case CoinPattern.FullLoop:
+                SpawnCoinsFullLoop(startDist);
+                break;
+            case CoinPattern.SCurve:
+                SpawnCoinsSCurve(startDist);
+                break;
+            case CoinPattern.WallRun:
+                SpawnCoinsWallRun(startDist);
+                break;
+            case CoinPattern.CeilingArc:
+                SpawnCoinsCeilingArc(startDist);
+                break;
+        }
+    }
+
+    void SpawnCoinAtAngle(float dist, float angleDeg)
+    {
+        Vector3 center, forward, right, up;
+
+        // Branch-aware coin placement
+        PipeFork fork = _tc != null ? _tc.CurrentFork : null;
+        int branch = _tc != null ? _tc.ForkBranch : -1;
+        float effectiveRadius = pipeRadius;
+
+        if (fork != null && branch >= 0)
+        {
+            Vector3 mainC, mainF, mainR, mainU;
+            _pipeGen.GetPathFrame(dist, out mainC, out mainF, out mainR, out mainU);
+
+            Vector3 bC, bF, bR, bU;
+            if (fork.GetBranchFrame(branch, dist, out bC, out bF, out bR, out bU))
+            {
+                float blend = fork.GetBranchBlend(dist);
+                center = Vector3.Lerp(mainC, bC, blend);
+                forward = Vector3.Slerp(mainF, bF, blend).normalized;
+                right = Vector3.Slerp(mainR, bR, blend).normalized;
+                up = Vector3.Slerp(mainU, bU, blend).normalized;
+                effectiveRadius = Mathf.Lerp(pipeRadius, fork.branchPipeRadius, blend);
+            }
+            else
+            {
+                _pipeGen.GetPathFrame(dist, out center, out forward, out right, out up);
+            }
+        }
+        else
+        {
+            _pipeGen.GetPathFrame(dist, out center, out forward, out right, out up);
+        }
+
+        float rad = angleDeg * Mathf.Deg2Rad;
+        float spawnRadius = effectiveRadius * 0.92f;
+        Vector3 pos = center + (right * Mathf.Cos(rad) + up * Mathf.Sin(rad)) * spawnRadius;
+
+        // Orient coin: inward is "up" for the coin so it sits on the pipe surface
+        Vector3 inward = (center - pos).normalized;
+        Quaternion rot = Quaternion.LookRotation(forward, inward);
+        GameObject coin = Instantiate(coinPrefab, pos, rot, transform);
+        _spawnedObjects.Add(coin);
+    }
+
+    // Original straight line trail at a random angle (not just bottom)
+    void SpawnCoinsStraight(float startDist)
+    {
+        // Can be at any angle now, not just bottom
+        float angleDeg = Random.value < 0.5f
+            ? 270f + Random.Range(-40f, 40f)  // bottom half
+            : Random.Range(0f, 360f);          // anywhere
 
         int count = Random.Range(4, 8);
         for (int i = 0; i < count; i++)
-        {
-            float coinDist = startDist + i * 3f;
-            Vector3 center, forward, right, up;
-            _pipeGen.GetPathFrame(coinDist, out center, out forward, out right, out up);
+            SpawnCoinAtAngle(startDist + i * 3f, angleDeg);
+    }
 
-            Vector3 pos = center - up * (pipeRadius * 0.72f) + right * sideOffset;
-            Quaternion rot = Quaternion.LookRotation(forward, up);
-            GameObject coin = Instantiate(coinPrefab, pos, rot, transform);
-            _spawnedObjects.Add(coin);
+    // Spiral: coins go around the pipe like a corkscrew
+    void SpawnCoinsSpiral(float startDist)
+    {
+        float startAngle = Random.Range(0f, 360f);
+        // How much of the pipe circumference to cover (180-540 degrees)
+        float totalSweep = Random.Range(180f, 540f);
+        // Randomize direction (clockwise vs counterclockwise)
+        float dir = Random.value < 0.5f ? 1f : -1f;
+
+        int count = Random.Range(8, 14);
+        float spacing = 4f;
+        for (int i = 0; i < count; i++)
+        {
+            float t = (float)i / (count - 1);
+            float angle = startAngle + totalSweep * t * dir;
+            SpawnCoinAtAngle(startDist + i * spacing, angle);
+        }
+    }
+
+    // Half loop: coins arc from bottom, up one wall, to the top (or reverse)
+    void SpawnCoinsHalfLoop(float startDist)
+    {
+        // Start at bottom (270°), sweep 180° to top (90°)
+        // Or start on a wall and sweep half around
+        float startAngle = Random.value < 0.5f ? 270f : 90f;
+        float endAngle = startAngle + (Random.value < 0.5f ? 180f : -180f);
+
+        int count = Random.Range(6, 10);
+        float spacing = 3.5f;
+        for (int i = 0; i < count; i++)
+        {
+            float t = (float)i / (count - 1);
+            float angle = Mathf.Lerp(startAngle, endAngle, t);
+            SpawnCoinAtAngle(startDist + i * spacing, angle);
+        }
+    }
+
+    // Full loop: coins go all the way around the pipe (360°)
+    void SpawnCoinsFullLoop(float startDist)
+    {
+        float startAngle = Random.Range(0f, 360f);
+        float dir = Random.value < 0.5f ? 1f : -1f;
+
+        int count = Random.Range(10, 16);
+        float spacing = 3.5f;
+        for (int i = 0; i < count; i++)
+        {
+            float t = (float)i / (count - 1);
+            float angle = startAngle + 360f * t * dir;
+            SpawnCoinAtAngle(startDist + i * spacing, angle);
+        }
+    }
+
+    // S-curve: coins weave side-to-side across the pipe
+    void SpawnCoinsSCurve(float startDist)
+    {
+        float centerAngle = Random.Range(0f, 360f);
+        float amplitude = Random.Range(60f, 120f); // degrees of swing
+
+        int count = Random.Range(8, 12);
+        float spacing = 3.5f;
+        for (int i = 0; i < count; i++)
+        {
+            float t = (float)i / (count - 1);
+            float wave = Mathf.Sin(t * Mathf.PI * 2f) * amplitude;
+            SpawnCoinAtAngle(startDist + i * spacing, centerAngle + wave);
+        }
+    }
+
+    // Wall run: straight line up the left or right wall
+    void SpawnCoinsWallRun(float startDist)
+    {
+        // Left wall (~180°) or right wall (~0°/360°)
+        float angleDeg = Random.value < 0.5f
+            ? Random.Range(160f, 200f)
+            : Random.Range(340f, 380f);
+
+        int count = Random.Range(5, 8);
+        for (int i = 0; i < count; i++)
+            SpawnCoinAtAngle(startDist + i * 4f, angleDeg);
+    }
+
+    // Ceiling arc: coins across the top of the pipe
+    void SpawnCoinsCeilingArc(float startDist)
+    {
+        // Arc from one upper side to the other across the ceiling
+        float startAngle = Random.Range(130f, 160f);
+        float endAngle = Random.Range(20f, 50f);
+
+        int count = Random.Range(6, 10);
+        float spacing = 3.5f;
+        for (int i = 0; i < count; i++)
+        {
+            float t = (float)i / (count - 1);
+            float angle = Mathf.Lerp(startAngle, endAngle, t);
+            SpawnCoinAtAngle(startDist + i * spacing, angle);
         }
     }
 

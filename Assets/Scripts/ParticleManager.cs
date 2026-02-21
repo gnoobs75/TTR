@@ -28,6 +28,16 @@ public class ParticleManager : MonoBehaviour
     private ParticleSystem _waterSplash;
     private ParticleSystem _wakeSpray;
 
+    // New creature hit effects
+    private ParticleSystem _frogSplat;
+    private ParticleSystem _jellyZap;
+    private ParticleSystem _spiderWeb;
+    private ParticleSystem _stompSquash;
+
+    // Underwater dive effects (continuous while submerged)
+    private ParticleSystem _underwaterBubbles;
+    private ParticleSystem _underwaterDebris;
+
     void Awake()
     {
         if (Instance == null) Instance = this;
@@ -99,6 +109,32 @@ public class ParticleManager : MonoBehaviour
         _wakeSpray = CreateTrail("WakeSpray",
             new Color(0.25f, 0.4f, 0.15f, 0.6f), new Color(0.2f, 0.35f, 0.1f, 0f),
             25, 2f, 0.7f, 0.08f);
+
+        // === NEW CREATURE HIT EFFECTS ===
+
+        // Frog splat: green toxic goop burst
+        _frogSplat = CreateBurst("FrogSplat",
+            new Color(0.1f, 0.8f, 0.2f, 0.9f), new Color(0.3f, 0.6f, 0.05f, 0.5f),
+            20, 3.5f, 0.7f, 0.18f);
+
+        // Jellyfish zap: electric cyan/white sparks
+        _jellyZap = CreateBurst("JellyZap",
+            new Color(0.2f, 1f, 0.9f, 0.9f), new Color(0.8f, 1f, 1f, 0.5f),
+            30, 6f, 0.4f, 0.08f);
+
+        // Spider web: white stringy burst
+        _spiderWeb = CreateBurst("SpiderWeb",
+            new Color(0.9f, 0.9f, 0.9f, 0.8f), new Color(0.6f, 0.6f, 0.65f, 0.4f),
+            15, 2.5f, 1.0f, 0.12f);
+
+        // Stomp squash: satisfying poof
+        _stompSquash = CreateBurst("StompSquash",
+            new Color(1f, 0.9f, 0.3f, 0.9f), new Color(1f, 0.5f, 0.1f, 0.4f),
+            25, 5f, 0.5f, 0.15f);
+
+        // === UNDERWATER DIVE EFFECTS ===
+        _underwaterBubbles = CreateUnderwaterBubbles();
+        _underwaterDebris = CreateUnderwaterDebris();
     }
 
     ParticleSystem CreateDustMotes()
@@ -438,5 +474,148 @@ public class ParticleManager : MonoBehaviour
         if (_coinMagnetTrail == null) return;
         _coinMagnetTrail.Stop();
         _coinMagnetTrail.transform.SetParent(transform);
+    }
+
+    // === NEW CREATURE HIT VFX ===
+    public void PlayFrogSplat(Vector3 position) => PlayAt(_frogSplat, position);
+    public void PlayJellyZap(Vector3 position) => PlayAt(_jellyZap, position);
+    public void PlaySpiderWeb(Vector3 position) => PlayAt(_spiderWeb, position);
+    public void PlayStompSquash(Vector3 position) => PlayAt(_stompSquash, position);
+
+    // === UNDERWATER DIVE VFX ===
+
+    ParticleSystem CreateUnderwaterBubbles()
+    {
+        var go = new GameObject("UW_Bubbles");
+        go.transform.SetParent(transform);
+        var ps = go.AddComponent<ParticleSystem>();
+
+        var main = ps.main;
+        main.maxParticles = 120;
+        main.startLifetime = new ParticleSystem.MinMaxCurve(1.5f, 4f);
+        main.startSpeed = new ParticleSystem.MinMaxCurve(0.5f, 2f);
+        main.startSize = new ParticleSystem.MinMaxCurve(0.03f, 0.12f);
+        main.startColor = new ParticleSystem.MinMaxGradient(
+            new Color(0.5f, 0.8f, 0.6f, 0.5f),
+            new Color(0.7f, 0.95f, 0.8f, 0.3f));
+        main.loop = true;
+        main.playOnAwake = false;
+        main.simulationSpace = ParticleSystemSimulationSpace.World;
+        main.gravityModifier = -0.4f; // bubbles float upward
+
+        var emission = ps.emission;
+        emission.rateOverTime = 25;
+
+        var shape = ps.shape;
+        shape.shapeType = ParticleSystemShapeType.Sphere;
+        shape.radius = 2.5f;
+
+        var sizeOverLife = ps.sizeOverLifetime;
+        sizeOverLife.enabled = true;
+        sizeOverLife.size = new ParticleSystem.MinMaxCurve(1f,
+            AnimationCurve.EaseInOut(0f, 0.6f, 1f, 1.3f)); // grow slightly as they rise
+
+        var colorOverLife = ps.colorOverLifetime;
+        colorOverLife.enabled = true;
+        Gradient grad = new Gradient();
+        grad.SetKeys(
+            new[] {
+                new GradientColorKey(new Color(0.5f, 0.8f, 0.6f), 0f),
+                new GradientColorKey(new Color(0.7f, 0.95f, 0.8f), 1f)
+            },
+            new[] {
+                new GradientAlphaKey(0.6f, 0f),
+                new GradientAlphaKey(0.4f, 0.7f),
+                new GradientAlphaKey(0f, 1f)
+            });
+        colorOverLife.color = grad;
+
+        var renderer = go.GetComponent<ParticleSystemRenderer>();
+        renderer.material = GetParticleMaterial(new Color(0.6f, 0.9f, 0.7f, 0.4f));
+
+        go.SetActive(false);
+        return ps;
+    }
+
+    ParticleSystem CreateUnderwaterDebris()
+    {
+        var go = new GameObject("UW_Debris");
+        go.transform.SetParent(transform);
+        var ps = go.AddComponent<ParticleSystem>();
+
+        var main = ps.main;
+        main.maxParticles = 80;
+        main.startLifetime = new ParticleSystem.MinMaxCurve(2f, 5f);
+        main.startSpeed = new ParticleSystem.MinMaxCurve(0.1f, 0.5f);
+        main.startSize = new ParticleSystem.MinMaxCurve(0.02f, 0.08f);
+        main.startColor = new ParticleSystem.MinMaxGradient(
+            new Color(0.35f, 0.25f, 0.12f, 0.6f),  // murky brown
+            new Color(0.2f, 0.4f, 0.15f, 0.4f));    // sickly green
+        main.loop = true;
+        main.playOnAwake = false;
+        main.simulationSpace = ParticleSystemSimulationSpace.World;
+        main.gravityModifier = -0.05f; // barely float
+        main.startRotation = new ParticleSystem.MinMaxCurve(0f, Mathf.PI * 2f);
+
+        var emission = ps.emission;
+        emission.rateOverTime = 15;
+
+        var shape = ps.shape;
+        shape.shapeType = ParticleSystemShapeType.Box;
+        shape.scale = new Vector3(4f, 4f, 6f); // spread around player
+
+        // Gentle random drift
+        var vel = ps.velocityOverLifetime;
+        vel.enabled = true;
+        vel.x = new ParticleSystem.MinMaxCurve(-0.3f, 0.3f);
+        vel.y = new ParticleSystem.MinMaxCurve(-0.1f, 0.2f);
+        vel.z = new ParticleSystem.MinMaxCurve(-0.3f, 0.3f);
+
+        var rotOverLife = ps.rotationOverLifetime;
+        rotOverLife.enabled = true;
+        rotOverLife.z = new ParticleSystem.MinMaxCurve(-1f, 1f);
+
+        var sizeOverLife = ps.sizeOverLifetime;
+        sizeOverLife.enabled = true;
+        sizeOverLife.size = new ParticleSystem.MinMaxCurve(1f,
+            AnimationCurve.EaseInOut(0f, 0.8f, 1f, 0f));
+
+        var renderer = go.GetComponent<ParticleSystemRenderer>();
+        renderer.material = GetParticleMaterial(new Color(0.3f, 0.25f, 0.12f, 0.5f));
+
+        go.SetActive(false);
+        return ps;
+    }
+
+    public void StartUnderwaterEffects(Transform player)
+    {
+        if (_underwaterBubbles != null)
+        {
+            _underwaterBubbles.gameObject.SetActive(true);
+            _underwaterBubbles.transform.SetParent(player);
+            _underwaterBubbles.transform.localPosition = Vector3.zero;
+            _underwaterBubbles.Play();
+        }
+        if (_underwaterDebris != null)
+        {
+            _underwaterDebris.gameObject.SetActive(true);
+            _underwaterDebris.transform.SetParent(player);
+            _underwaterDebris.transform.localPosition = Vector3.zero;
+            _underwaterDebris.Play();
+        }
+    }
+
+    public void StopUnderwaterEffects()
+    {
+        if (_underwaterBubbles != null)
+        {
+            _underwaterBubbles.Stop();
+            _underwaterBubbles.transform.SetParent(transform);
+        }
+        if (_underwaterDebris != null)
+        {
+            _underwaterDebris.Stop();
+            _underwaterDebris.transform.SetParent(transform);
+        }
     }
 }

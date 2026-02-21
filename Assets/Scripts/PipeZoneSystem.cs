@@ -218,8 +218,23 @@ public class PipeZoneSystem : MonoBehaviour
             _mainLight.intensity = Mathf.Lerp(current.lightIntensity, next.lightIntensity, blend);
         }
 
-        // Announce zone change
-        if (zoneChanged && ProceduralAudio.Instance != null)
-            ProceduralAudio.Instance.PlayZoneTransition();
+        // Announce zone change with full fanfare
+        if (zoneChanged)
+        {
+            if (ProceduralAudio.Instance != null)
+                ProceduralAudio.Instance.PlayZoneTransition();
+            // Show zone name announcement
+            if (ScorePopup.Instance != null && _tc != null)
+                ScorePopup.Instance.ShowMilestone(
+                    _tc.transform.position + Vector3.up * 2.5f,
+                    zones[zoneIdx].name.ToUpper());
+            // Camera rumble for zone transition
+            if (PipeCamera.Instance != null)
+                PipeCamera.Instance.Shake(0.2f);
+            // Screen flash
+            if (ScreenEffects.Instance != null)
+                ScreenEffects.Instance.TriggerMilestoneFlash();
+            HapticManager.MediumTap();
+        }
     }
 }

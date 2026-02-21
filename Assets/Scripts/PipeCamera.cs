@@ -13,9 +13,9 @@ public class PipeCamera : MonoBehaviour
 
     [Header("Follow Settings")]
     [Tooltip("How far behind the turd (along the pipe path) the camera sits")]
-    public float followDistance = 1.8f;
+    public float followDistance = 4.5f;
     [Tooltip("How far ahead of the turd the camera looks")]
-    public float lookAhead = 6f;
+    public float lookAhead = 7f;
     public float positionSmooth = 12f;
     public float rotationSmooth = 10f;
 
@@ -43,6 +43,7 @@ public class PipeCamera : MonoBehaviour
     // Juice
     private float _shakeIntensity;
     private float _fovPunch;
+    private float _smoothCamBlend; // smoothed fork blend for camera (avoids jerky transitions)
 
     void Awake()
     {
@@ -70,11 +71,44 @@ public class PipeCamera : MonoBehaviour
             // === CAMERA POSITION: Behind the turd, elevated toward center ===
             float camDist = Mathf.Max(0f, playerDist - followDistance);
             Vector3 camCenter, camFwd, camRight, camUp;
-            _pipeGen.GetPathFrame(camDist, out camCenter, out camFwd, out camRight, out camUp);
-
-            // Get pipe center at the player's current position
             Vector3 playerCenter, playerFwd, playerRight, playerUp;
-            _pipeGen.GetPathFrame(playerDist, out playerCenter, out playerFwd, out playerRight, out playerUp);
+
+            // Branch-aware path following: use the same fork/branch as the player
+            PipeFork fork = _tc.CurrentFork;
+            int branch = _tc.ForkBranch;
+
+            if (fork != null && branch >= 0)
+            {
+                // Get main path frame first
+                _pipeGen.GetPathFrame(camDist, out camCenter, out camFwd, out camRight, out camUp);
+                Vector3 bCamC, bCamF, bCamR, bCamU;
+                if (fork.GetBranchFrame(branch, camDist, out bCamC, out bCamF, out bCamR, out bCamU))
+                {
+                    float targetBlend = fork.GetBranchBlend(camDist);
+                    _smoothCamBlend = Mathf.Lerp(_smoothCamBlend, targetBlend, Time.deltaTime * 4f);
+                    // Blend position into the branch
+                    camCenter = Vector3.Lerp(camCenter, bCamC, _smoothCamBlend);
+                    // Smoothly blend FORWARD direction toward branch so camera looks
+                    // where the player is actually going (not back along main path)
+                    camFwd = Vector3.Slerp(camFwd, bCamF, _smoothCamBlend).normalized;
+                }
+
+                // Player position: blend center and forward for look target
+                _pipeGen.GetPathFrame(playerDist, out playerCenter, out playerFwd, out playerRight, out playerUp);
+                Vector3 bPC, bPF, bPR, bPU;
+                if (fork.GetBranchFrame(branch, playerDist, out bPC, out bPF, out bPR, out bPU))
+                {
+                    float pBlend = fork.GetBranchBlend(playerDist);
+                    playerCenter = Vector3.Lerp(playerCenter, bPC, pBlend);
+                    playerFwd = Vector3.Slerp(playerFwd, bPF, pBlend).normalized;
+                }
+            }
+            else
+            {
+                _smoothCamBlend = 0f; // reset when not in fork
+                _pipeGen.GetPathFrame(camDist, out camCenter, out camFwd, out camRight, out camUp);
+                _pipeGen.GetPathFrame(playerDist, out playerCenter, out playerFwd, out playerRight, out playerUp);
+            }
 
             // Player's offset from pipe center (their position on the pipe wall)
             Vector3 playerOffset = target.position - playerCenter;

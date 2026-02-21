@@ -96,7 +96,7 @@ MonoBehaviour:
   m_EditorClassIdentifier: Assembly-CSharp::OutlineRendererFeature
   m_Active: 1
   settings:
-    outlineMaterial: {fileID: 2100000, guid: bc46b3f45470e334483f9526193d0e90, type: 2}
+    outlineMaterial: {fileID: 2100000, guid: 9865b01f94e284a4c9c148038b01b085, type: 2}
     renderPassEvent: 550
     thickness: 2.5
     outlineColor: {r: 0, g: 0, b: 0, a: 1}

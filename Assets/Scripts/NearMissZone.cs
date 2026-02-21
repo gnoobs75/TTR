@@ -35,6 +35,10 @@ public class NearMissZone : MonoBehaviour
             if (ParticleManager.Instance != null)
                 ParticleManager.Instance.PlayNearMiss(other.transform.position);
 
+            if (ScorePopup.Instance != null)
+                ScorePopup.Instance.ShowNearMiss(other.transform.position,
+                    ComboSystem.Instance != null ? Mathf.RoundToInt(25 * ComboSystem.Instance.Multiplier) : 25);
+
             if (PipeCamera.Instance != null)
             {
                 PipeCamera.Instance.Shake(0.15f);

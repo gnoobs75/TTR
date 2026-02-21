@@ -24,6 +24,10 @@ public class RaceFinish : MonoBehaviour
     private bool _initialized;
     private bool _podiumShown;
 
+    // 3D Podium
+    private GameObject _podium3D;
+    private ParticleSystem _confetti;
+
     struct PodiumSlot
     {
         public RectTransform root;
@@ -358,11 +362,14 @@ public class RaceFinish : MonoBehaviour
         var sorted = new List<RaceManager.RacerEntry>(entries);
         sorted.Sort((a, b) => a.finishPlace.CompareTo(b.finishPlace));
 
+        // Build 3D podium in world space
+        Create3DPodium(sorted);
+
         yield return new WaitForSeconds(1.5f);
 
         podiumRoot.gameObject.SetActive(true);
 
-        // Fade in podium
+        // Fade in podium UI overlay
         float fadeTime = 0.8f;
         float elapsed = 0f;
         while (elapsed < fadeTime)
@@ -398,11 +405,165 @@ public class RaceFinish : MonoBehaviour
             StartCoroutine(SlotPunchAnimation(slot.root));
 
             if (ProceduralAudio.Instance != null)
-                ProceduralAudio.Instance.PlayCoinCollect(); // reuse as reveal SFX
+                ProceduralAudio.Instance.PlayCoinCollect();
 
             HapticManager.LightTap();
 
             yield return new WaitForSeconds(0.6f);
+        }
+
+        // Start confetti after all revealed
+        if (_confetti != null)
+            _confetti.Play();
+
+        // Pan camera to podium
+        StartCoroutine(PodiumCameraSequence());
+    }
+
+    void Create3DPodium(List<RaceManager.RacerEntry> sorted)
+    {
+        // Position podium ahead of the finish line (in open space)
+        Vector3 podiumPos = Vector3.zero;
+        if (RaceManager.Instance != null && RaceManager.Instance.PlayerController != null)
+            podiumPos = RaceManager.Instance.PlayerController.transform.position + Vector3.forward * 15f;
+
+        _podium3D = new GameObject("Podium3D");
+        _podium3D.transform.position = podiumPos;
+
+        Shader toonLit = Shader.Find("Custom/ToonLit");
+        Shader shader = toonLit != null ? toonLit : Shader.Find("Universal Render Pipeline/Lit");
+        if (shader == null) shader = Shader.Find("Standard");
+
+        // Platform heights: 1st = tallest (center), 2nd = left, 3rd = right
+        float[] heights = { 2.5f, 1.8f, 1.2f };
+        float[] xOffsets = { 0f, -2.5f, 2.5f };
+        Color[] pedestalColors = { GoldColor * 0.5f, SilverColor * 0.5f, BronzeColor * 0.5f };
+        string[] labels = { "1ST", "2ND", "3RD" };
+
+        for (int i = 0; i < 3 && i < sorted.Count; i++)
+        {
+            // Pedestal block
+            GameObject pedestal = GameObject.CreatePrimitive(PrimitiveType.Cube);
+            pedestal.name = $"Pedestal_{labels[i]}";
+            pedestal.transform.SetParent(_podium3D.transform);
+            pedestal.transform.localPosition = new Vector3(xOffsets[i], heights[i] * 0.5f, 0);
+            pedestal.transform.localScale = new Vector3(2f, heights[i], 2f);
+
+            Material pedMat = new Material(shader);
+            pedMat.SetColor("_BaseColor", pedestalColors[i]);
+            pedMat.EnableKeyword("_EMISSION");
+            pedMat.SetColor("_EmissionColor", pedestalColors[i] * 0.3f);
+            pedestal.GetComponent<Renderer>().material = pedMat;
+
+            // Place label on front of pedestal
+            GameObject labelObj = new GameObject($"Label_{labels[i]}");
+            labelObj.transform.SetParent(pedestal.transform);
+            labelObj.transform.localPosition = new Vector3(0, 0.3f, 0.51f);
+            labelObj.transform.localScale = new Vector3(0.5f / 2f, 1f / heights[i], 1f);
+            TextMesh tm = labelObj.AddComponent<TextMesh>();
+            tm.text = labels[i];
+            tm.fontSize = 64;
+            tm.characterSize = 0.08f;
+            tm.alignment = TextAlignment.Center;
+            tm.anchor = TextAnchor.MiddleCenter;
+            Color labelColor = i == 0 ? GoldColor : (i == 1 ? SilverColor : BronzeColor);
+            tm.color = labelColor;
+            tm.fontStyle = FontStyle.Bold;
+
+            // Move racer model onto podium
+            var entry = sorted[i];
+            if (entry.transform != null)
+            {
+                entry.transform.position = podiumPos + new Vector3(xOffsets[i], heights[i] + 0.5f, 0);
+                entry.transform.rotation = Quaternion.LookRotation(Vector3.back); // face camera
+            }
+        }
+
+        // Confetti particle system
+        GameObject confettiObj = new GameObject("Confetti");
+        confettiObj.transform.SetParent(_podium3D.transform);
+        confettiObj.transform.localPosition = new Vector3(0, 5f, 0);
+
+        _confetti = confettiObj.AddComponent<ParticleSystem>();
+        var main = _confetti.main;
+        main.startLifetime = 3f;
+        main.startSpeed = 2f;
+        main.startSize = 0.15f;
+        main.maxParticles = 200;
+        main.loop = true;
+        main.startColor = new ParticleSystem.MinMaxGradient(GoldColor, new Color(0.2f, 0.8f, 0.3f));
+        main.gravityModifier = 0.3f;
+        main.simulationSpace = ParticleSystemSimulationSpace.World;
+
+        var emission = _confetti.emission;
+        emission.rateOverTime = 50f;
+
+        var shape = _confetti.shape;
+        shape.shapeType = ParticleSystemShapeType.Box;
+        shape.scale = new Vector3(8f, 0.1f, 4f);
+
+        var colorOverLife = _confetti.colorOverLifetime;
+        colorOverLife.enabled = true;
+        Gradient grad = new Gradient();
+        grad.SetKeys(
+            new GradientColorKey[] {
+                new GradientColorKey(Color.white, 0f),
+                new GradientColorKey(GoldColor, 0.5f),
+                new GradientColorKey(new Color(0.8f, 0.2f, 0.2f), 1f)
+            },
+            new GradientAlphaKey[] {
+                new GradientAlphaKey(1f, 0f),
+                new GradientAlphaKey(1f, 0.7f),
+                new GradientAlphaKey(0f, 1f)
+            }
+        );
+        colorOverLife.color = new ParticleSystem.MinMaxGradient(grad);
+
+        // Use default particle material
+        ParticleSystemRenderer psr = confettiObj.GetComponent<ParticleSystemRenderer>();
+        Material confettiMat = new Material(Shader.Find("Particles/Standard Unlit"));
+        if (confettiMat != null)
+        {
+            confettiMat.SetColor("_Color", Color.white);
+            psr.material = confettiMat;
+        }
+
+        _confetti.Stop(); // Will start after reveal
+    }
+
+    IEnumerator PodiumCameraSequence()
+    {
+        if (_podium3D == null) yield break;
+
+        Camera cam = Camera.main;
+        if (cam == null) yield break;
+
+        // Disable PipeCamera
+        PipeCamera pipeCam = cam.GetComponent<PipeCamera>();
+        if (pipeCam != null)
+            pipeCam.enabled = false;
+
+        Vector3 podiumCenter = _podium3D.transform.position + Vector3.up * 2f;
+        float camDist = 8f;
+        float elapsed = 0f;
+        float duration = 8f;
+
+        while (elapsed < duration)
+        {
+            elapsed += Time.deltaTime;
+            float angle = (elapsed / duration) * 180f * Mathf.Deg2Rad; // half orbit
+            float height = 2f + Mathf.Sin(elapsed * 0.3f) * 1f;
+
+            Vector3 camPos = podiumCenter + new Vector3(
+                Mathf.Cos(angle) * camDist,
+                height,
+                Mathf.Sin(angle) * camDist
+            );
+
+            cam.transform.position = Vector3.Lerp(cam.transform.position, camPos, Time.deltaTime * 2f);
+            cam.transform.LookAt(podiumCenter);
+
+            yield return null;
         }
     }
 

@@ -75,6 +75,8 @@ public class ComboSystem : MonoBehaviour
                 PipeCamera.Instance.PunchFOV(4f);
             if (ProceduralAudio.Instance != null)
                 ProceduralAudio.Instance.PlayComboUp();
+            if (ScreenEffects.Instance != null)
+                ScreenEffects.Instance.TriggerMilestoneFlash();
             HapticManager.MediumTap();
 
             // Hype the combo in the Poop Crew overlay

@@ -13,6 +13,7 @@ public class GameUI : MonoBehaviour
     public Text walletText;
     public Text multiplierText;
     public Text coinCountText;
+    public Text speedText;
 
     [Header("Game Over Panel")]
     public GameObject gameOverPanel;
@@ -126,6 +127,13 @@ public class GameUI : MonoBehaviour
     private int _displayedCoins;
     private float _coinPunchTime;
 
+    // Game over animation
+    private float _gameOverShowTime;
+    private bool _gameOverAnimating;
+
+    // Start screen pulse
+    private float _startPulsePhase;
+
     public void UpdateCoinCount(int coins)
     {
         if (coinCountText == null) return;
@@ -158,6 +166,22 @@ public class GameUI : MonoBehaviour
         // Pulse every 50m
         if (m > 0 && m % 50 == 0 && prev != distanceText.text)
             _distPunchTime = Time.time;
+    }
+
+    public void UpdateSpeed(float speed)
+    {
+        if (speedText == null) return;
+        int mph = Mathf.RoundToInt(speed * 3.6f); // arbitrary "sewer mph"
+        speedText.text = mph + " SMPH";
+        // Color: green at low, yellow mid, red high
+        float t = Mathf.Clamp01((speed - 5f) / 15f);
+        speedText.color = Color.Lerp(
+            new Color(0.3f, 1f, 0.4f),
+            new Color(1f, 0.3f, 0.15f), t);
+
+        // Notify screen effects
+        if (ScreenEffects.Instance != null)
+            ScreenEffects.Instance.UpdateSpeed(speed);
     }
 
     public void UpdateMultiplier(float mult)
@@ -226,6 +250,39 @@ public class GameUI : MonoBehaviour
                 distanceText.transform.localScale = Vector3.one;
             }
         }
+
+        // Game over panel entrance animation (scale up with elastic bounce)
+        if (_gameOverAnimating && gameOverPanel != null)
+        {
+            float elapsed = Time.unscaledTime - _gameOverShowTime;
+            float dur = 0.6f;
+            if (elapsed < dur)
+            {
+                float t = elapsed / dur;
+                // Elastic ease-out: overshoot then settle
+                float scale;
+                if (t < 0.5f)
+                    scale = Mathf.Lerp(0.01f, 1.15f, t / 0.5f);
+                else if (t < 0.7f)
+                    scale = Mathf.Lerp(1.15f, 0.95f, (t - 0.5f) / 0.2f);
+                else
+                    scale = Mathf.Lerp(0.95f, 1f, (t - 0.7f) / 0.3f);
+                gameOverPanel.transform.localScale = Vector3.one * scale;
+            }
+            else
+            {
+                gameOverPanel.transform.localScale = Vector3.one;
+                _gameOverAnimating = false;
+            }
+        }
+
+        // Start button pulsing glow
+        if (startButton != null && startPanel != null && startPanel.activeSelf)
+        {
+            _startPulsePhase += Time.deltaTime;
+            float pulse = 1f + Mathf.Sin(_startPulsePhase * 3f) * 0.06f;
+            startButton.transform.localScale = Vector3.one * pulse;
+        }
     }
 
     public void UpdateWallet()
@@ -241,23 +298,59 @@ public class GameUI : MonoBehaviour
         "You got FLUSHED!", "Down the drain!", "CLOGGED!", "Totally wiped out!",
         "Splashdown!", "What a dump!", "Sewer surfing fail!", "Brown out!",
         "That stinks!", "You hit rock bottom!", "Pipe dream over!",
-        "Went down the toilet!", "PLOP!", "That was crappy!", "Washed up!"
+        "Went down the toilet!", "PLOP!", "That was crappy!", "Washed up!",
+        "Skid mark!", "Floater down!", "Log jammed!", "Number TWO bad!",
+        "Royal flush... OUT!", "Brown town shutdown!", "Corn-ered!",
+        "Sewer wipeout!", "Turd burglar got you!", "Septic shock!",
+        "Full stoppage!", "Drain-o'd!", "That's the pits!",
+        "Back to the bowl!", "Un-BOWL-ievable!", "Total dump fire!"
     };
 
     public void ShowGameOver(int finalScore, int highScore, int coins, float distance, int nearMisses, int bestCombo)
     {
         if (gameOverPanel != null)
+        {
             gameOverPanel.SetActive(true);
+            // Start animated entrance
+            _gameOverShowTime = Time.unscaledTime;
+            _gameOverAnimating = true;
+            gameOverPanel.transform.localScale = Vector3.one * 0.01f;
+        }
 
         if (finalScoreText != null)
             finalScoreText.text = finalScore.ToString("N0");
 
+        bool isNewHigh = finalScore >= highScore && finalScore > 0;
         if (highScoreText != null)
         {
-            if (finalScore >= highScore && finalScore > 0)
+            if (isNewHigh)
+            {
                 highScoreText.text = "NEW HIGH SCORE!";
+                highScoreText.color = new Color(1f, 0.85f, 0.1f); // gold
+            }
             else
+            {
                 highScoreText.text = "Best: " + highScore.ToString("N0");
+                highScoreText.color = new Color(0.7f, 0.7f, 0.7f);
+            }
+        }
+
+        // Celebrate new high score with extra effects
+        if (isNewHigh)
+        {
+            if (ScreenEffects.Instance != null)
+                ScreenEffects.Instance.TriggerMilestoneFlash();
+            if (PipeCamera.Instance != null)
+                PipeCamera.Instance.PunchFOV(8f);
+            if (ProceduralAudio.Instance != null)
+                ProceduralAudio.Instance.PlayCelebration();
+            if (ParticleManager.Instance != null)
+            {
+                var player = GameManager.Instance?.player;
+                if (player != null)
+                    ParticleManager.Instance.PlayCelebration(player.transform.position);
+            }
+            HapticManager.HeavyTap();
         }
 
         if (runStatsText != null)

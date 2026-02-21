@@ -11,7 +11,7 @@ public class Collectible : MonoBehaviour
     public float bobAmplitude = 0.15f;
     public float bobFrequency = 2f;
     public float pulseFrequency = 3f;
-    public float floatHeight = 0.35f;  // How high above surface to float
+    public float floatHeight = 0.08f;  // How high above surface to float
 
     private Vector3 _startLocalPos;
     private float _bobOffset;
