@@ -316,6 +316,107 @@ public class RaceManager : MonoBehaviour
         }
     }
 
+    void CreateProgressBar()
+    {
+        Canvas canvas = FindOverlayCanvas();
+        if (canvas == null) return;
+
+        Font font = Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
+        if (font == null) font = Font.CreateDynamicFontFromOSFont("Arial", 14);
+
+        // Background bar at top of screen (slim, under safe area)
+        GameObject bgObj = new GameObject("RaceProgressBg");
+        _progressBarBg = bgObj.AddComponent<RectTransform>();
+        _progressBarBg.SetParent(canvas.transform, false);
+        _progressBarBg.anchorMin = new Vector2(0.08f, 0.94f);
+        _progressBarBg.anchorMax = new Vector2(0.72f, 0.965f);
+        _progressBarBg.offsetMin = Vector2.zero;
+        _progressBarBg.offsetMax = Vector2.zero;
+
+        Image bgImg = bgObj.AddComponent<Image>();
+        bgImg.color = new Color(0.08f, 0.06f, 0.04f, 0.7f);
+
+        // Fill bar (shows player progress)
+        GameObject fillObj = new GameObject("ProgressFill");
+        _progressBarFill = fillObj.AddComponent<RectTransform>();
+        _progressBarFill.SetParent(_progressBarBg, false);
+        _progressBarFill.anchorMin = Vector2.zero;
+        _progressBarFill.anchorMax = new Vector2(0f, 1f); // width = 0 initially
+        _progressBarFill.offsetMin = Vector2.zero;
+        _progressBarFill.offsetMax = Vector2.zero;
+
+        _progressFillImage = fillObj.AddComponent<Image>();
+        _progressFillImage.color = new Color(0.3f, 0.8f, 0.2f, 0.6f);
+
+        // Distance label (e.g. "420m to Brown Town")
+        GameObject labelObj = new GameObject("ProgressLabel");
+        RectTransform labelRt = labelObj.AddComponent<RectTransform>();
+        labelRt.SetParent(_progressBarBg, false);
+        labelRt.anchorMin = Vector2.zero;
+        labelRt.anchorMax = Vector2.one;
+        labelRt.offsetMin = new Vector2(4, 0);
+        labelRt.offsetMax = new Vector2(-4, 0);
+
+        _progressLabel = labelObj.AddComponent<Text>();
+        _progressLabel.font = font;
+        _progressLabel.fontSize = 14;
+        _progressLabel.alignment = TextAnchor.MiddleCenter;
+        _progressLabel.color = new Color(0.9f, 0.9f, 0.85f, 0.9f);
+        _progressLabel.text = "";
+        _progressLabel.horizontalOverflow = HorizontalWrapMode.Overflow;
+
+        Outline labelOutline = labelObj.AddComponent<Outline>();
+        labelOutline.effectColor = new Color(0, 0, 0, 0.9f);
+        labelOutline.effectDistance = new Vector2(1, -1);
+
+        // Racer dots (one per entry)
+        int count = _entries.Count;
+        _racerDots = new RectTransform[count];
+        _racerDotImages = new Image[count];
+
+        for (int i = 0; i < count; i++)
+        {
+            GameObject dotObj = new GameObject("RacerDot_" + i);
+            _racerDots[i] = dotObj.AddComponent<RectTransform>();
+            _racerDots[i].SetParent(_progressBarBg, false);
+            _racerDots[i].sizeDelta = new Vector2(10, 10);
+            _racerDots[i].anchorMin = new Vector2(0, 0.5f);
+            _racerDots[i].anchorMax = new Vector2(0, 0.5f);
+            _racerDots[i].anchoredPosition = Vector2.zero;
+
+            _racerDotImages[i] = dotObj.AddComponent<Image>();
+            _racerDotImages[i].color = _entries[i].color;
+
+            // Player dot is bigger and has outline
+            if (_entries[i].isPlayer)
+            {
+                _racerDots[i].sizeDelta = new Vector2(14, 14);
+                Outline dotOutline = dotObj.AddComponent<Outline>();
+                dotOutline.effectColor = new Color(1f, 0.85f, 0.1f, 0.9f);
+                dotOutline.effectDistance = new Vector2(1, -1);
+            }
+        }
+
+        // Finish flag icon at the right end
+        GameObject flagObj = new GameObject("FinishFlag");
+        RectTransform flagRt = flagObj.AddComponent<RectTransform>();
+        flagRt.SetParent(_progressBarBg, false);
+        flagRt.anchorMin = new Vector2(1f, 0);
+        flagRt.anchorMax = new Vector2(1f, 1f);
+        flagRt.anchoredPosition = new Vector2(8, 0);
+        flagRt.sizeDelta = new Vector2(16, 0);
+
+        Text flagText = flagObj.AddComponent<Text>();
+        flagText.font = font;
+        flagText.fontSize = 14;
+        flagText.alignment = TextAnchor.MiddleCenter;
+        flagText.color = Color.white;
+        flagText.text = "F"; // simple finish marker
+        flagText.fontStyle = FontStyle.Bold;
+
+        bgObj.SetActive(false);
+    }
+
     Canvas FindOverlayCanvas()
     {
         // Find existing UI canvas (ScreenEffects sits on one)
@@ -456,8 +557,22 @@ public class RaceManager : MonoBehaviour
             if (ProceduralAudio.Instance != null)
                 ProceduralAudio.Instance.PlayGameStart();
 
+            // Big dramatic camera punch
             if (PipeCamera.Instance != null)
-                PipeCamera.Instance.PunchFOV(6f);
+            {
+                PipeCamera.Instance.PunchFOV(8f);
+                PipeCamera.Instance.Shake(0.15f);
+            }
+
+            // Speed streaks flash for launch feel
+            if (ScreenEffects.Instance != null)
+            {
+                ScreenEffects.Instance.FlashSpeedStreaks(1.2f);
+                ScreenEffects.Instance.TriggerPowerUpFlash();
+            }
+
+            // "RACE TO BROWN TOWN!" motivational popup
+            StartCoroutine(ShowRaceStartPopup());
 
             HapticManager.HeavyTap();
         }
@@ -468,6 +583,22 @@ public class RaceManager : MonoBehaviour
         yield return new WaitForSeconds(delay);
         if (_countdownText != null)
             _countdownText.gameObject.SetActive(false);
+    }
+
+    IEnumerator ShowRaceStartPopup()
+    {
+        yield return new WaitForSeconds(0.8f);
+        string[] raceMottos = {
+            "RACE TO BROWN TOWN!",
+            "EAT MY FLUSH!",
+            "FULL SPEED TO THE PLANT!",
+            "RACE FOR THE THRONE!",
+            "GO GO GO!"
+        };
+        string motto = raceMottos[Random.Range(0, raceMottos.Length)];
+        if (ScorePopup.Instance != null && playerController != null)
+            ScorePopup.Instance.ShowMilestone(
+                playerController.transform.position + Vector3.up * 3f, motto);
     }
 
     void UpdateRace()
@@ -851,6 +982,66 @@ public class RaceManager : MonoBehaviour
         }
 
         OnRaceComplete();
+    }
+
+    void CheckFinalStretch()
+    {
+        if (_finalStretchTriggered || playerController == null) return;
+
+        float playerDist = playerController.DistanceTraveled;
+        float remaining = raceDistance - playerDist;
+
+        if (remaining <= FINAL_STRETCH_DISTANCE && remaining > 0f)
+        {
+            _finalStretchTriggered = true;
+            _finalStretchStart = Time.time;
+
+            // "FINAL STRETCH!" announcement
+            if (ScorePopup.Instance != null)
+                ScorePopup.Instance.ShowMilestone(
+                    playerController.transform.position + Vector3.up * 2.5f,
+                    "FINAL STRETCH!");
+
+            // Big camera shake + FOV punch
+            if (PipeCamera.Instance != null)
+            {
+                PipeCamera.Instance.Shake(0.25f);
+                PipeCamera.Instance.PunchFOV(5f);
+            }
+
+            // Golden flash
+            if (ScreenEffects.Instance != null)
+                ScreenEffects.Instance.TriggerMilestoneFlash();
+
+            // Celebration audio
+            if (ProceduralAudio.Instance != null)
+                ProceduralAudio.Instance.PlayCelebration();
+
+            HapticManager.HeavyTap();
+        }
+
+        // Continuous final stretch intensity (heartbeat camera pulses)
+        if (_finalStretchTriggered && remaining > 0f)
+        {
+            float elapsed = Time.time - _finalStretchStart;
+            float urgency = 1f - Mathf.Clamp01(remaining / FINAL_STRETCH_DISTANCE);
+
+            // Heartbeat camera pulse - gets faster as you approach
+            float heartRate = Mathf.Lerp(2f, 5f, urgency);
+            float pulse = Mathf.Sin(elapsed * heartRate * Mathf.PI * 2f);
+            if (pulse > 0.9f && PipeCamera.Instance != null)
+                PipeCamera.Instance.Shake(0.03f + urgency * 0.05f);
+
+            // Increasing vignette intensity
+            if (ScreenEffects.Instance != null)
+            {
+                Color stretchColor = Color.Lerp(
+                    new Color(1f, 0.85f, 0.1f), // gold
+                    new Color(1f, 0.3f, 0.1f),   // urgent red-gold
+                    urgency);
+                ScreenEffects.Instance.UpdateZoneVignette(stretchColor, 0.3f + urgency * 0.5f);
+            }
+        }
     }
 
     void UpdatePositionHUD()

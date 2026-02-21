@@ -21,6 +21,10 @@ public class ScreenEffects : MonoBehaviour
     // Zone vignette (atmospheric colored edges per zone)
     private Image _zoneVignette;
 
+    // Speed streaks (radial lines from center at high speed)
+    private Image _speedStreaks;
+    private float _speedStreakIntensity;
+
     // State
     private float _hitFlashAlpha;
     private float _vignetteIntensity;
@@ -90,6 +94,10 @@ public class ScreenEffects : MonoBehaviour
 
         // Zone vignette - atmospheric colored tint per zone
         _zoneVignette = CreateOverlay("ZoneVignette", new Color(0, 0, 0, 0));
+
+        // Speed streaks - radial lines from center when going fast
+        _speedStreaks = CreateOverlay("SpeedStreaks", new Color(1, 1, 1, 0));
+        ApplySpeedStreakTexture(_speedStreaks);
     }
 
     void ApplyVignetteTexture(Image img)
@@ -108,6 +116,45 @@ public class ScreenEffects : MonoBehaviour
                 float alpha = Mathf.Clamp01((dist - 0.35f) / 0.65f);
                 alpha = alpha * alpha; // quadratic falloff for natural vignette
                 tex.SetPixel(x, y, new Color(0, 0, 0, alpha));
+            }
+        }
+        tex.Apply();
+        Sprite spr = Sprite.Create(tex, new Rect(0, 0, size, size), new Vector2(0.5f, 0.5f));
+        img.sprite = spr;
+        img.type = Image.Type.Simple;
+        img.preserveAspect = false;
+    }
+
+    void ApplySpeedStreakTexture(Image img)
+    {
+        if (img == null) return;
+        int size = 256;
+        Texture2D tex = new Texture2D(size, size, TextureFormat.RGBA32, false);
+        float half = size * 0.5f;
+
+        for (int y = 0; y < size; y++)
+        {
+            for (int x = 0; x < size; x++)
+            {
+                float dx = (x - half) / half;
+                float dy = (y - half) / half;
+                float dist = Mathf.Sqrt(dx * dx + dy * dy);
+
+                // Only show at edges (radial streaks from center)
+                float edgeMask = Mathf.Clamp01((dist - 0.4f) / 0.5f);
+                edgeMask = edgeMask * edgeMask;
+
+                // Radial line pattern (angular stripes)
+                float angle = Mathf.Atan2(dy, dx);
+                float lines = Mathf.Abs(Mathf.Sin(angle * 18f)); // 36 radial lines
+                lines = Mathf.Pow(lines, 3f); // sharp lines
+                lines *= edgeMask;
+
+                // Slight fade at very edge to avoid hard border
+                float outerFade = 1f - Mathf.Clamp01((dist - 0.9f) / 0.1f);
+
+                float alpha = lines * outerFade;
+                tex.SetPixel(x, y, new Color(1f, 1f, 1f, alpha));
             }
         }
         tex.Apply();
@@ -212,6 +259,19 @@ public class ScreenEffects : MonoBehaviour
             _zoneVignette.color = Color.clear;
         }
 
+        // Speed streaks - radial lines pulsing at high speed
+        if (_speedStreakIntensity > 0.005f && _speedStreaks != null)
+        {
+            // Pulse for dynamic feel
+            float streakPulse = 0.7f + Mathf.Sin(Time.time * 15f) * 0.3f;
+            float alpha = _speedStreakIntensity * 0.12f * streakPulse;
+            _speedStreaks.color = new Color(0.9f, 0.95f, 1f, alpha);
+        }
+        else if (_speedStreaks != null)
+        {
+            _speedStreaks.color = new Color(0.9f, 0.95f, 1f, 0f);
+        }
+
         // Underwater tint - murky green with caustic ripple
         if (_underwaterIntensity > 0.001f)
         {
@@ -261,6 +321,14 @@ public class ScreenEffects : MonoBehaviour
         // Speed vignette: tunnel vision at high speed
         float vigTarget = t * 0.35f;
         _vignetteIntensity = Mathf.Max(_vignetteIntensity, vigTarget);
+        // Speed streaks: radial lines at high speed
+        _speedStreakIntensity = Mathf.Lerp(_speedStreakIntensity, t, Time.deltaTime * 4f);
+    }
+
+    /// <summary>Flash speed streaks briefly (e.g. race start, boost pickup).</summary>
+    public void FlashSpeedStreaks(float intensity = 1f)
+    {
+        _speedStreakIntensity = Mathf.Max(_speedStreakIntensity, intensity);
     }
 
     /// <summary>Green flash for power-up pickup.</summary>
