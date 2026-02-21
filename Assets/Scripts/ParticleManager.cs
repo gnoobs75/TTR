@@ -42,6 +42,10 @@ public class ParticleManager : MonoBehaviour
     private ParticleSystem _stinkCloud;
     private ParticleSystem _sewerFlies;
 
+    // Zone-colored ambient motion trail
+    private ParticleSystem _zoneTrail;
+    private Color _zoneTrailTargetColor = new Color(0.6f, 0.55f, 0.45f, 0.5f);
+
     void Awake()
     {
         if (Instance == null) Instance = this;
@@ -143,6 +147,9 @@ public class ParticleManager : MonoBehaviour
         // === SIGNATURE POOP EFFECTS ===
         _stinkCloud = CreateStinkCloud();
         _sewerFlies = CreateSewerFlies();
+
+        // Zone-colored ambient motion trail (subtle whispy trail behind player)
+        _zoneTrail = CreateZoneTrail();
     }
 
     ParticleSystem CreateDustMotes()
@@ -768,5 +775,112 @@ public class ParticleManager : MonoBehaviour
         if (_stinkCloud == null) return;
         _stinkCloud.Stop();
         _stinkCloud.transform.SetParent(transform);
+    }
+
+    // === ZONE TRAIL ===
+
+    ParticleSystem CreateZoneTrail()
+    {
+        var go = new GameObject("ZoneTrail");
+        go.transform.SetParent(transform);
+        var ps = go.AddComponent<ParticleSystem>();
+
+        var main = ps.main;
+        main.maxParticles = 120;
+        main.startLifetime = new ParticleSystem.MinMaxCurve(0.6f, 1.2f);
+        main.startSpeed = new ParticleSystem.MinMaxCurve(0.2f, 0.8f);
+        main.startSize = new ParticleSystem.MinMaxCurve(0.04f, 0.12f);
+        main.startColor = new Color(0.6f, 0.55f, 0.45f, 0.5f);
+        main.loop = true;
+        main.playOnAwake = false;
+        main.simulationSpace = ParticleSystemSimulationSpace.World;
+
+        var emission = ps.emission;
+        emission.rateOverTime = 20;
+
+        var shape = ps.shape;
+        shape.shapeType = ParticleSystemShapeType.Cone;
+        shape.angle = 25f;
+        shape.radius = 0.15f;
+
+        // Fade and shrink over lifetime
+        var sizeOverLife = ps.sizeOverLifetime;
+        sizeOverLife.enabled = true;
+        sizeOverLife.size = new ParticleSystem.MinMaxCurve(1f,
+            AnimationCurve.EaseInOut(0f, 0.8f, 1f, 0f));
+
+        var colorOverLife = ps.colorOverLifetime;
+        colorOverLife.enabled = true;
+        Gradient grad = new Gradient();
+        grad.SetKeys(
+            new[] {
+                new GradientColorKey(Color.white, 0f),
+                new GradientColorKey(Color.white, 1f)
+            },
+            new[] {
+                new GradientAlphaKey(0.4f, 0f),
+                new GradientAlphaKey(0.2f, 0.5f),
+                new GradientAlphaKey(0f, 1f)
+            });
+        colorOverLife.color = grad;
+
+        // Gentle drift via noise
+        var noise = ps.noise;
+        noise.enabled = true;
+        noise.strength = 0.3f;
+        noise.frequency = 1.5f;
+        noise.scrollSpeed = 0.5f;
+
+        var renderer = go.GetComponent<ParticleSystemRenderer>();
+        renderer.material = GetParticleMaterial(new Color(0.6f, 0.55f, 0.45f, 0.5f));
+
+        go.SetActive(false);
+        return ps;
+    }
+
+    /// <summary>Start the zone-colored ambient trail behind the player.</summary>
+    public void StartZoneTrail(Transform player)
+    {
+        if (_zoneTrail == null) return;
+        _zoneTrail.gameObject.SetActive(true);
+        _zoneTrail.transform.SetParent(player);
+        _zoneTrail.transform.localPosition = Vector3.back * 0.5f;
+        _zoneTrail.Play();
+    }
+
+    /// <summary>Update zone trail color based on current pipe zone.</summary>
+    public void UpdateZoneTrailColor(Color zoneColor)
+    {
+        if (_zoneTrail == null) return;
+
+        // Smooth color transition
+        _zoneTrailTargetColor = new Color(zoneColor.r, zoneColor.g, zoneColor.b, 0.5f);
+        var main = _zoneTrail.main;
+        Color current = main.startColor.color;
+        main.startColor = Color.Lerp(current, _zoneTrailTargetColor, Time.deltaTime * 2f);
+
+        // Update material emission for a subtle glow
+        var renderer = _zoneTrail.GetComponent<ParticleSystemRenderer>();
+        if (renderer != null && renderer.material != null)
+        {
+            renderer.material.SetColor("_BaseColor", _zoneTrailTargetColor);
+            if (renderer.material.HasProperty("_EmissionColor"))
+                renderer.material.SetColor("_EmissionColor", zoneColor * 0.3f);
+        }
+    }
+
+    /// <summary>Adjust zone trail intensity based on speed.</summary>
+    public void UpdateZoneTrailIntensity(float speed)
+    {
+        if (_zoneTrail == null) return;
+        var emission = _zoneTrail.emission;
+        // More particles at higher speed, subtle at low speed
+        float intensity = Mathf.Lerp(8f, 35f, Mathf.Clamp01((speed - 4f) / 10f));
+        emission.rateOverTime = intensity;
+
+        // Bigger particles at higher speed
+        var main = _zoneTrail.main;
+        float sizeScale = Mathf.Lerp(0.06f, 0.15f, Mathf.Clamp01((speed - 4f) / 10f));
+        main.startSize = new ParticleSystem.MinMaxCurve(sizeScale * 0.5f, sizeScale);
     }
 }

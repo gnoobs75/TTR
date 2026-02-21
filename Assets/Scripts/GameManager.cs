@@ -137,11 +137,16 @@ public class GameManager : MonoBehaviour
         if (AnalyticsManager.Instance != null)
             AnalyticsManager.Instance.LogRunStart();
 
+        // Show pause button during gameplay
+        if (PauseMenu.Instance != null)
+            PauseMenu.Instance.ShowPauseButton();
+
         // Start signature poop effects
         if (ParticleManager.Instance != null && player != null)
         {
             ParticleManager.Instance.StartStinkCloud(player.transform);
             ParticleManager.Instance.StartSewerFlies(player.transform);
+            ParticleManager.Instance.StartZoneTrail(player.transform);
         }
     }
 
@@ -153,6 +158,9 @@ public class GameManager : MonoBehaviour
             actionPressed = TouchInput.Instance.ActionPressed;
         else if (Keyboard.current != null)
             actionPressed = Keyboard.current.spaceKey.wasPressedThisFrame;
+
+        // Block input while paused
+        if (PauseMenu.Instance != null && PauseMenu.Instance.IsPaused) return;
 
         if (actionPressed)
         {
@@ -306,6 +314,10 @@ public class GameManager : MonoBehaviour
             ProceduralAudio.Instance.StopMusic();
             ProceduralAudio.Instance.PlayGameOver();
         }
+
+        // Hide pause button on game over
+        if (PauseMenu.Instance != null)
+            PauseMenu.Instance.HidePauseButton();
 
         if (gameUI != null)
             gameUI.ShowGameOver(finalScore, PlayerData.HighScore, _runCoins, distanceTraveled, _runNearMisses, _runBestCombo);

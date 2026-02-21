@@ -85,6 +85,19 @@ public class RaceManager : MonoBehaviour
     // === DISTANCE MILESTONES ===
     private int _lastMilestoneIndex = -1;
 
+    // === POSITION CHANGE ARROW ===
+    private Text _posChangeArrow;
+    private float _posChangeShowTime;
+    private bool _posChangeUp; // true = gained, false = lost
+    private static readonly string[] GAIN_QUIPS = {
+        "EAT MY CORN!", "OUTTA THE WAY!", "PLOP PLOP PASS!",
+        "SEWER SPEED!", "BROWN LIGHTNING!", "FLUSH 'EM!"
+    };
+    private static readonly string[] LOSE_QUIPS = {
+        "THEY SLIPPED PAST!", "TURBO TURD!", "WATCH YOUR SIX!",
+        "INCOMING!", "GOT SPLASHED!", "OVERTAKEN!"
+    };
+
     public State RaceState => _state;
     public float LeaderDistance => _leaderDistance;
     public float RaceTime => _state >= State.Racing ? Time.time - _raceStartTime : 0f;
@@ -119,6 +132,7 @@ public class RaceManager : MonoBehaviour
         BuildEntries();
         CreateCountdownUI();
         CreatePositionHUD();
+        CreatePositionChangeArrow();
         CreateRaceTimerHUD();
         CreateProgressBar();
     }
@@ -240,6 +254,37 @@ public class RaceManager : MonoBehaviour
         _positionHudOutline.effectDistance = new Vector2(2, -2);
 
         posObj.SetActive(false);
+    }
+
+    void CreatePositionChangeArrow()
+    {
+        Canvas canvas = FindOverlayCanvas();
+        if (canvas == null) return;
+
+        Font font = Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
+        if (font == null) font = Font.CreateDynamicFontFromOSFont("Arial", 14);
+
+        // Arrow indicator to the LEFT of the position HUD
+        GameObject arrowObj = new GameObject("PosChangeArrow");
+        RectTransform art = arrowObj.AddComponent<RectTransform>();
+        art.SetParent(canvas.transform, false);
+        art.anchorMin = new Vector2(0.68f, 0.85f);
+        art.anchorMax = new Vector2(0.78f, 0.95f);
+        art.offsetMin = Vector2.zero;
+        art.offsetMax = Vector2.zero;
+
+        _posChangeArrow = arrowObj.AddComponent<Text>();
+        _posChangeArrow.font = font;
+        _posChangeArrow.fontSize = 48;
+        _posChangeArrow.fontStyle = FontStyle.Bold;
+        _posChangeArrow.alignment = TextAnchor.MiddleCenter;
+        _posChangeArrow.color = Color.clear; // hidden initially
+        _posChangeArrow.text = "";
+        _posChangeArrow.horizontalOverflow = HorizontalWrapMode.Overflow;
+
+        Outline arrowOutline = arrowObj.AddComponent<Outline>();
+        arrowOutline.effectColor = new Color(0, 0, 0, 0.9f);
+        arrowOutline.effectDistance = new Vector2(2, -2);
     }
 
     void CreateRaceTimerHUD()
@@ -664,7 +709,7 @@ public class RaceManager : MonoBehaviour
             _entries[i] = e;
         }
 
-        // Position change announcements
+        // Position change announcements (with animated arrows + CheerOverlay)
         foreach (var e in _entries)
         {
             if (e.isPlayer && !e.isFinished)
@@ -676,6 +721,7 @@ public class RaceManager : MonoBehaviour
                     if (improved)
                     {
                         // Player moved UP in position
+                        string quip = GAIN_QUIPS[Random.Range(0, GAIN_QUIPS.Length)];
                         if (ScorePopup.Instance != null && playerController != null)
                             ScorePopup.Instance.ShowMilestone(
                                 playerController.transform.position + Vector3.up * 2f, posStr + " PLACE!");
@@ -683,12 +729,36 @@ public class RaceManager : MonoBehaviour
                             PipeCamera.Instance.PunchFOV(3f);
                         if (ProceduralAudio.Instance != null)
                             ProceduralAudio.Instance.PlayCelebration();
+
+                        // Show animated UP arrow
+                        ShowPositionChangeArrow(true);
+
+                        // CheerOverlay reacts to overtake
+                        if (CheerOverlay.Instance != null)
+                            CheerOverlay.Instance.ShowCheer(quip,
+                                new Color(0.2f, 1f, 0.3f), e.position == 1);
+
+                        // Green flash for gaining position
+                        if (ScreenEffects.Instance != null)
+                            ScreenEffects.Instance.TriggerMilestoneFlash();
+
                         HapticManager.MediumTap();
+
+                        // Taking 1st place is a BIG deal
+                        if (e.position == 1)
+                        {
+                            if (PipeCamera.Instance != null)
+                                PipeCamera.Instance.Shake(0.2f);
+                            if (ParticleManager.Instance != null && playerController != null)
+                                ParticleManager.Instance.PlayCelebration(playerController.transform.position);
+                            HapticManager.HeavyTap();
+                        }
                     }
                     else
                     {
                         // Player dropped position - show who passed them
                         string passerName = GetRacerNameAtPosition(e.position - 1);
+                        string quip = LOSE_QUIPS[Random.Range(0, LOSE_QUIPS.Length)];
                         if (ScorePopup.Instance != null && playerController != null && passerName.Length > 0)
                             ScorePopup.Instance.ShowMilestone(
                                 playerController.transform.position + Vector3.up * 2f,
@@ -697,6 +767,15 @@ public class RaceManager : MonoBehaviour
                             PipeCamera.Instance.Shake(0.15f);
                         if (ProceduralAudio.Instance != null)
                             ProceduralAudio.Instance.PlayAITaunt();
+
+                        // Show animated DOWN arrow
+                        ShowPositionChangeArrow(false);
+
+                        // CheerOverlay reacts to being passed
+                        if (CheerOverlay.Instance != null)
+                            CheerOverlay.Instance.ShowCheer(quip,
+                                new Color(1f, 0.4f, 0.2f), false);
+
                         HapticManager.LightTap();
                     }
                 }
@@ -751,13 +830,15 @@ public class RaceManager : MonoBehaviour
         if (playerController != null)
             playerController.enabled = false;
 
-        // Hide race HUD (position + timer + progress) since the finish banner takes over
+        // Hide race HUD (position + timer + progress + arrow) since the finish banner takes over
         if (_positionHudText != null)
             _positionHudText.transform.parent.gameObject.SetActive(false);
         if (_raceTimerText != null)
             _raceTimerText.gameObject.SetActive(false);
         if (_progressBarBg != null)
             _progressBarBg.gameObject.SetActive(false);
+        if (_posChangeArrow != null)
+            _posChangeArrow.gameObject.SetActive(false);
 
         // Start camera orbit around player
         StartCameraOrbit();
@@ -1085,6 +1166,19 @@ public class RaceManager : MonoBehaviour
         }
     }
 
+    void ShowPositionChangeArrow(bool gained)
+    {
+        _posChangeShowTime = Time.time;
+        _posChangeUp = gained;
+        if (_posChangeArrow != null)
+        {
+            _posChangeArrow.text = gained ? "\u25B2" : "\u25BC"; // ▲ or ▼
+            _posChangeArrow.color = gained
+                ? new Color(0.1f, 1f, 0.3f, 1f)   // bright green
+                : new Color(1f, 0.3f, 0.15f, 1f);  // bright red
+        }
+    }
+
     void UpdatePositionHUD()
     {
         if (_positionHudText == null) return;
@@ -1142,6 +1236,35 @@ public class RaceManager : MonoBehaviour
         else
         {
             _positionHudText.transform.localScale = Vector3.one;
+        }
+
+        // Animate position change arrow (slide + fade over 1.2 seconds)
+        if (_posChangeArrow != null)
+        {
+            float arrowElapsed = Time.time - _posChangeShowTime;
+            if (arrowElapsed < 1.2f)
+            {
+                float t = arrowElapsed / 1.2f;
+                // Slide up (for gain) or down (for loss) while fading
+                float slide = _posChangeUp ? -t * 20f : t * 20f;
+                _posChangeArrow.transform.localPosition = new Vector3(0f, slide, 0f);
+
+                // Fade out over last 40%
+                float alpha = t < 0.6f ? 1f : 1f - (t - 0.6f) / 0.4f;
+                // Pulse scale at the start
+                float arrowScale = t < 0.15f ? 1f + (1f - t / 0.15f) * 0.6f : 1f;
+                _posChangeArrow.transform.localScale = Vector3.one * arrowScale;
+
+                Color c = _posChangeArrow.color;
+                c.a = alpha;
+                _posChangeArrow.color = c;
+            }
+            else
+            {
+                Color c = _posChangeArrow.color;
+                c.a = 0f;
+                _posChangeArrow.color = c;
+            }
         }
     }
 

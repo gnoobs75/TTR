@@ -234,6 +234,15 @@ public class PipeZoneSystem : MonoBehaviour
             ScreenEffects.Instance.UpdateZoneVignette(fogCol, vignetteStr);
         }
 
+        // Zone trail color + intensity follows the current zone's light color
+        if (ParticleManager.Instance != null)
+        {
+            Color trailCol = Color.Lerp(current.lightColor, next.lightColor, blend);
+            ParticleManager.Instance.UpdateZoneTrailColor(trailCol);
+            if (_tc != null)
+                ParticleManager.Instance.UpdateZoneTrailIntensity(_tc.CurrentSpeed);
+        }
+
         // Announce zone change with full fanfare
         if (zoneChanged)
         {

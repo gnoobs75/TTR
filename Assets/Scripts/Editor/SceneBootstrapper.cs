@@ -580,6 +580,9 @@ public class SceneBootstrapper
         obj.AddComponent<AnalyticsManager>();
         obj.AddComponent<RateAppPrompt>();
         obj.AddComponent<TutorialOverlay>();
+
+        // Pause menu (mobile-critical)
+        obj.AddComponent<PauseMenu>();
     }
 
     // ===== WATER CREATURE SPAWNER =====
@@ -6279,17 +6282,30 @@ public class SceneBootstrapper
         es.AddComponent<EventSystem>();
         es.AddComponent<InputSystemUIInputModule>();
 
+        // === SAFE AREA CONTAINER (protects HUD from notch/dynamic island) ===
+        GameObject safeAreaObj = new GameObject("SafeArea");
+        safeAreaObj.transform.SetParent(canvasObj.transform, false);
+        RectTransform safeRt = safeAreaObj.AddComponent<RectTransform>();
+        safeRt.anchorMin = Vector2.zero;
+        safeRt.anchorMax = Vector2.one;
+        safeRt.offsetMin = Vector2.zero;
+        safeRt.offsetMax = Vector2.zero;
+        safeAreaObj.AddComponent<SafeAreaFitter>();
+
         // === RIGHT-SIDE PUFFY COMIC SCORE HUD (percentage anchors for any resolution) ===
         // Pooper Snooper occupies top strip (0.895-0.995), HUD starts below at 0.84
         // Max X anchor 0.88 to keep outlines well within screen edge
 
+        // HUD elements parent to SafeArea to avoid notch/dynamic island overlap
+        Transform hudParent = safeAreaObj.transform;
+
         // "SCORE" label
-        Text scoreLabelText = MakeStretchText(canvasObj.transform, "ScoreLabel", "SCORE",
+        Text scoreLabelText = MakeStretchText(hudParent, "ScoreLabel", "SCORE",
             26, TextAnchor.LowerRight, new Color(1f, 0.85f, 0.4f, 0.8f),
             new Vector2(0.72f, 0.84f), new Vector2(0.88f, 0.87f), true);
 
         // Score number - big puffy golden text
-        Text scoreText = MakeStretchText(canvasObj.transform, "ScoreText", "0",
+        Text scoreText = MakeStretchText(hudParent, "ScoreText", "0",
             64, TextAnchor.UpperRight, new Color(1f, 0.92f, 0.2f),
             new Vector2(0.55f, 0.78f), new Vector2(0.88f, 0.845f), true);
         {
@@ -6305,7 +6321,7 @@ public class SceneBootstrapper
         }
 
         // Distance - right side below score
-        Text distanceText = MakeStretchText(canvasObj.transform, "DistanceText", "0m",
+        Text distanceText = MakeStretchText(hudParent, "DistanceText", "0m",
             36, TextAnchor.UpperRight, new Color(0.6f, 1f, 0.5f),
             new Vector2(0.68f, 0.73f), new Vector2(0.88f, 0.78f), true);
         {
@@ -6315,7 +6331,7 @@ public class SceneBootstrapper
         }
 
         // Combo counter (compact — hype labels go to CheerOverlay now)
-        Text comboText = MakeText(canvasObj.transform, "ComboText", "",
+        Text comboText = MakeText(hudParent, "ComboText", "",
             42, TextAnchor.MiddleCenter, new Color(1f, 0.9f, 0.2f),
             new Vector2(0.5f, 0.5f), new Vector2(0, 160), new Vector2(200, 60), true);
         Outline comboOutline2 = comboText.gameObject.AddComponent<Outline>();
@@ -6518,18 +6534,18 @@ public class SceneBootstrapper
         scrollRect.vertical = true;
 
         // Multiplier text (left side, below tracker)
-        Text multiplierText = MakeStretchText(canvasObj.transform, "MultiplierText", "x1.0",
+        Text multiplierText = MakeStretchText(hudParent, "MultiplierText", "x1.0",
             42, TextAnchor.MiddleLeft, new Color(1f, 1f, 0.7f),
             new Vector2(0.02f, 0.78f), new Vector2(0.18f, 0.84f), true);
         multiplierText.gameObject.SetActive(false);
 
         // "FARTCOINS" label
-        Text coinLabel = MakeStretchText(canvasObj.transform, "CoinLabel", "FARTCOINS",
+        Text coinLabel = MakeStretchText(hudParent, "CoinLabel", "FARTCOINS",
             20, TextAnchor.LowerRight, new Color(0.85f, 0.6f, 0.15f, 0.85f),
             new Vector2(0.68f, 0.675f), new Vector2(0.88f, 0.71f), true);
 
         // HUD coin counter - puffy copper style, right side below distance
-        Text coinCountText = MakeStretchText(canvasObj.transform, "CoinCountText", "0",
+        Text coinCountText = MakeStretchText(hudParent, "CoinCountText", "0",
             46, TextAnchor.UpperRight, new Color(1f, 0.75f, 0.25f),
             new Vector2(0.62f, 0.61f), new Vector2(0.88f, 0.68f), true);
         {
@@ -6545,12 +6561,12 @@ public class SceneBootstrapper
         }
 
         // HUD speed indicator - bottom-left, sewer-mph style
-        Text speedText = MakeStretchText(canvasObj.transform, "SpeedText", "0 SMPH",
+        Text speedText = MakeStretchText(hudParent, "SpeedText", "0 SMPH",
             22, TextAnchor.LowerLeft, new Color(0.3f, 1f, 0.4f, 0.85f),
             new Vector2(0.02f, 0.015f), new Vector2(0.22f, 0.05f), true);
 
         // HUD wallet text (left side, below tracker)
-        Text walletText = MakeStretchText(canvasObj.transform, "WalletText", "0",
+        Text walletText = MakeStretchText(hudParent, "WalletText", "0",
             28, TextAnchor.UpperLeft, new Color(1f, 0.85f, 0.2f),
             new Vector2(0.02f, 0.84f), new Vector2(0.18f, 0.875f), true);
 
