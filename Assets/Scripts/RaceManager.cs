@@ -82,6 +82,9 @@ public class RaceManager : MonoBehaviour
     private float _finalStretchStart;
     private const float FINAL_STRETCH_DISTANCE = 100f; // last 100m
 
+    // === DISTANCE MILESTONES ===
+    private int _lastMilestoneIndex = -1;
+
     public State RaceState => _state;
     public float LeaderDistance => _leaderDistance;
     public float RaceTime => _state >= State.Racing ? Time.time - _raceStartTime : 0f;
@@ -722,6 +725,9 @@ public class RaceManager : MonoBehaviour
                 : $"{secs:F1}s";
         }
 
+        // === DISTANCE MILESTONES ===
+        CheckDistanceMilestones();
+
         // === FINAL STRETCH CHECK ===
         CheckFinalStretch();
 
@@ -982,6 +988,41 @@ public class RaceManager : MonoBehaviour
         }
 
         OnRaceComplete();
+    }
+
+    void CheckDistanceMilestones()
+    {
+        if (playerController == null) return;
+        float dist = playerController.DistanceTraveled;
+
+        // Milestones at 25%, 50%, 75% of race distance
+        float[] thresholds = { 0.25f, 0.50f, 0.75f };
+        string[] messages = { "QUARTER WAY!", "HALFWAY THERE!", "THREE QUARTERS!" };
+        string[] cheerWords = { "NICE", "HYPE", "YEAH" };
+
+        for (int i = 0; i < thresholds.Length; i++)
+        {
+            if (i <= _lastMilestoneIndex) continue;
+            if (dist >= raceDistance * thresholds[i])
+            {
+                _lastMilestoneIndex = i;
+
+                if (ScorePopup.Instance != null)
+                    ScorePopup.Instance.Show(
+                        messages[i],
+                        playerController.transform.position + Vector3.up * 2f,
+                        ScorePopup.PopupType.Milestone, 1.3f);
+
+                if (PipeCamera.Instance != null)
+                    PipeCamera.Instance.PunchFOV(2f);
+
+                if (CheerOverlay.Instance != null)
+                    CheerOverlay.Instance.ShowCheer(messages[i], new Color(1f, 0.85f, 0.1f));
+
+                HapticManager.LightTap();
+                break; // only one per frame
+            }
+        }
     }
 
     void CheckFinalStretch()

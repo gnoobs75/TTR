@@ -329,6 +329,24 @@ public class RaceFinish : MonoBehaviour
                 ProceduralAudio.Instance.PlayCelebration();
         }
 
+        // Screen effects: golden/silver flash based on placement
+        if (ScreenEffects.Instance != null)
+        {
+            if (place == 1)
+                ScreenEffects.Instance.TriggerMilestoneFlash();
+            else if (place <= 3)
+                ScreenEffects.Instance.TriggerPowerUpFlash();
+            else
+                ScreenEffects.Instance.TriggerHitFlash(); // shame flash for last place
+        }
+
+        // Finish line particles
+        if (ParticleManager.Instance != null)
+            ParticleManager.Instance.PlayCelebration(
+                RaceManager.Instance != null && RaceManager.Instance.PlayerController != null
+                    ? RaceManager.Instance.PlayerController.transform.position
+                    : transform.position);
+
         HapticManager.MediumTap();
     }
 
