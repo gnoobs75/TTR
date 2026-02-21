@@ -6456,6 +6456,11 @@ public class SceneBootstrapper
             16, TextAnchor.MiddleCenter, new Color(1f, 0.85f, 0.3f, 0.7f),
             new Vector2(0.15f, 0.27f), new Vector2(0.85f, 0.32f), true);
 
+        // Race tagline above the daily challenge
+        MakeStretchText(startPanel.transform, "RaceTagline", "RACE TO BROWN TOWN!",
+            24, TextAnchor.MiddleCenter, new Color(1f, 0.65f, 0.15f, 0.85f),
+            new Vector2(0.10f, 0.54f), new Vector2(0.90f, 0.59f), true);
+
         // "or press SPACE" hint at very bottom
         MakeStretchText(startPanel.transform, "HintText", "or press SPACE",
             18, TextAnchor.MiddleCenter, new Color(0.7f, 0.7f, 0.65f, 0.5f),

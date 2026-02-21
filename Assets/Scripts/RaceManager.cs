@@ -1093,6 +1093,24 @@ public class RaceManager : MonoBehaviour
         string ordinal = GetOrdinal(playerPos);
         string posStr = playerPos + ordinal;
 
+        // Show gap to racer ahead (motivating) or behind (pressure)
+        float gapAhead = 0f, gapBehind = 0f;
+        float playerDist = playerController != null ? playerController.DistanceTraveled : 0f;
+        float playerSpeed = playerController != null ? Mathf.Max(playerController.CurrentSpeed, 1f) : 1f;
+        foreach (var e in _entries)
+        {
+            if (e.isPlayer) continue;
+            float gap = (e.distance - playerDist) / playerSpeed;
+            if (gap > 0f && (gapAhead == 0f || gap < gapAhead)) gapAhead = gap;
+            if (gap < 0f && (-gap < gapBehind || gapBehind == 0f)) gapBehind = -gap;
+        }
+
+        // Show relevant gap info
+        if (playerPos == 1 && gapBehind > 0f && gapBehind < 5f)
+            posStr += $"\n+{gapBehind:F1}s";
+        else if (playerPos > 1 && gapAhead > 0f && gapAhead < 10f)
+            posStr += $"\n-{gapAhead:F1}s";
+
         _positionHudText.text = posStr;
 
         // Color by position
