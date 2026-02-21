@@ -139,7 +139,7 @@ public class ScorePopup : MonoBehaviour
             spawnTime = Time.time,
             lifetime = type == PopupType.Milestone ? 2.5f : 1.4f,
             worldPos = worldPosition,
-            velocity = Vector3.up * 2.5f + Random.insideUnitSphere * 0.4f,
+            velocity = Vector3.up * 2.5f + Vector3.right * Random.Range(-1.2f, 1.2f) + Random.insideUnitSphere * 0.3f,
             startScale = scale,
             wobbleAngle = wobbleAngle,
             wobbleSpeed = wobbleSpeed,
@@ -193,7 +193,7 @@ public class ScorePopup : MonoBehaviour
         else if (combo >= 7) label = "RADICAL!";
         else if (combo >= 5) label = "SICK!";
         else label = "COMBO!";
-        Show($"{combo}x\n{label}", pos, PopupType.Combo, 1.1f + combo * 0.06f);
+        Show($"{combo}x\n{label}", pos, PopupType.Combo, 1.2f + combo * 0.15f);
     }
 
     void Update()
@@ -230,14 +230,15 @@ public class ScorePopup : MonoBehaviour
             p.obj.SetActive(true);
             p.obj.GetComponent<RectTransform>().position = screenPos;
 
-            // Scale: BIG punch-in then settle with slight bounce
+            // Scale: elastic ease-out (springy punch-in)
             float scaleT;
-            if (t < 0.1f)
-                scaleT = Mathf.Lerp(2.2f, 0.85f, t / 0.1f); // overshoot small
-            else if (t < 0.2f)
-                scaleT = Mathf.Lerp(0.85f, 1.05f, (t - 0.1f) / 0.1f); // bounce back
-            else if (t < 0.25f)
-                scaleT = Mathf.Lerp(1.05f, 1f, (t - 0.2f) / 0.05f); // settle
+            float sT = Mathf.Clamp01(t / 0.3f); // normalize to 0-1 over first 30%
+            if (sT < 1f)
+            {
+                // Elastic ease-out: overshoot, bounce, settle
+                float elasticT = Mathf.Pow(2f, -10f * sT) * Mathf.Sin((sT - 0.075f) * (2f * Mathf.PI) / 0.3f) + 1f;
+                scaleT = Mathf.Lerp(2.2f, 1f, elasticT);
+            }
             else
                 scaleT = 1f;
 
@@ -250,8 +251,15 @@ public class ScorePopup : MonoBehaviour
 
             // Color: flash white at start then settle to base
             Color c = p.baseColor;
-            if (t < 0.08f)
-                c = Color.Lerp(Color.white, p.baseColor, t / 0.08f);
+            if (t < 0.12f)
+                c = Color.Lerp(Color.white, p.baseColor, t / 0.12f);
+
+            // Milestone popups: gentle color pulse after initial flash
+            if (p.lifetime >= 2f && t > 0.15f && t < 0.65f)
+            {
+                float pulseT = Mathf.Sin(elapsed * 4f) * 0.15f;
+                c = Color.Lerp(c, Color.white, Mathf.Max(0f, pulseT));
+            }
 
             // Fade out in last 35%
             c.a = t > 0.65f ? Mathf.Lerp(1f, 0f, (t - 0.65f) / 0.35f) : 1f;

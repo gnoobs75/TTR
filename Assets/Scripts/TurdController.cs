@@ -528,6 +528,10 @@ public class TurdController : MonoBehaviour
         if (ScreenEffects.Instance != null)
             ScreenEffects.Instance.TriggerHitFlash();
 
+        // Camera recoil (backward kick on impact)
+        if (PipeCamera.Instance != null)
+            PipeCamera.Instance.Recoil(0.35f);
+
         // Reset multiplier
         if (GameManager.Instance != null)
             GameManager.Instance.OnPlayerHit();

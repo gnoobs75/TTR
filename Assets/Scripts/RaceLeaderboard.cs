@@ -173,15 +173,21 @@ public class RaceLeaderboard : MonoBehaviour
                 _lastPositions[i] = entry.position;
             }
 
-            // Animate bounce
+            // Animate bounce (elastic springy feel)
             float scale = 1f;
             if (_animTimers[i] > 0f)
             {
                 _animTimers[i] -= Time.deltaTime;
                 float t = 1f - (_animTimers[i] / 0.4f);
-                scale = 1f + Mathf.Sin(t * Mathf.PI) * 0.15f; // bounce up then settle
+                // Elastic overshoot: bigger bounce with spring-back
+                float elastic = Mathf.Pow(2f, -8f * t) * Mathf.Sin((t - 0.1f) * Mathf.PI * 2f / 0.35f);
+                scale = 1f + elastic * 0.25f;
             }
             row.root.localScale = new Vector3(scale, scale, 1f);
+
+            // Flash position number on change
+            if (_animTimers[i] > 0.2f)
+                row.positionText.color = Color.Lerp(PositionColors[posIdx], Color.white, (_animTimers[i] - 0.2f) / 0.2f);
 
             // Position number with color
             int posIdx = Mathf.Clamp(entry.position - 1, 0, PositionColors.Length - 1);
@@ -194,10 +200,11 @@ public class RaceLeaderboard : MonoBehaviour
             // Name
             row.nameText.text = entry.name;
 
-            // Background highlight for player
+            // Background highlight for player (gentle pulse)
             if (entry.isPlayer)
             {
-                row.bgImage.color = PlayerHighlight;
+                float pulse = 0.25f + Mathf.Sin(Time.time * 2f) * 0.08f;
+                row.bgImage.color = new Color(1f, 0.85f, 0.1f, pulse);
                 row.nameText.color = new Color(1f, 0.92f, 0.3f); // gold name
             }
             else
@@ -206,7 +213,7 @@ public class RaceLeaderboard : MonoBehaviour
                 row.nameText.color = Color.white;
             }
 
-            // Time gap
+            // Time gap with color gradient (green=close, yellow=mid, red=far)
             if (entry.position == 1)
             {
                 row.gapText.text = "LEADER";
@@ -214,15 +221,26 @@ public class RaceLeaderboard : MonoBehaviour
             }
             else if (entry.isFinished)
             {
-                row.gapText.text = $"+{entry.finishTime - entries[0].finishTime:F1}s";
-                row.gapText.color = new Color(0.6f, 0.6f, 0.55f);
+                float gap = entry.finishTime - entries[0].finishTime;
+                row.gapText.text = $"+{gap:F1}s";
+                row.gapText.color = GapColor(gap);
             }
             else
             {
                 row.gapText.text = $"+{entry.gapToLeader:F1}s";
-                row.gapText.color = new Color(0.7f, 0.7f, 0.65f);
+                row.gapText.color = GapColor(entry.gapToLeader);
             }
         }
+    }
+
+    /// <summary>Color gap text: green (close) → yellow (mid) → red (far).</summary>
+    static Color GapColor(float gap)
+    {
+        if (gap < 1f)
+            return Color.Lerp(new Color(0.3f, 1f, 0.4f), new Color(0.9f, 0.9f, 0.3f), gap);
+        if (gap < 5f)
+            return Color.Lerp(new Color(0.9f, 0.9f, 0.3f), new Color(1f, 0.5f, 0.2f), (gap - 1f) / 4f);
+        return new Color(0.8f, 0.35f, 0.2f); // far behind = red-orange
     }
 
     /// <summary>Show final results with finish places.</summary>

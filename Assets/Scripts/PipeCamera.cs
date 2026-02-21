@@ -45,6 +45,8 @@ public class PipeCamera : MonoBehaviour
     private float _smoothCamBlend; // smoothed fork blend for camera (avoids jerky transitions)
     private float _steerTilt;      // smoothed camera roll tilt from steering
     private float _breathePhase;   // subtle organic camera breathing
+    private float _recoilAmount;   // backward kick on collision
+    private float _lastSpeed;      // for acceleration lean
 
     void Awake()
     {
@@ -156,11 +158,27 @@ public class PipeCamera : MonoBehaviour
             // Steer tilt: bank camera when player turns for dynamic feel
             if (_tc != null)
             {
-                float targetTilt = -_tc.AngularVelocity * 0.04f;
-                targetTilt = Mathf.Clamp(targetTilt, -8f, 8f);
+                float targetTilt = -_tc.AngularVelocity * 0.06f;
+                targetTilt = Mathf.Clamp(targetTilt, -12f, 12f);
                 _steerTilt = Mathf.Lerp(_steerTilt, targetTilt, Time.deltaTime * 6f);
                 if (Mathf.Abs(_steerTilt) > 0.1f)
                     transform.rotation *= Quaternion.Euler(0, 0, _steerTilt);
+            }
+
+            // Acceleration lean: dip forward when speeding up, lean back when slowing
+            if (_tc != null)
+            {
+                float accel = (_tc.CurrentSpeed - _lastSpeed) / Mathf.Max(Time.deltaTime, 0.001f);
+                _lastSpeed = _tc.CurrentSpeed;
+                float leanAngle = Mathf.Clamp(accel * 0.15f, -3f, 3f);
+                transform.rotation *= Quaternion.Euler(leanAngle, 0, 0);
+            }
+
+            // Hit recoil: pushes camera backward briefly
+            if (_recoilAmount > 0.01f)
+            {
+                transform.position -= transform.forward * _recoilAmount;
+                _recoilAmount = Mathf.Lerp(_recoilAmount, 0f, Time.deltaTime * 10f);
             }
 
             // Speed-based FOV
@@ -211,5 +229,11 @@ public class PipeCamera : MonoBehaviour
     public void PunchFOV(float amount)
     {
         _fovPunch = Mathf.Clamp(_fovPunch + amount, -10f, 15f);
+    }
+
+    /// <summary>Brief backward kick on collision. Pairs well with Shake().</summary>
+    public void Recoil(float amount = 0.3f)
+    {
+        _recoilAmount = Mathf.Max(_recoilAmount, amount);
     }
 }
