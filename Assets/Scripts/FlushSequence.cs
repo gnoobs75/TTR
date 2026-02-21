@@ -30,6 +30,8 @@ public class FlushSequence : MonoBehaviour
     private Vector3 _originalCamPos;
     private Quaternion _originalCamRot;
     private float _whirlAngle;
+    private float _countdownPunchTime; // for punch-scale on each number
+    private float _flushPunchTime;     // for FLUSH! text burst
 
     void Awake()
     {
@@ -100,17 +102,26 @@ public class FlushSequence : MonoBehaviour
                     State = FlushState.Countdown;
                     _countdownValue = 3;
                     _timer = countdownInterval;
+                    _countdownPunchTime = Time.unscaledTime;
                     SetCountdownText("3");
                     if (ProceduralAudio.Instance != null)
                         ProceduralAudio.Instance.PlayCountdownTick();
+                    HapticManager.LightTap();
                 }
                 break;
 
             case FlushState.Countdown:
-                // Pulse countdown text
-                float pulse = 1f + Mathf.Sin(Time.unscaledTime * 15f) * 0.1f;
+                // Punch animation: scale bursts big then settles back
+                float punchElapsed = Time.unscaledTime - _countdownPunchTime;
+                float punchScale;
+                if (punchElapsed < 0.12f)
+                    punchScale = 1f + (1f - punchElapsed / 0.12f) * 0.5f; // burst to 1.5x
+                else if (punchElapsed < 0.35f)
+                    punchScale = 1f + Mathf.Sin((punchElapsed - 0.12f) / 0.23f * Mathf.PI) * 0.08f; // settle wobble
+                else
+                    punchScale = 1f;
                 if (countdownText != null)
-                    countdownText.transform.localScale = Vector3.one * pulse;
+                    countdownText.transform.localScale = Vector3.one * punchScale;
 
                 if (_timer <= 0f)
                 {
@@ -118,19 +129,27 @@ public class FlushSequence : MonoBehaviour
                     if (_countdownValue > 0)
                     {
                         _timer = countdownInterval;
+                        _countdownPunchTime = Time.unscaledTime;
                         SetCountdownText(_countdownValue.ToString());
+                        // Color shifts warmer as countdown approaches 1
+                        if (countdownText != null)
+                            countdownText.color = Color.Lerp(Color.white,
+                                new Color(1f, 0.7f, 0.2f), (3 - _countdownValue) / 2f);
                         if (ProceduralAudio.Instance != null)
                             ProceduralAudio.Instance.PlayCountdownTick();
+                        HapticManager.LightTap();
                     }
                     else
                     {
                         State = FlushState.Flushing;
                         _timer = flushDuration;
+                        _flushPunchTime = Time.unscaledTime;
                         SetCountdownText("FLUSH!");
                         if (countdownText != null)
                         {
-                            countdownText.fontSize = 72;
-                            countdownText.color = new Color(0.3f, 0.9f, 1f);
+                            countdownText.fontSize = 80;
+                            countdownText.color = new Color(0.3f, 0.95f, 1f);
+                            countdownText.transform.localScale = Vector3.one * 1.6f; // big burst
                         }
                         if (ProceduralAudio.Instance != null)
                             ProceduralAudio.Instance.PlayFlush();
@@ -141,31 +160,44 @@ public class FlushSequence : MonoBehaviour
 
             case FlushState.Flushing:
                 float flushT = 1f - (_timer / flushDuration);
+                // Ease-out curve: starts slow, accelerates (feels like gravity pulling)
+                float easedT = 1f - (1f - flushT) * (1f - flushT);
 
-                // Whirling water overlay
-                _whirlAngle += Time.unscaledDeltaTime * (200f + flushT * 800f);
-                SetWhirlAlpha(Mathf.Lerp(0f, 0.8f, flushT));
+                // Whirling water overlay (full alpha for dramatic effect)
+                _whirlAngle += Time.unscaledDeltaTime * (200f + flushT * 1000f);
+                SetWhirlAlpha(Mathf.Lerp(0f, 1f, flushT));
                 if (whirlOverlay != null)
                     whirlOverlay.transform.localRotation = Quaternion.Euler(0, 0, _whirlAngle);
 
-                // Camera dives down into pipe
+                // Camera dives down into pipe (ease-out for momentum feel)
                 if (_cam != null)
                 {
                     _cam.transform.position = Vector3.Lerp(
                         new Vector3(0, 3f, 0f),
-                        new Vector3(0, -2f, 3f), flushT);
+                        new Vector3(0, -2f, 3f), easedT);
                     _cam.transform.rotation = Quaternion.Slerp(
                         Quaternion.Euler(70f, 0, 0),
-                        Quaternion.Euler(0, 0, 0), flushT);
-                    _cam.fieldOfView = Mathf.Lerp(68f, 90f, flushT);
+                        Quaternion.Euler(0, 0, 0), easedT);
+                    _cam.fieldOfView = Mathf.Lerp(68f, 95f, easedT);
                 }
+
+                // Screen shake ramps up during flush dive
+                if (PipeCamera.Instance != null)
+                    PipeCamera.Instance.Shake(0.02f + flushT * 0.08f);
 
                 // Vignette closes in
                 SetVignetteAlpha(Mathf.Lerp(0.6f, 1f, flushT));
 
-                // Fade out text
+                // FLUSH! text: punch-scale decay + fade
+                float flushTextElapsed = Time.unscaledTime - _flushPunchTime;
                 if (countdownText != null)
                 {
+                    // Scale settles from 1.6 down to 1.0 over first 0.3s
+                    float textScale = flushTextElapsed < 0.3f
+                        ? Mathf.Lerp(1.6f, 1f, flushTextElapsed / 0.3f)
+                        : 1f;
+                    countdownText.transform.localScale = Vector3.one * textScale;
+
                     Color c = countdownText.color;
                     c.a = 1f - flushT;
                     countdownText.color = c;

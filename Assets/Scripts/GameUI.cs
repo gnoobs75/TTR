@@ -88,6 +88,7 @@ public class GameUI : MonoBehaviour
 
     void OnStartClicked()
     {
+        HapticManager.MediumTap();
         if (GameManager.Instance != null)
             GameManager.Instance.StartGame();
     }
@@ -108,6 +109,7 @@ public class GameUI : MonoBehaviour
 
     void OnShopClicked()
     {
+        HapticManager.LightTap();
         if (shopPanel != null)
             shopPanel.SetActive(true);
         if (startPanel != null)
@@ -143,6 +145,8 @@ public class GameUI : MonoBehaviour
     // Game over animation
     private float _gameOverShowTime;
     private bool _gameOverAnimating;
+    private bool _isNewHighScore;
+    private float _newHighScorePhase;
 
     // Start screen pulse
     private float _startPulsePhase;
@@ -289,6 +293,20 @@ public class GameUI : MonoBehaviour
             }
         }
 
+        // New high score text: rainbow color cycle + gentle pulse
+        if (_isNewHighScore && highScoreText != null && highScoreText.gameObject.activeInHierarchy)
+        {
+            _newHighScorePhase += Time.unscaledDeltaTime;
+            // Rainbow cycle through gold -> orange -> pink -> gold
+            float hue = Mathf.PingPong(_newHighScorePhase * 0.4f, 0.15f) + 0.08f; // gold-orange range
+            Color rainbow = Color.HSVToRGB(hue, 0.85f, 1f);
+            highScoreText.color = rainbow;
+
+            // Gentle breathing scale
+            float breathe = 1f + Mathf.Sin(_newHighScorePhase * 3f) * 0.06f;
+            highScoreText.transform.localScale = Vector3.one * breathe;
+        }
+
         // Start button pulsing glow
         if (startButton != null && startPanel != null && startPanel.activeSelf)
         {
@@ -351,13 +369,15 @@ public class GameUI : MonoBehaviour
         if (finalScoreText != null)
             finalScoreText.text = finalScore.ToString("N0");
 
-        bool isNewHigh = finalScore >= highScore && finalScore > 0;
+        _isNewHighScore = finalScore >= highScore && finalScore > 0;
+        _newHighScorePhase = 0f;
         if (highScoreText != null)
         {
-            if (isNewHigh)
+            if (_isNewHighScore)
             {
                 highScoreText.text = "NEW HIGH SCORE!";
                 highScoreText.color = new Color(1f, 0.85f, 0.1f); // gold
+                highScoreText.fontSize = Mathf.RoundToInt(28 * _uiScale);
             }
             else
             {
@@ -367,12 +387,15 @@ public class GameUI : MonoBehaviour
         }
 
         // Celebrate new high score with extra effects
-        if (isNewHigh)
+        if (_isNewHighScore)
         {
             if (ScreenEffects.Instance != null)
                 ScreenEffects.Instance.TriggerMilestoneFlash();
             if (PipeCamera.Instance != null)
+            {
                 PipeCamera.Instance.PunchFOV(8f);
+                PipeCamera.Instance.Shake(0.3f);
+            }
             if (ProceduralAudio.Instance != null)
                 ProceduralAudio.Instance.PlayCelebration();
             if (ParticleManager.Instance != null)
@@ -381,25 +404,32 @@ public class GameUI : MonoBehaviour
                 if (player != null)
                     ParticleManager.Instance.PlayCelebration(player.transform.position);
             }
+
+            // Poop Crew goes wild for new high score
+            if (CheerOverlay.Instance != null)
+                CheerOverlay.Instance.ShowCheer("NEW RECORD!", new Color(1f, 0.85f, 0.1f), true);
+
             HapticManager.HeavyTap();
         }
 
         if (runStatsText != null)
         {
-            string stats = $"{Mathf.FloorToInt(distance)}m  |  {coins} Fartcoins";
-            if (nearMisses > 0) stats += $"  |  {nearMisses} close calls";
-            if (bestCombo > 1) stats += $"  |  {bestCombo}x combo";
+            // Formatted stats with line breaks for mobile readability
+            string stats = $"{Mathf.FloorToInt(distance)}m traveled";
+            stats += $"\n{coins} Fartcoins collected";
+            if (nearMisses > 0) stats += $"\n{nearMisses} close calls";
+            if (bestCombo > 1) stats += $"\n{bestCombo}x best combo";
 
             // Add race position if in a race
             if (RaceManager.Instance != null)
             {
                 int place = RaceManager.Instance.GetPlayerFinishPlace();
                 if (place > 0)
-                    stats += $"  |  {place}{GetOrdinalUpper(place)} Place";
+                    stats += $"\n{place}{GetOrdinalUpper(place)} Place Finish";
                 else
                 {
                     int pos = RaceManager.Instance.GetPlayerPosition();
-                    stats += $"  |  {pos}{GetOrdinalUpper(pos)} (DNF)";
+                    stats += $"\n{pos}{GetOrdinalUpper(pos)} (DNF)";
                 }
             }
 
@@ -435,6 +465,7 @@ public class GameUI : MonoBehaviour
 
     void OnRestartClicked()
     {
+        HapticManager.MediumTap();
         if (GameManager.Instance != null)
             GameManager.Instance.RestartGame();
     }

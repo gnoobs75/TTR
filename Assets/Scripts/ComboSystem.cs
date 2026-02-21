@@ -25,6 +25,7 @@ public class ComboSystem : MonoBehaviour
 
     private float _lastEventTime;
     private int _displayedCombo;
+    private float _eventPunchTime; // for pop animation on each event
 
     void Awake()
     {
@@ -45,6 +46,7 @@ public class ComboSystem : MonoBehaviour
     {
         ComboCount++;
         _lastEventTime = Time.time;
+        _eventPunchTime = Time.time; // trigger pop animation
 
         if (GameManager.Instance == null) return;
 
@@ -72,16 +74,26 @@ public class ComboSystem : MonoBehaviour
         {
             GameManager.Instance.AddScore(comboMilestoneBonus * (ComboCount / 5));
             if (PipeCamera.Instance != null)
+            {
                 PipeCamera.Instance.PunchFOV(4f);
+                PipeCamera.Instance.Shake(0.1f + ComboCount * 0.005f);
+            }
             if (ProceduralAudio.Instance != null)
                 ProceduralAudio.Instance.PlayComboUp();
             if (ScreenEffects.Instance != null)
                 ScreenEffects.Instance.TriggerMilestoneFlash();
+
+            // Particle celebration at milestones
+            if (ParticleManager.Instance != null && GameManager.Instance.player != null)
+                ParticleManager.Instance.PlayComboFlash(
+                    GameManager.Instance.player.transform.position);
+
             HapticManager.MediumTap();
 
             // Hype the combo in the Poop Crew overlay
             string label;
-            if (ComboCount >= 20) label = "INSANE";
+            if (ComboCount >= 50) label = "LEGENDARY";
+            else if (ComboCount >= 20) label = "INSANE";
             else if (ComboCount >= 10) label = "EPIC";
             else label = "SICK";
             Color col = Color.Lerp(new Color(1f, 0.9f, 0.2f), new Color(1f, 0.2f, 0.4f),
@@ -105,19 +117,28 @@ public class ComboSystem : MonoBehaviour
     {
         if (comboText == null) return;
 
-        if (ComboCount >= 2)
+        if (ComboCount >= 1)
         {
             comboText.gameObject.SetActive(true);
 
-            // Compact counter — hype labels now go to CheerOverlay
+            // Compact counter — hype labels go to CheerOverlay
             comboText.text = $"{ComboCount}x";
 
-            // Color ramp: yellow -> red
+            // Color ramp: yellow -> red (intensifies with combo)
             float t = Mathf.Clamp01(ComboCount / 20f);
             comboText.color = Color.Lerp(new Color(1f, 0.9f, 0.2f), new Color(1f, 0.2f, 0.4f), t);
 
-            // Subtle pulse
-            float pulse = 1f + Mathf.Sin(Time.time * 8f) * 0.04f * Mathf.Min(ComboCount, 10);
+            // Organic pulse (stronger with higher combo)
+            float pulse = 1f + Mathf.Sin(Time.time * 8f) * 0.1f * Mathf.Min(ComboCount, 10);
+
+            // Pop animation on each new event (decays over 0.2s)
+            float popElapsed = Time.time - _eventPunchTime;
+            if (popElapsed < 0.2f)
+            {
+                float pop = 1f + (1f - popElapsed / 0.2f) * 0.35f;
+                pulse *= pop;
+            }
+
             comboText.transform.localScale = Vector3.one * pulse;
         }
         else
