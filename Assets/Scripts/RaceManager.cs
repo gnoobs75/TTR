@@ -755,7 +755,7 @@ public class RaceManager : MonoBehaviour
 
                         // Green flash for gaining position
                         if (ScreenEffects.Instance != null)
-                            ScreenEffects.Instance.TriggerMilestoneFlash();
+                            ScreenEffects.Instance.TriggerZoneFlash(new Color(0.2f, 1f, 0.3f));
 
                         // Rival personality reaction (they got passed!)
                         RacerAI passedAI = GetRacerAIAtPosition(e.position + 1);
@@ -800,12 +800,16 @@ public class RaceManager : MonoBehaviour
                         // Show animated DOWN arrow
                         ShowPositionChangeArrow(false);
 
+                        // Red edge pulse for losing position
+                        if (ScreenEffects.Instance != null)
+                            ScreenEffects.Instance.TriggerProximityWarning();
+
                         // CheerOverlay shows the taunt
                         if (CheerOverlay.Instance != null)
                             CheerOverlay.Instance.ShowCheer(quip,
                                 passerAI != null ? passerAI.racerColor : new Color(1f, 0.4f, 0.2f), false);
 
-                        HapticManager.LightTap();
+                        HapticManager.MediumTap();
                     }
                 }
                 _lastPlayerPosition = e.position;

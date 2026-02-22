@@ -229,7 +229,26 @@ public abstract class ObstacleBehavior : MonoBehaviour
         foreach (var pupil in _pupils)
             if (pupil != null) pupil.localScale = Vector3.one * 2f;
 
+        // Spring-bounce recovery: brief upward pop before settling
+        Vector3 flatScale = transform.localScale;
+        t = 0f;
+        float bounceDur = 0.15f;
+        while (t < bounceDur)
+        {
+            t += Time.deltaTime;
+            float p = t / bounceDur;
+            // Elastic overshoot: pops up then settles back flat
+            float bounce = Mathf.Sin(p * Mathf.PI) * 0.4f;
+            transform.localScale = new Vector3(
+                flatScale.x * (1f - bounce * 0.3f),
+                flatScale.y + startScale.y * bounce,
+                flatScale.z * (1f - bounce * 0.3f)
+            );
+            yield return null;
+        }
+        transform.localScale = flatScale;
+
         // Stay squashed until destroyed
-        yield return new WaitForSeconds(1f);
+        yield return new WaitForSeconds(0.8f);
     }
 }

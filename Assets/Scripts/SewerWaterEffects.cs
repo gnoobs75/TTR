@@ -499,6 +499,7 @@ public class SewerWaterEffects : MonoBehaviour
 
     void UpdateWaterfallGushes()
     {
+        int cascadeTarget = -1; // index of a nearby waterfall to cascade-trigger
         for (int i = 0; i < _waterfalls.Count; i++)
         {
             var wf = _waterfalls[i];
@@ -516,8 +517,37 @@ public class SewerWaterEffects : MonoBehaviour
                     ProceduralAudio.Instance.PlayWaterGush();
 
                 wf.gushTimer = gushInterval + Random.Range(-1f, 2f);
+
+                // Cascade: 30% chance to trigger a nearby waterfall shortly after
+                if (Random.value < 0.3f && _waterfalls.Count > 1)
+                {
+                    // Find closest other waterfall
+                    float closestDist = float.MaxValue;
+                    for (int j = 0; j < _waterfalls.Count; j++)
+                    {
+                        if (j == i || _waterfalls[j].dripCurtain == null) continue;
+                        float d = Mathf.Abs(wf.spawnDist - _waterfalls[j].spawnDist);
+                        if (d < closestDist && d < 30f)
+                        {
+                            closestDist = d;
+                            cascadeTarget = j;
+                        }
+                    }
+                }
             }
             _waterfalls[i] = wf;
+        }
+
+        // Apply cascade trigger (short delay simulated by setting timer very low)
+        if (cascadeTarget >= 0 && cascadeTarget < _waterfalls.Count)
+        {
+            var ct = _waterfalls[cascadeTarget];
+            if (ct.dripCurtain != null)
+            {
+                ct.gushTimer = Mathf.Min(ct.gushTimer, 0.3f); // gush in ~0.3s
+                ct.hasGush = true;
+                _waterfalls[cascadeTarget] = ct;
+            }
         }
     }
 
