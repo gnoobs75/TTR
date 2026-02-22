@@ -45,7 +45,6 @@ public class ScreenEffects : MonoBehaviour
     private float _hitFlashDecay = 3f;
 
     // Speed overlay
-    private float _speedThreshold = 12f;
     private float _maxSpeedOverlay = 0.15f;
 
     // Hit chromatic aberration (color-shifted overlays)
@@ -682,15 +681,27 @@ public class ScreenEffects : MonoBehaviour
     /// <summary>Update speed-based overlay intensity. Call each frame with current speed.</summary>
     public void UpdateSpeed(float currentSpeed)
     {
-        float t = Mathf.Clamp01((currentSpeed - _speedThreshold) / 8f);
+        // Two-tier speed intensity: gentle awareness at moderate speed, aggressive at high speed
+        // Tier 1: subtle tunnel vision starts at 8 SMPH (awareness)
+        float tLow = Mathf.Clamp01((currentSpeed - 8f) / 6f);
+        // Tier 2: aggressive effects at 14+ SMPH (intensity)
+        float tHigh = Mathf.Clamp01((currentSpeed - 14f) / 7f);
+        // Combined: exponential curve for that "walls closing in" feel
+        float t = tLow * tLow + tHigh * tHigh * 0.5f;
+        t = Mathf.Clamp01(t);
         _speedIntensity = Mathf.Lerp(_speedIntensity, t, Time.deltaTime * 3f);
-        // Speed vignette: progressive tunnel vision (stronger curve at extreme speed)
-        float vigTarget = t * t * 0.45f; // quadratic ramp for more dramatic extreme-speed feel
+
+        // Speed vignette: two-stage tunnel vision
+        // Stage 1 (8-14 SMPH): gentle darkening at edges
+        // Stage 2 (14+ SMPH): dramatic tunnel vision closing in
+        float vigTarget = tLow * tLow * 0.25f + tHigh * tHigh * 0.35f;
         _vignetteIntensity = Mathf.Max(_vignetteIntensity, vigTarget);
-        // Speed streaks: radial lines at high speed
-        _speedStreakIntensity = Mathf.Lerp(_speedStreakIntensity, t, Time.deltaTime * 4f);
-        // Film grain: starts at moderate speed, intensifies
-        // Zone baseline: deeper zones have grittier baseline grain
+
+        // Speed streaks: radial lines ramp in with exponential curve
+        float streakTarget = tLow * 0.3f + tHigh * 0.7f;
+        _speedStreakIntensity = Mathf.Lerp(_speedStreakIntensity, streakTarget, Time.deltaTime * 4f);
+
+        // Film grain: starts earlier (7 SMPH), zone-boosted, more aggressive at extremes
         float zoneGrainBoost = 0f;
         if (PipeZoneSystem.Instance != null)
         {
@@ -698,10 +709,13 @@ public class ScreenEffects : MonoBehaviour
             // Porcelain=0, Grimy=0.05, Toxic=0.15, Rusty=0.2, Hellsewer=0.3
             zoneGrainBoost = zi * 0.075f;
         }
-        float grainTarget = Mathf.Clamp01((currentSpeed - 9f) / 8f) + zoneGrainBoost;
+        float grainBase = Mathf.Clamp01((currentSpeed - 7f) / 6f);
+        float grainTarget = grainBase * (0.6f + tHigh * 0.4f) + zoneGrainBoost;
         _grainIntensity = Mathf.Lerp(_grainIntensity, grainTarget, Time.deltaTime * 3f);
-        // Speed chromatic: subtle sustained aberration at very high speed
-        _speedChromaticTarget = Mathf.Lerp(_speedChromaticTarget, t * 0.4f, Time.deltaTime * 3f);
+
+        // Speed chromatic: subtle at moderate, aggressive at extreme
+        float chromTarget = tLow * 0.15f + tHigh * tHigh * 0.5f;
+        _speedChromaticTarget = Mathf.Lerp(_speedChromaticTarget, chromTarget, Time.deltaTime * 3f);
     }
 
     /// <summary>Flash speed streaks briefly (e.g. race start, boost pickup).</summary>

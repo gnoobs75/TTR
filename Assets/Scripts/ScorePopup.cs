@@ -59,7 +59,10 @@ public class ScorePopup : MonoBehaviour
         _canvas = canvasObj.AddComponent<Canvas>();
         _canvas.renderMode = RenderMode.ScreenSpaceOverlay;
         _canvas.sortingOrder = 50;
-        canvasObj.AddComponent<CanvasScaler>();
+        CanvasScaler scaler = canvasObj.AddComponent<CanvasScaler>();
+        scaler.uiScaleMode = CanvasScaler.ScaleMode.ScaleWithScreenSize;
+        scaler.referenceResolution = new Vector2(1080, 1920);
+        scaler.matchWidthOrHeight = 0.5f;
 
         // Pre-pool some popup objects
         for (int i = 0; i < 15; i++)
