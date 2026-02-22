@@ -48,12 +48,18 @@ public class SettingsMenu : MonoBehaviour
     {
         LoadSettings();
         if (settingsPanel != null) settingsPanel.SetActive(true);
+        if (ProceduralAudio.Instance != null)
+            ProceduralAudio.Instance.PlayUIClick();
+        HapticManager.LightTap();
     }
 
     public void Close()
     {
         SaveSettings();
         if (settingsPanel != null) settingsPanel.SetActive(false);
+        if (ProceduralAudio.Instance != null)
+            ProceduralAudio.Instance.PlayUIClick();
+        HapticManager.LightTap();
     }
 
     void LoadSettings()
@@ -112,6 +118,7 @@ public class SettingsMenu : MonoBehaviour
     void OnHapticChanged(bool val)
     {
         HapticManager.Enabled = val;
+        if (val) HapticManager.LightTap(); // Let them feel it!
     }
 
     void PrevControl()
@@ -119,6 +126,7 @@ public class SettingsMenu : MonoBehaviour
         _controlIndex = (_controlIndex - 1 + ControlNames.Length) % ControlNames.Length;
         UpdateControlLabel();
         ApplyControlScheme();
+        HapticManager.LightTap();
     }
 
     void NextControl()
@@ -126,6 +134,7 @@ public class SettingsMenu : MonoBehaviour
         _controlIndex = (_controlIndex + 1) % ControlNames.Length;
         UpdateControlLabel();
         ApplyControlScheme();
+        HapticManager.LightTap();
     }
 
     void UpdateControlLabel()

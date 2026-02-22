@@ -461,9 +461,9 @@ public class GameManager : MonoBehaviour
             GameCenterManager.Instance.ReportScore(finalScore, distanceTraveled);
             GameCenterManager.Instance.CheckZoneAchievements(distanceTraveled);
             if (_runBestCombo >= 20)
-                GameCenterManager.Instance.ReportAchievement(GameCenterManager.ACH_COMBO_KING);
+                GameCenterManager.Instance.ReportComboKing();
             if (PlayerData.TotalRuns == 1)
-                GameCenterManager.Instance.ReportAchievement(GameCenterManager.ACH_FIRST_FLUSH);
+                GameCenterManager.Instance.ReportFirstFlush();
         }
 
         // Cloud save

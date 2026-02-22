@@ -169,6 +169,10 @@ public class AssetGallery : MonoBehaviour
             var startPanel = GameManager.Instance.gameUI.startPanel;
             if (startPanel != null) startPanel.SetActive(true);
         }
+
+        if (ProceduralAudio.Instance != null)
+            ProceduralAudio.Instance.PlayUIClick();
+        HapticManager.LightTap();
     }
 
     public void FilterCategory(string category)
@@ -187,6 +191,7 @@ public class AssetGallery : MonoBehaviour
             categoryText.text = category;
 
         ShowCurrentAsset();
+        HapticManager.LightTap();
     }
 
     public void ShowNext()
@@ -194,6 +199,7 @@ public class AssetGallery : MonoBehaviour
         if (_filteredAssets.Count == 0) return;
         _currentIndex = (_currentIndex + 1) % _filteredAssets.Count;
         ShowCurrentAsset();
+        HapticManager.LightTap();
     }
 
     public void ShowPrevious()
@@ -201,6 +207,7 @@ public class AssetGallery : MonoBehaviour
         if (_filteredAssets.Count == 0) return;
         _currentIndex = (_currentIndex - 1 + _filteredAssets.Count) % _filteredAssets.Count;
         ShowCurrentAsset();
+        HapticManager.LightTap();
     }
 
     void ShowCurrentAsset()

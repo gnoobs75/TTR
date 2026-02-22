@@ -87,6 +87,24 @@ public class GameCenterManager : MonoBehaviour
         if (distance >= 800f) ReportAchievement(ACH_ZONE_HELL);
     }
 
+    /// Report first flush achievement with celebration
+    public void ReportFirstFlush()
+    {
+        ReportAchievement(ACH_FIRST_FLUSH);
+        if (CheerOverlay.Instance != null)
+            CheerOverlay.Instance.ShowCheer("FIRST FLUSH!", new Color(0.3f, 0.9f, 1f), true);
+        HapticManager.MediumTap();
+    }
+
+    /// Report combo king achievement with celebration
+    public void ReportComboKing()
+    {
+        ReportAchievement(ACH_COMBO_KING);
+        if (CheerOverlay.Instance != null)
+            CheerOverlay.Instance.ShowCheer("COMBO KING!", new Color(1f, 0.6f, 0.2f), true);
+        HapticManager.MediumTap();
+    }
+
     /// Show native leaderboard UI
     public void ShowLeaderboard()
     {
