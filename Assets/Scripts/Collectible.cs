@@ -21,11 +21,14 @@ public class Collectible : MonoBehaviour
     private Quaternion _baseRotation;
     private bool _started;
 
-    // Coin magnetism: pull toward player when close
+    // Coin magnetism: spiral arc pull toward player
     private Transform _player;
     private const float MAGNET_RANGE = 3.5f;
-    private const float MAGNET_SPEED = 12f;
+    private const float MAGNET_SPEED = 14f;
     private bool _magnetActive;
+    private float _magnetTimer;        // Time since magnet engaged
+    private Vector3 _magnetOrbitAxis;  // Random perpendicular axis for spiral
+    private float _magnetOrbitDir;     // CW or CCW spiral
 
     void Start()
     {
@@ -68,7 +71,7 @@ public class Collectible : MonoBehaviour
         if (transform.parent != null)
             transform.localPosition = _startLocalPos + transform.parent.InverseTransformDirection(Vector3.up) * bob;
 
-        // Coin magnetism: pull toward player when in range
+        // Coin magnetism: spiral arc pull toward player
         float proximity = 0f;
         if (_player != null)
         {
@@ -76,13 +79,40 @@ public class Collectible : MonoBehaviour
             if (dist < MAGNET_RANGE)
             {
                 proximity = 1f - (dist / MAGNET_RANGE); // 0 at edge, 1 when touching
-                // Accelerating pull: slow at edge, fast when close
-                float pullStrength = proximity * proximity * MAGNET_SPEED;
-                Vector3 toPlayer = (_player.position - transform.position).normalized;
-                transform.position += toPlayer * pullStrength * Time.deltaTime;
-                _magnetActive = true;
-                // Override bob when magnetized - coin flies straight at player
-                if (proximity > 0.5f)
+
+                // Initialize orbit axis on first magnet contact
+                if (!_magnetActive)
+                {
+                    _magnetActive = true;
+                    _magnetTimer = 0f;
+                    Vector3 toPlayer = (_player.position - transform.position).normalized;
+                    // Pick a perpendicular axis for the spiral orbit
+                    _magnetOrbitAxis = Vector3.Cross(toPlayer, Vector3.up).normalized;
+                    if (_magnetOrbitAxis.sqrMagnitude < 0.01f)
+                        _magnetOrbitAxis = Vector3.Cross(toPlayer, Vector3.right).normalized;
+                    _magnetOrbitDir = Random.value > 0.5f ? 1f : -1f;
+                }
+                _magnetTimer += Time.deltaTime;
+
+                // Exponential pull: gentle start, aggressive close-in
+                float pullCurve = proximity * proximity * proximity; // cubic for snappier finish
+                float pullStrength = pullCurve * MAGNET_SPEED;
+
+                // Spiral component: orbit perpendicular to pull direction, decays as coin gets close
+                float spiralStrength = (1f - proximity) * 3.5f; // strong at range, zero at contact
+                float spiralDecay = Mathf.Exp(-_magnetTimer * 2f); // fades over time too
+                Vector3 toPlayerDir = (_player.position - transform.position).normalized;
+                Vector3 spiralForce = Vector3.Cross(toPlayerDir, _magnetOrbitAxis) * _magnetOrbitDir
+                                      * spiralStrength * spiralDecay;
+
+                // Slight upward loft at the start of magnet engagement
+                float loft = Mathf.Max(0f, 0.3f - _magnetTimer) * 2f;
+
+                Vector3 totalForce = toPlayerDir * pullStrength + spiralForce + Vector3.up * loft;
+                transform.position += totalForce * Time.deltaTime;
+
+                // Override bob when deep in magnet pull
+                if (proximity > 0.4f)
                     _startLocalPos = transform.localPosition;
             }
         }
@@ -108,11 +138,14 @@ public class Collectible : MonoBehaviour
             _halo.localScale = new Vector3(haloScale, 0.01f, haloScale);
         }
 
-        // Spin faster when being magnetized (excited coin!)
+        // Spin faster when being magnetized (excited coin!) with wobble
         if (_magnetActive)
         {
-            float extraSpin = Time.time * rotateSpeed * (1f + proximity * 2f);
-            transform.rotation = _baseRotation * Quaternion.Euler(90f, extraSpin, 0f);
+            float spinMultiplier = 1f + proximity * 4f + _magnetTimer * 3f; // accelerating frenzy
+            float extraSpin = Time.time * rotateSpeed * spinMultiplier;
+            // Add wobble on the tilt axis - coin tumbles as it spirals in
+            float wobble = Mathf.Sin(_magnetTimer * 15f) * proximity * 25f;
+            transform.rotation = _baseRotation * Quaternion.Euler(90f + wobble, extraSpin, wobble * 0.5f);
         }
     }
 
