@@ -65,6 +65,11 @@ public class ProceduralAudio : MonoBehaviour
     private AudioClip _dangerPing;
     private AudioSource _dangerSource; // dedicated source for pitch-shifting danger pings
 
+    // Drift grinding
+    private AudioClip _driftGrind;
+    private AudioSource _driftSource; // dedicated looping source for drift grinding
+    private float _driftVolTarget;
+
     // New feature sounds
     private AudioClip _zoneTransition;
     private AudioClip _flushSound;
@@ -136,6 +141,13 @@ public class ProceduralAudio : MonoBehaviour
         _dangerSource = gameObject.AddComponent<AudioSource>();
         _dangerSource.playOnAwake = false;
         _dangerSource.spatialBlend = 0f;
+
+        // Drift grinding source (looping, volume-controlled)
+        _driftSource = gameObject.AddComponent<AudioSource>();
+        _driftSource.playOnAwake = false;
+        _driftSource.spatialBlend = 0f;
+        _driftSource.loop = true;
+        _driftSource.volume = 0f;
 
         // Ambient audio sources (two for crossfading between zones)
         _ambientSource = gameObject.AddComponent<AudioSource>();
@@ -655,6 +667,20 @@ public class ProceduralAudio : MonoBehaviour
             return Mathf.Sin(2f * Mathf.PI * freq * t) * env * 0.4f;
         });
 
+        // Drift grind: loopable friction/scraping noise (filtered noise + resonance)
+        _driftGrind = GenerateClip("DriftGrind", 0.5f, (t, dur) =>
+        {
+            float noise = Random.Range(-1f, 1f);
+            // Band-pass around grinding frequency for metallic texture
+            float grindFreq = 220f + Mathf.Sin(t * 30f) * 80f;
+            float resonance = Mathf.Sin(2f * Mathf.PI * grindFreq * t) * 0.3f;
+            // Mix noise + resonance for gritty friction sound
+            float signal = noise * 0.2f + resonance;
+            // Seamless loop (fade edges slightly)
+            float loopEnv = Mathf.Sin(Mathf.PI * (t / dur));
+            return signal * loopEnv * 0.3f;
+        });
+
         // Background music: simple bass-driven loop
         GenerateBGM();
     }
@@ -804,6 +830,20 @@ public class ProceduralAudio : MonoBehaviour
         if (_dangerPing == null || _dangerSource == null) return;
         _dangerSource.pitch = Mathf.Clamp(pitch, 0.8f, 2f);
         _dangerSource.PlayOneShot(_dangerPing, masterVolume * sfxVolume * 0.5f);
+    }
+
+    /// <summary>Update drift grinding volume and pitch. Intensity 0=silent, 1=full grind.</summary>
+    public void UpdateDriftGrind(float intensity)
+    {
+        if (_driftSource == null || _driftGrind == null) return;
+        _driftVolTarget = intensity;
+        if (intensity > 0.01f && !_driftSource.isPlaying)
+        {
+            _driftSource.clip = _driftGrind;
+            _driftSource.Play();
+        }
+        // Pitch rises with intensity for urgency
+        _driftSource.pitch = Mathf.Lerp(0.8f, 1.4f, intensity);
     }
 
     public void PlayNearMiss() => PlaySFX(_nearMiss);
@@ -1023,6 +1063,15 @@ public class ProceduralAudio : MonoBehaviour
 
     void Update()
     {
+        // Smooth drift grind volume ramping
+        if (_driftSource != null)
+        {
+            float targetVol = _driftVolTarget * masterVolume * sfxVolume * 0.35f;
+            _driftSource.volume = Mathf.Lerp(_driftSource.volume, targetVol, Time.deltaTime * 8f);
+            if (_driftSource.volume < 0.005f && _driftSource.isPlaying && _driftVolTarget <= 0f)
+                _driftSource.Stop();
+        }
+
         if (_musicSource != null && _musicPlaying)
         {
             // Auto-poll player speed if available

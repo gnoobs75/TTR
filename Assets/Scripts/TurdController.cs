@@ -83,6 +83,7 @@ public class TurdController : MonoBehaviour
 
     // Water tracking
     private bool _wasInWater = false;
+    private bool _isDriftSparking = false;
 
     // Coin magnet
     private float _coinMagnetTimer = 0f;
@@ -253,6 +254,29 @@ public class TurdController : MonoBehaviour
         // Dampen angular velocity near pipe bottom to prevent overshoot
         if (Mathf.Abs(angleDelta) < 10f && Mathf.Abs(_steerInput) < 0.05f)
             _angularVelocity *= (1f - 6f * Time.deltaTime);
+
+        // === DRIFT SPARKS: friction feedback when steering hard ===
+        float absAngVel = Mathf.Abs(_angularVelocity);
+        float driftIntensity = Mathf.Clamp01((absAngVel - 25f) / 60f); // starts at 25 deg/s, full at 85
+        if (drifting) driftIntensity = Mathf.Max(driftIntensity, 0.7f); // always strong when counter-steering
+        driftIntensity *= Mathf.Clamp01(CurrentSpeed / 8f); // scale with forward speed
+
+        if (driftIntensity > 0.05f)
+        {
+            if (!_isDriftSparking)
+            {
+                _isDriftSparking = true;
+                ParticleManager.Instance?.StartDriftSparks(transform);
+            }
+            ParticleManager.Instance?.UpdateDriftSparks(driftIntensity);
+            ProceduralAudio.Instance?.UpdateDriftGrind(driftIntensity);
+        }
+        else if (_isDriftSparking)
+        {
+            _isDriftSparking = false;
+            ParticleManager.Instance?.StopDriftSparks();
+            ProceduralAudio.Instance?.UpdateDriftGrind(0f);
+        }
 
         // === FORK CHECK (visual only - tracks branch for spawn density) ===
         if (pipeGen != null)

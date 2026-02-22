@@ -48,6 +48,9 @@ public class ParticleManager : MonoBehaviour
     // Landing dust ring (puff on jump landing)
     private ParticleSystem _landingDust;
 
+    // Drift/graze sparks (friction against pipe wall during hard steering)
+    private ParticleSystem _driftSparks;
+
     // Zone-colored ambient motion trail
     private ParticleSystem _zoneTrail;
     private Color _zoneTrailTargetColor = new Color(0.6f, 0.55f, 0.45f, 0.5f);
@@ -133,6 +136,11 @@ public class ParticleManager : MonoBehaviour
         _wakeSpray = CreateTrail("WakeSpray",
             new Color(0.25f, 0.4f, 0.15f, 0.6f), new Color(0.2f, 0.35f, 0.1f, 0f),
             25, 2f, 0.7f, 0.08f);
+
+        // Drift sparks - orange/yellow friction sparks when steering hard
+        _driftSparks = CreateTrail("DriftSparks",
+            new Color(1f, 0.7f, 0.15f, 0.9f), new Color(1f, 0.4f, 0.05f, 0f),
+            60, 5f, 0.35f, 0.06f);
 
         // === NEW CREATURE HIT EFFECTS ===
 
@@ -532,6 +540,31 @@ public class ParticleManager : MonoBehaviour
         if (_coinMagnetTrail == null) return;
         _coinMagnetTrail.Stop();
         _coinMagnetTrail.transform.SetParent(transform);
+    }
+
+    // === DRIFT SPARKS ===
+    public void StartDriftSparks(Transform player)
+    {
+        if (_driftSparks == null) return;
+        _driftSparks.gameObject.SetActive(true);
+        _driftSparks.transform.SetParent(player);
+        _driftSparks.transform.localPosition = Vector3.down * 0.15f;
+        _driftSparks.Play();
+    }
+
+    public void StopDriftSparks()
+    {
+        if (_driftSparks == null) return;
+        _driftSparks.Stop();
+        _driftSparks.transform.SetParent(transform);
+    }
+
+    /// <summary>Update drift spark intensity based on angular velocity.</summary>
+    public void UpdateDriftSparks(float intensity)
+    {
+        if (_driftSparks == null) return;
+        var emission = _driftSparks.emission;
+        emission.rateOverTime = Mathf.Lerp(0f, 80f, intensity);
     }
 
     // === NEW CREATURE HIT VFX ===
