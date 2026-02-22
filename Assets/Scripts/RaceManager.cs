@@ -700,10 +700,18 @@ public class RaceManager : MonoBehaviour
                 e.finishTime = raceTime;
 
                 if (e.ai != null)
+                {
                     e.ai.OnFinish(raceTime);
+                    AnnounceAIFinish(e);
+                }
 
                 if (e.isPlayer)
+                {
                     OnPlayerFinished(e.finishPlace, raceTime);
+                    // Also populate the results panel
+                    if (finishLine != null)
+                        finishLine.OnRacerFinished(e.name, e.color, e.finishPlace, e.finishTime, true);
+                }
             }
 
             _entries[i] = e;
@@ -864,6 +872,48 @@ public class RaceManager : MonoBehaviour
             ProceduralAudio.Instance.PlayCelebration();
 
         HapticManager.HeavyTap();
+    }
+
+    // AI finish quips shown as floating text when each rival crosses the line
+    static readonly string[][] AI_FINISH_QUIPS = {
+        new[] { "WINNER!", "Champion of the Sewers!", "Flush Royalty!" },                  // 1st
+        new[] { "Runner Up!", "Almost Golden!", "Silver Flush!" },                         // 2nd
+        new[] { "Bronze Turd!", "Podium Plop!", "Third Wheel of Turds!" },                // 3rd
+        new[] { "Meh.", "At Least You Tried", "Participation Trophy" },                    // 4th
+        new[] { "Dead Last, LOL", "Bring a Map Next Time", "The Clog of Shame" },          // 5th
+    };
+
+    void AnnounceAIFinish(RacerEntry entry)
+    {
+        int placeIdx = Mathf.Clamp(entry.finishPlace - 1, 0, AI_FINISH_QUIPS.Length - 1);
+        string quip = AI_FINISH_QUIPS[placeIdx][Random.Range(0, AI_FINISH_QUIPS[placeIdx].Length)];
+
+        // Find the first finisher's time for time gap
+        float leaderTime = entry.finishTime;
+        foreach (var e in _entries)
+            if (e.isFinished && e.finishPlace == 1) { leaderTime = e.finishTime; break; }
+        float gap = entry.finishTime - leaderTime;
+        string gapStr = entry.finishPlace == 1 ? "" : $" (+{gap:F1}s)";
+
+        // Show floating announcement
+        if (ScorePopup.Instance != null && entry.transform != null)
+        {
+            Vector3 pos = entry.transform.position + Vector3.up * 2.5f;
+            ScorePopup.Instance.ShowMilestone(pos, $"{entry.name} - {entry.finishPlace}{GetOrdinal(entry.finishPlace)}{gapStr}");
+        }
+
+        // Show rival's personality quip when they finish
+        if (entry.ai != null && CheerOverlay.Instance != null)
+        {
+            string taunt = entry.finishPlace <= 2 ? entry.ai.GetPassTaunt() : quip;
+            CheerOverlay.Instance.ShowCheer($"{entry.name}: \"{taunt}\"", entry.color, false);
+        }
+
+        // Notify RaceFinish to show the individual result row
+        if (finishLine != null)
+            finishLine.OnRacerFinished(entry.name, entry.color, entry.finishPlace, entry.finishTime, entry.isPlayer);
+
+        HapticManager.LightTap();
     }
 
     void OnRaceComplete()
@@ -1076,7 +1126,15 @@ public class RaceManager : MonoBehaviour
                 e.finishPlace = _nextFinishPlace++;
                 e.finishTime = Time.time - _raceStartTime;
                 if (e.ai != null)
+                {
                     e.ai.OnFinish(e.finishTime);
+                    AnnounceAIFinish(e);
+                }
+                else if (e.isPlayer)
+                {
+                    if (finishLine != null)
+                        finishLine.OnRacerFinished(e.name, e.color, e.finishPlace, e.finishTime, true);
+                }
                 _entries[i] = e;
                 yield return new WaitForSeconds(0.3f);
             }

@@ -28,6 +28,21 @@ public class RaceFinish : MonoBehaviour
     private GameObject _podium3D;
     private ParticleSystem _confetti;
 
+    // Race results panel (all 5 racers)
+    private RectTransform _resultsRoot;
+    private CanvasGroup _resultsGroup;
+    private ResultRow[] _resultRows;
+    private int _nextResultRow;
+
+    struct ResultRow
+    {
+        public RectTransform root;
+        public Image bg;
+        public Text placeText;
+        public Text nameText;
+        public Text timeText;
+    }
+
     // Animation state
     private float _bannerShowTime;
     private Color _placeBaseColor;
@@ -71,11 +86,14 @@ public class RaceFinish : MonoBehaviour
 
         CreateBanner();
         CreatePodium();
+        CreateResultsPanel();
 
         // Hide everything initially
         _bannerGroup.alpha = 0f;
         _podiumGroup.alpha = 0f;
+        _resultsGroup.alpha = 0f;
         podiumRoot.gameObject.SetActive(false);
+        _resultsRoot.gameObject.SetActive(false);
     }
 
     void CreateBanner()
@@ -220,6 +238,188 @@ public class RaceFinish : MonoBehaviour
         }
     }
 
+    void CreateResultsPanel()
+    {
+        // Full race results panel - right side, shows all 5 racers as they finish
+        GameObject resObj = new GameObject("RaceResults");
+        _resultsRoot = resObj.AddComponent<RectTransform>();
+        _resultsRoot.SetParent(finishCanvas.transform, false);
+        _resultsRoot.anchorMin = new Vector2(0.60f, 0.30f);
+        _resultsRoot.anchorMax = new Vector2(0.98f, 0.70f);
+        _resultsRoot.offsetMin = Vector2.zero;
+        _resultsRoot.offsetMax = Vector2.zero;
+
+        _resultsGroup = resObj.AddComponent<CanvasGroup>();
+
+        // Background
+        Image resBg = resObj.AddComponent<Image>();
+        resBg.color = new Color(0.06f, 0.05f, 0.03f, 0.88f);
+
+        // Title: "RACE RESULTS"
+        GameObject resTitleObj = new GameObject("ResultsTitle");
+        RectTransform resTitleRect = resTitleObj.AddComponent<RectTransform>();
+        resTitleRect.SetParent(_resultsRoot, false);
+        resTitleRect.anchorMin = new Vector2(0.05f, 0.85f);
+        resTitleRect.anchorMax = new Vector2(0.95f, 0.98f);
+        resTitleRect.offsetMin = Vector2.zero;
+        resTitleRect.offsetMax = Vector2.zero;
+        Text resTitleText = resTitleObj.AddComponent<Text>();
+        resTitleText.font = Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
+        if (resTitleText.font == null) resTitleText.font = Resources.GetBuiltinResource<Font>("Arial.ttf");
+        resTitleText.fontSize = 18;
+        resTitleText.fontStyle = FontStyle.Bold;
+        resTitleText.alignment = TextAnchor.MiddleCenter;
+        resTitleText.color = GoldColor;
+        resTitleText.text = "RACE RESULTS";
+        Outline resTitleOutline = resTitleObj.AddComponent<Outline>();
+        resTitleOutline.effectColor = new Color(0, 0, 0, 0.9f);
+        resTitleOutline.effectDistance = new Vector2(1.5f, -1.5f);
+
+        // Create 5 result rows (one per racer)
+        _resultRows = new ResultRow[5];
+        _nextResultRow = 0;
+        for (int i = 0; i < 5; i++)
+        {
+            _resultRows[i] = CreateResultRow(_resultsRoot, i);
+        }
+    }
+
+    ResultRow CreateResultRow(RectTransform parent, int index)
+    {
+        ResultRow row = new ResultRow();
+        float rowHeight = 0.15f;
+        float yTop = 0.82f - index * (rowHeight + 0.02f);
+
+        GameObject rowObj = new GameObject($"ResultRow_{index}");
+        row.root = rowObj.AddComponent<RectTransform>();
+        row.root.SetParent(parent, false);
+        row.root.anchorMin = new Vector2(0.03f, yTop - rowHeight);
+        row.root.anchorMax = new Vector2(0.97f, yTop);
+        row.root.offsetMin = Vector2.zero;
+        row.root.offsetMax = Vector2.zero;
+
+        row.bg = rowObj.AddComponent<Image>();
+        row.bg.color = new Color(0.12f, 0.10f, 0.07f, 0f); // hidden initially
+
+        Font font = Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
+        if (font == null) font = Resources.GetBuiltinResource<Font>("Arial.ttf");
+
+        // Place number
+        GameObject plObj = new GameObject("Place");
+        RectTransform plRect = plObj.AddComponent<RectTransform>();
+        plRect.SetParent(row.root, false);
+        plRect.anchorMin = new Vector2(0f, 0f);
+        plRect.anchorMax = new Vector2(0.18f, 1f);
+        plRect.offsetMin = Vector2.zero;
+        plRect.offsetMax = Vector2.zero;
+        row.placeText = plObj.AddComponent<Text>();
+        row.placeText.font = font;
+        row.placeText.fontSize = 16;
+        row.placeText.fontStyle = FontStyle.Bold;
+        row.placeText.alignment = TextAnchor.MiddleCenter;
+        row.placeText.color = Color.clear;
+
+        // Racer name
+        GameObject nmObj = new GameObject("Name");
+        RectTransform nmRect = nmObj.AddComponent<RectTransform>();
+        nmRect.SetParent(row.root, false);
+        nmRect.anchorMin = new Vector2(0.20f, 0f);
+        nmRect.anchorMax = new Vector2(0.68f, 1f);
+        nmRect.offsetMin = Vector2.zero;
+        nmRect.offsetMax = Vector2.zero;
+        row.nameText = nmObj.AddComponent<Text>();
+        row.nameText.font = font;
+        row.nameText.fontSize = 14;
+        row.nameText.fontStyle = FontStyle.Bold;
+        row.nameText.alignment = TextAnchor.MiddleLeft;
+        row.nameText.color = Color.clear;
+
+        // Time
+        GameObject tmObj = new GameObject("Time");
+        RectTransform tmRect = tmObj.AddComponent<RectTransform>();
+        tmRect.SetParent(row.root, false);
+        tmRect.anchorMin = new Vector2(0.70f, 0f);
+        tmRect.anchorMax = new Vector2(1f, 1f);
+        tmRect.offsetMin = Vector2.zero;
+        tmRect.offsetMax = Vector2.zero;
+        row.timeText = tmObj.AddComponent<Text>();
+        row.timeText.font = font;
+        row.timeText.fontSize = 13;
+        row.timeText.alignment = TextAnchor.MiddleRight;
+        row.timeText.color = Color.clear;
+
+        return row;
+    }
+
+    /// <summary>Called when any racer finishes. Populates live results rows.</summary>
+    public void OnRacerFinished(string racerName, Color racerColor, int place, float time, bool isPlayer)
+    {
+        if (!_initialized) return;
+
+        // Show results panel on first finish
+        if (!_resultsRoot.gameObject.activeSelf)
+        {
+            _resultsRoot.gameObject.SetActive(true);
+            _resultsGroup.alpha = 1f;
+        }
+
+        if (_nextResultRow >= _resultRows.Length) return;
+        var row = _resultRows[_nextResultRow];
+
+        // Place color
+        Color placeColor = place == 1 ? GoldColor :
+                           place == 2 ? SilverColor :
+                           place == 3 ? BronzeColor : new Color(0.6f, 0.55f, 0.5f);
+
+        row.placeText.text = $"{place}{GetOrdinal(place)}";
+        row.placeText.color = placeColor;
+        row.nameText.text = racerName;
+        row.nameText.color = isPlayer ? GoldColor : Color.white;
+        row.bg.color = isPlayer
+            ? new Color(0.3f, 0.28f, 0.05f, 0.5f)
+            : new Color(0.12f, 0.10f, 0.07f, 0.6f);
+
+        // Show time gap from leader
+        if (place == 1)
+            row.timeText.text = $"{time:F1}s";
+        else
+        {
+            // Find leader time
+            float leaderTime = time;
+            for (int i = 0; i < _nextResultRow; i++)
+                if (_resultRows[i].placeText.text.StartsWith("1")) { leaderTime = 0; break; }
+            row.timeText.text = $"+{time - _firstFinishTime:F1}s";
+        }
+        row.timeText.color = new Color(0.75f, 0.75f, 0.7f);
+
+        // Track leader time
+        if (place == 1) _firstFinishTime = time;
+
+        // Elastic punch animation
+        StartCoroutine(ResultRowPunchAnimation(row.root));
+
+        _nextResultRow++;
+    }
+
+    private float _firstFinishTime;
+
+    IEnumerator ResultRowPunchAnimation(RectTransform rect)
+    {
+        float duration = 0.5f;
+        float elapsed = 0f;
+        rect.localScale = new Vector3(1.3f, 1.3f, 1f);
+        while (elapsed < duration)
+        {
+            elapsed += Time.deltaTime;
+            float t = elapsed / duration;
+            float elastic = Mathf.Pow(2f, -8f * t) * Mathf.Sin((t - 0.1f) * Mathf.PI * 2f / 0.35f);
+            float scale = 1f + elastic * 0.2f;
+            rect.localScale = new Vector3(scale, scale, 1f);
+            yield return null;
+        }
+        rect.localScale = Vector3.one;
+    }
+
     PodiumSlot CreatePodiumSlot(RectTransform parent, int visualIndex, float height, Color color, string label, float totalWidth)
     {
         PodiumSlot slot = new PodiumSlot();
@@ -324,7 +524,16 @@ public class RaceFinish : MonoBehaviour
                            place == 2 ? SilverColor :
                            place == 3 ? BronzeColor : Color.white;
 
-        _placeText.text = $"YOU FINISHED {place}{ordinal}!";
+        // Funny placement quips
+        string[] placeQuips = {
+            "KING OF THE SEWER!",
+            "ALMOST GOLDEN... TURD!",
+            "BRONZE IS JUST FANCY RUST!",
+            "YOU TRIED YOUR WORST!",
+            "LAST PLACE, BEST SMELL!"
+        };
+        string quip = placeQuips[Mathf.Clamp(place - 1, 0, placeQuips.Length - 1)];
+        _placeText.text = $"YOU FINISHED {place}{ordinal}!\n<size=16>{quip}</size>";
         _placeText.color = placeColor;
         _placeBaseColor = placeColor;
         _timeText.text = $"Time: {time:F1}s";
@@ -745,6 +954,22 @@ public class RaceFinish : MonoBehaviour
             _podiumSlots[i].nameText.text = "";
             _podiumSlots[i].timeText.text = "";
             _podiumSlots[i].colorSwatch.color = Color.clear;
+        }
+
+        // Reset results panel
+        _nextResultRow = 0;
+        _firstFinishTime = 0f;
+        if (_resultsRoot != null)
+        {
+            _resultsGroup.alpha = 0f;
+            _resultsRoot.gameObject.SetActive(false);
+            for (int i = 0; i < _resultRows.Length; i++)
+            {
+                _resultRows[i].placeText.color = Color.clear;
+                _resultRows[i].nameText.color = Color.clear;
+                _resultRows[i].timeText.color = Color.clear;
+                _resultRows[i].bg.color = new Color(0.12f, 0.10f, 0.07f, 0f);
+            }
         }
     }
 

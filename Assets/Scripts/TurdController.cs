@@ -708,6 +708,8 @@ public class TurdController : MonoBehaviour
         float originalMax = maxSpeed;
         maxSpeed *= multiplier;
         _currentSpeed *= multiplier;
+        _boostTimeRemaining = duration;
+        _boostDuration = duration;
 
         if (PipeCamera.Instance != null)
             PipeCamera.Instance.PunchFOV(6f);
@@ -719,10 +721,39 @@ public class TurdController : MonoBehaviour
         }
         if (ProceduralAudio.Instance != null)
             ProceduralAudio.Instance.PlaySpeedBoost();
+        if (ScreenEffects.Instance != null)
+        {
+            ScreenEffects.Instance.TriggerPowerUpFlash();
+            ScreenEffects.Instance.FlashSpeedStreaks(1.5f);
+        }
         HapticManager.MediumTap();
 
-        yield return new WaitForSeconds(duration);
+        // Tick down boost with visual feedback
+        float elapsed = 0f;
+        while (elapsed < duration)
+        {
+            elapsed += Time.deltaTime;
+            _boostTimeRemaining = duration - elapsed;
 
+            // Intensify exhaust trail color as boost winds down (cyan -> orange -> red)
+            float t = elapsed / duration;
+            if (ParticleManager.Instance != null)
+            {
+                Color exhaust = Color.Lerp(
+                    new Color(0f, 0.9f, 1f),   // cyan at start
+                    new Color(1f, 0.4f, 0.1f),  // fiery orange at end
+                    t);
+                ParticleManager.Instance.SetBoostTrailColor(exhaust);
+            }
+
+            // Speed streaks stay strong during boost
+            if (ScreenEffects.Instance != null && t < 0.8f)
+                ScreenEffects.Instance.FlashSpeedStreaks(0.8f);
+
+            yield return null;
+        }
+
+        _boostTimeRemaining = 0f;
         maxSpeed = originalMax;
         if (ParticleManager.Instance != null)
         {
@@ -730,6 +761,13 @@ public class TurdController : MonoBehaviour
             ParticleManager.Instance.StopSpeedLines();
         }
     }
+
+    // Boost state for HUD display
+    private float _boostTimeRemaining;
+    private float _boostDuration;
+    public float BoostTimeRemaining => _boostTimeRemaining;
+    public float BoostDuration => _boostDuration;
+    public bool IsBoosting => _boostTimeRemaining > 0f;
 
     // === VERTICAL DROP ===
 

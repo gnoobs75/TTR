@@ -583,6 +583,9 @@ public class SceneBootstrapper
 
         // Pause menu (mobile-critical)
         obj.AddComponent<PauseMenu>();
+
+        // Obstacle radar HUD (fades in at high speed)
+        obj.AddComponent<ObstacleRadar>();
     }
 
     // ===== WATER CREATURE SPAWNER =====

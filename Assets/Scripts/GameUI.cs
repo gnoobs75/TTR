@@ -173,6 +173,13 @@ public class GameUI : MonoBehaviour
     private int _quipIndex;
     private float _nextQuipTime;
 
+    // Boost timer bar
+    private RectTransform _boostBarBg;
+    private RectTransform _boostBarFill;
+    private Image _boostFillImage;
+    private Text _boostLabel;
+    private bool _boostBarCreated;
+
     private static readonly string[] StartQuips = {
         "\"Abandon hope, all ye who flush\"",
         "\"It's a dirty job, but someone's gotta race it\"",
@@ -234,6 +241,104 @@ public class GameUI : MonoBehaviour
         // Notify screen effects
         if (ScreenEffects.Instance != null)
             ScreenEffects.Instance.UpdateSpeed(speed);
+
+        // Update boost timer bar
+        UpdateBoostBar();
+    }
+
+    void CreateBoostBar()
+    {
+        if (_boostBarCreated) return;
+        _boostBarCreated = true;
+
+        Canvas canvas = GetComponentInParent<Canvas>();
+        if (canvas == null && ScreenEffects.Instance != null)
+            canvas = ScreenEffects.Instance.GetComponentInParent<Canvas>();
+        if (canvas == null) return;
+
+        Font font = Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
+        if (font == null) font = Font.CreateDynamicFontFromOSFont("Arial", 14);
+
+        // Boost bar background (bottom-center, above controls)
+        GameObject bgObj = new GameObject("BoostBarBg");
+        _boostBarBg = bgObj.AddComponent<RectTransform>();
+        _boostBarBg.SetParent(canvas.transform, false);
+        _boostBarBg.anchorMin = new Vector2(0.25f, 0.06f);
+        _boostBarBg.anchorMax = new Vector2(0.75f, 0.085f);
+        _boostBarBg.offsetMin = Vector2.zero;
+        _boostBarBg.offsetMax = Vector2.zero;
+
+        Image bgImg = bgObj.AddComponent<Image>();
+        bgImg.color = new Color(0.1f, 0.1f, 0.1f, 0.6f);
+
+        // Fill bar
+        GameObject fillObj = new GameObject("BoostFill");
+        _boostBarFill = fillObj.AddComponent<RectTransform>();
+        _boostBarFill.SetParent(_boostBarBg, false);
+        _boostBarFill.anchorMin = Vector2.zero;
+        _boostBarFill.anchorMax = Vector2.one;
+        _boostBarFill.offsetMin = Vector2.zero;
+        _boostBarFill.offsetMax = Vector2.zero;
+
+        _boostFillImage = fillObj.AddComponent<Image>();
+        _boostFillImage.color = new Color(0f, 0.9f, 1f, 0.8f);
+
+        // Label
+        GameObject labelObj = new GameObject("BoostLabel");
+        RectTransform lrt = labelObj.AddComponent<RectTransform>();
+        lrt.SetParent(_boostBarBg, false);
+        lrt.anchorMin = Vector2.zero;
+        lrt.anchorMax = Vector2.one;
+        lrt.offsetMin = Vector2.zero;
+        lrt.offsetMax = Vector2.zero;
+
+        _boostLabel = labelObj.AddComponent<Text>();
+        _boostLabel.font = font;
+        _boostLabel.fontSize = 12;
+        _boostLabel.alignment = TextAnchor.MiddleCenter;
+        _boostLabel.color = Color.white;
+        _boostLabel.text = "BOOST";
+        _boostLabel.fontStyle = FontStyle.Bold;
+
+        Outline lo = labelObj.AddComponent<Outline>();
+        lo.effectColor = new Color(0, 0, 0, 0.8f);
+        lo.effectDistance = new Vector2(1, -1);
+
+        bgObj.SetActive(false);
+    }
+
+    void UpdateBoostBar()
+    {
+        if (GameManager.Instance == null || GameManager.Instance.player == null) return;
+        TurdController tc = GameManager.Instance.player;
+        if (!tc.IsBoosting)
+        {
+            if (_boostBarBg != null && _boostBarBg.gameObject.activeSelf)
+                _boostBarBg.gameObject.SetActive(false);
+            return;
+        }
+
+        if (!_boostBarCreated) CreateBoostBar();
+        if (_boostBarBg == null) return;
+
+        _boostBarBg.gameObject.SetActive(true);
+        float pct = tc.BoostTimeRemaining / Mathf.Max(0.01f, tc.BoostDuration);
+        _boostBarFill.anchorMax = new Vector2(pct, 1f);
+
+        // Color: cyan at full -> orange at low -> red flashing at very low
+        Color barColor;
+        if (pct > 0.5f)
+            barColor = Color.Lerp(new Color(1f, 0.6f, 0f), new Color(0f, 0.9f, 1f), (pct - 0.5f) * 2f);
+        else if (pct > 0.2f)
+            barColor = Color.Lerp(new Color(1f, 0.3f, 0.1f), new Color(1f, 0.6f, 0f), (pct - 0.2f) / 0.3f);
+        else
+        {
+            barColor = new Color(1f, 0.2f, 0.1f);
+            // Flash warning when almost out
+            float flash = Mathf.Abs(Mathf.Sin(Time.time * 8f));
+            barColor = Color.Lerp(barColor, Color.white, flash * 0.3f);
+        }
+        _boostFillImage.color = barColor;
     }
 
     public void UpdateMultiplier(float mult)

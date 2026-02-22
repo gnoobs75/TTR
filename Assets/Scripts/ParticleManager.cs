@@ -418,6 +418,19 @@ public class ParticleManager : MonoBehaviour
         if (_boostTrail == null) return;
         _boostTrail.Stop();
         _boostTrail.transform.SetParent(transform);
+        // Reset to default cyan color
+        var main = _boostTrail.main;
+        main.startColor = new ParticleSystem.MinMaxGradient(
+            new Color(0f, 0.9f, 1f, 0.8f), new Color(0f, 0.4f, 1f, 0f));
+    }
+
+    public void SetBoostTrailColor(Color color)
+    {
+        if (_boostTrail == null) return;
+        var main = _boostTrail.main;
+        main.startColor = new ParticleSystem.MinMaxGradient(
+            new Color(color.r, color.g, color.b, 0.8f),
+            new Color(color.r * 0.6f, color.g * 0.6f, color.b * 0.6f, 0.4f));
     }
 
     // Per-obstacle hit VFX
