@@ -86,6 +86,7 @@ public class RacerAI : MonoBehaviour
     private float _finalStretchMult = 1f;
     private const float FINISH_DISTANCE = 1000f;
     private const float FINAL_STRETCH_START = 850f; // last 150m
+    private static bool _finalStretchAnnounced; // one-shot: first AI to sprint triggers player cue
 
     // Public accessors
     public float DistanceTraveled => _distanceAlongPath;
@@ -95,6 +96,7 @@ public class RacerAI : MonoBehaviour
 
     void Start()
     {
+        _finalStretchAnnounced = false; // reset per race
         _currentSpeed = baseSpeed * 0.5f; // start slow, accelerate
         if (pipeGen == null)
             pipeGen = Object.FindFirstObjectByType<PipeGenerator>();
@@ -366,6 +368,19 @@ public class RacerAI : MonoBehaviour
             float pushBase = 1.05f + aggression * 0.1f;
             float variance = (1f - consistency) * 0.08f;
             _finalStretchMult = pushBase + Random.Range(-variance, variance);
+
+            // First AI to sprint: telegraph to the player that rivals are pushing
+            if (!_finalStretchAnnounced)
+            {
+                _finalStretchAnnounced = true;
+                if (ScreenEffects.Instance != null)
+                    ScreenEffects.Instance.TriggerProximityWarning(); // red edge = danger
+                if (PipeCamera.Instance != null)
+                    PipeCamera.Instance.Shake(0.1f);
+                if (CheerOverlay.Instance != null)
+                    CheerOverlay.Instance.ShowCheer("RIVALS SPRINT!", new Color(1f, 0.4f, 0.2f), false);
+                HapticManager.LightTap();
+            }
         }
 
         // Ramp up as we approach the line

@@ -680,33 +680,54 @@ public class RaceFinish : MonoBehaviour
             // Punch animation per slot
             StartCoroutine(SlotPunchAnimation(slot.root));
 
+            // Escalating screen effects per reveal (3rd→2nd→1st = bigger each time)
+            float revealIntensity = (r + 1) / 3f; // 0.33, 0.66, 1.0
+            if (ScreenEffects.Instance != null)
+            {
+                // Vignette darkens as suspense builds
+                ScreenEffects.Instance.UpdateZoneVignette(
+                    new Color(0.1f, 0.08f, 0.03f), revealIntensity * 0.5f);
+            }
+
             // Escalating effects: bigger for higher placement
             if (i == 0)
             {
-                // 1st place reveal: extra fanfare
+                // 1st place reveal: maximum fanfare
                 if (ProceduralAudio.Instance != null)
                     ProceduralAudio.Instance.PlayCelebration();
                 if (PipeCamera.Instance != null)
-                    PipeCamera.Instance.Shake(0.2f);
+                {
+                    PipeCamera.Instance.Shake(0.3f);
+                    PipeCamera.Instance.PunchFOV(8f);
+                }
                 if (ScreenEffects.Instance != null)
+                {
                     ScreenEffects.Instance.TriggerMilestoneFlash();
+                    ScreenEffects.Instance.FlashSpeedStreaks(1.2f);
+                }
                 HapticManager.HeavyTap();
             }
             else if (i == 1)
             {
                 if (ProceduralAudio.Instance != null)
                     ProceduralAudio.Instance.PlayCoinCollect();
+                if (PipeCamera.Instance != null)
+                    PipeCamera.Instance.Shake(0.12f);
+                if (ScreenEffects.Instance != null)
+                    ScreenEffects.Instance.TriggerPowerUpFlash();
                 HapticManager.MediumTap();
             }
             else
             {
                 if (ProceduralAudio.Instance != null)
                     ProceduralAudio.Instance.PlayCoinCollect();
+                if (PipeCamera.Instance != null)
+                    PipeCamera.Instance.Shake(0.06f);
                 HapticManager.LightTap();
             }
 
             // Longer pause before 1st place reveal for suspense
-            yield return new WaitForSeconds(r == 1 ? 1.0f : 0.7f);
+            yield return new WaitForSeconds(r == 1 ? 1.2f : 0.8f);
         }
 
         // Start confetti after all revealed

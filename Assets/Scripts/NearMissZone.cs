@@ -96,11 +96,16 @@ public class NearMissZone : MonoBehaviour
                 int streakBonus = streak * 50;
                 GameManager.Instance.AddScore(streakBonus);
 
-                HapticManager.MediumTap();
+                // Milestone haptic: one tier above current streak tier
+                if (streak >= 10) HapticManager.HeavyTap();
+                else HapticManager.MediumTap();
             }
             else
             {
-                HapticManager.LightTap();
+                // Regular near-miss: escalating haptic with streak
+                if (streak >= 10) HapticManager.MediumTap();
+                else if (streak >= 5) HapticManager.MediumTap();
+                else HapticManager.LightTap();
             }
         }
     }
