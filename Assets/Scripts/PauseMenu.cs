@@ -19,6 +19,10 @@ public class PauseMenu : MonoBehaviour
     private Text _controlSchemeLabel;
     private Image _pauseButtonImage;
     private float _pauseButtonPulsePhase;
+    private CanvasGroup _pausePanelGroup;
+    private float _pauseFadeTimer;
+    private bool _pauseFadingIn;
+    private bool _pauseFadingOut;
 
     // Control scheme display
     private static readonly string[] SCHEME_NAMES = { "Touch Zones", "Swipe", "Tilt", "Keyboard" };
@@ -48,6 +52,42 @@ public class PauseMenu : MonoBehaviour
                 Color c = _pauseButtonImage.color;
                 c.a = alpha;
                 _pauseButtonImage.color = c;
+            }
+        }
+
+        // Pause panel fade-in animation (uses unscaledDeltaTime since TimeScale=0)
+        if (_pauseFadingIn && _pausePanelGroup != null)
+        {
+            _pauseFadeTimer += Time.unscaledDeltaTime;
+            float t = Mathf.Clamp01(_pauseFadeTimer / 0.3f);
+            _pausePanelGroup.alpha = t;
+            // Elastic scale: 0.85 → overshoot 1.05 → settle 1.0
+            float scale;
+            if (t < 0.6f)
+                scale = Mathf.Lerp(0.85f, 1.05f, t / 0.6f);
+            else
+                scale = Mathf.Lerp(1.05f, 1f, (t - 0.6f) / 0.4f);
+            _pausePanel.transform.localScale = Vector3.one * scale;
+            if (t >= 1f)
+            {
+                _pauseFadingIn = false;
+                _pausePanel.transform.localScale = Vector3.one;
+            }
+        }
+
+        // Pause panel fade-out animation
+        if (_pauseFadingOut && _pausePanelGroup != null)
+        {
+            _pauseFadeTimer += Time.unscaledDeltaTime;
+            float t = Mathf.Clamp01(_pauseFadeTimer / 0.2f);
+            _pausePanelGroup.alpha = 1f - t;
+            _pausePanel.transform.localScale = Vector3.one * (1f - t * 0.15f);
+            if (t >= 1f)
+            {
+                _pauseFadingOut = false;
+                _pausePanel.SetActive(false);
+                _pausePanelGroup.alpha = 1f;
+                _pausePanel.transform.localScale = Vector3.one;
             }
         }
 
@@ -119,6 +159,7 @@ public class PauseMenu : MonoBehaviour
 
         Image panelBg = _pausePanel.AddComponent<Image>();
         panelBg.color = new Color(0.03f, 0.05f, 0.02f, 0.92f);
+        _pausePanelGroup = _pausePanel.AddComponent<CanvasGroup>();
 
         // Title: "PIPE BLOCKED!"
         GameObject titleObj = new GameObject("PauseTitle");
@@ -311,7 +352,15 @@ public class PauseMenu : MonoBehaviour
         _savedTimeScale = Time.timeScale;
         Time.timeScale = 0f;
 
-        if (_pausePanel != null) _pausePanel.SetActive(true);
+        if (_pausePanel != null)
+        {
+            _pausePanel.SetActive(true);
+            if (_pausePanelGroup != null) _pausePanelGroup.alpha = 0f;
+            _pausePanel.transform.localScale = Vector3.one * 0.85f;
+            _pauseFadingIn = true;
+            _pauseFadingOut = false;
+            _pauseFadeTimer = 0f;
+        }
         if (_pauseButton != null) _pauseButton.SetActive(false);
 
         UpdateSchemeLabel();
@@ -329,7 +378,10 @@ public class PauseMenu : MonoBehaviour
         _isPaused = false;
         Time.timeScale = _savedTimeScale;
 
-        if (_pausePanel != null) _pausePanel.SetActive(false);
+        // Fade out pause panel instead of instant hide
+        _pauseFadingOut = true;
+        _pauseFadingIn = false;
+        _pauseFadeTimer = 0f;
         if (_pauseButton != null) _pauseButton.SetActive(true);
 
         AudioListener.pause = false;
@@ -347,6 +399,9 @@ public class PauseMenu : MonoBehaviour
         _isPaused = false;
         Time.timeScale = 1f;
         AudioListener.pause = false;
+        if (_pausePanel != null) _pausePanel.SetActive(false);
+        _pauseFadingIn = false;
+        _pauseFadingOut = false;
 
         // Fresh start energy!
         if (CheerOverlay.Instance != null)

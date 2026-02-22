@@ -62,7 +62,11 @@ public class GameUI : MonoBehaviour
             startPanel.SetActive(true);
 
         if (shopPanel != null)
+        {
             shopPanel.SetActive(false);
+            _shopCanvasGroup = shopPanel.GetComponent<CanvasGroup>();
+            if (_shopCanvasGroup == null) _shopCanvasGroup = shopPanel.AddComponent<CanvasGroup>();
+        }
 
         if (startButton != null)
             startButton.onClick.AddListener(OnStartClicked);
@@ -125,7 +129,14 @@ public class GameUI : MonoBehaviour
         HapticManager.LightTap();
         if (ProceduralAudio.Instance != null) ProceduralAudio.Instance.PlayUIClick();
         if (shopPanel != null)
+        {
             shopPanel.SetActive(true);
+            if (_shopCanvasGroup != null) _shopCanvasGroup.alpha = 0f;
+            shopPanel.transform.localScale = Vector3.one * 0.92f;
+            _shopFadingIn = true;
+            _shopFadingOut = false;
+            _shopFadeTimer = 0f;
+        }
         if (startPanel != null)
             startPanel.SetActive(false);
         UpdateWallet();
@@ -136,10 +147,9 @@ public class GameUI : MonoBehaviour
     {
         HapticManager.LightTap();
         if (ProceduralAudio.Instance != null) ProceduralAudio.Instance.PlayUIClick();
-        if (shopPanel != null)
-            shopPanel.SetActive(false);
-        if (startPanel != null)
-            startPanel.SetActive(true);
+        _shopFadingOut = true;
+        _shopFadingIn = false;
+        _shopFadeTimer = 0f;
         UpdateWallet();
     }
 
@@ -163,6 +173,12 @@ public class GameUI : MonoBehaviour
     private bool _gameOverAnimating;
     private bool _isNewHighScore;
     private float _newHighScorePhase;
+
+    // Shop panel animation
+    private CanvasGroup _shopCanvasGroup;
+    private float _shopFadeTimer;
+    private bool _shopFadingIn;
+    private bool _shopFadingOut;
 
     // Start screen animations
     private float _startPulsePhase;
@@ -900,6 +916,31 @@ public class GameUI : MonoBehaviour
             // Gentle breathing scale
             float breathe = 1f + Mathf.Sin(_newHighScorePhase * 3f) * 0.06f;
             highScoreText.transform.localScale = Vector3.one * breathe;
+        }
+
+        // Shop panel fade animation
+        if (_shopFadingIn && _shopCanvasGroup != null)
+        {
+            _shopFadeTimer += Time.deltaTime;
+            float st = Mathf.Clamp01(_shopFadeTimer / 0.3f);
+            _shopCanvasGroup.alpha = st;
+            shopPanel.transform.localScale = Vector3.one * Mathf.Lerp(0.92f, 1f, st);
+            if (st >= 1f) _shopFadingIn = false;
+        }
+        if (_shopFadingOut && _shopCanvasGroup != null)
+        {
+            _shopFadeTimer += Time.deltaTime;
+            float st = Mathf.Clamp01(_shopFadeTimer / 0.2f);
+            _shopCanvasGroup.alpha = 1f - st;
+            shopPanel.transform.localScale = Vector3.one * Mathf.Lerp(1f, 0.92f, st);
+            if (st >= 1f)
+            {
+                _shopFadingOut = false;
+                shopPanel.SetActive(false);
+                _shopCanvasGroup.alpha = 1f;
+                shopPanel.transform.localScale = Vector3.one;
+                if (startPanel != null) startPanel.SetActive(true);
+            }
         }
 
         // === START SCREEN ANIMATIONS ===

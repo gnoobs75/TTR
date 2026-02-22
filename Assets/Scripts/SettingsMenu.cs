@@ -29,6 +29,11 @@ public class SettingsMenu : MonoBehaviour
     private int _controlIndex;
     private static readonly string[] ControlNames = { "Touch Zones", "Swipe", "Tilt" };
 
+    private CanvasGroup _panelGroup;
+    private float _fadeTimer;
+    private bool _fadingIn;
+    private bool _fadingOut;
+
     void Start()
     {
         LoadSettings();
@@ -41,13 +46,26 @@ public class SettingsMenu : MonoBehaviour
         if (hapticToggle != null) hapticToggle.onValueChanged.AddListener(OnHapticChanged);
         if (closeButton != null) closeButton.onClick.AddListener(Close);
 
-        if (settingsPanel != null) settingsPanel.SetActive(false);
+        if (settingsPanel != null)
+        {
+            _panelGroup = settingsPanel.GetComponent<CanvasGroup>();
+            if (_panelGroup == null) _panelGroup = settingsPanel.AddComponent<CanvasGroup>();
+            settingsPanel.SetActive(false);
+        }
     }
 
     public void Open()
     {
         LoadSettings();
-        if (settingsPanel != null) settingsPanel.SetActive(true);
+        if (settingsPanel != null)
+        {
+            settingsPanel.SetActive(true);
+            if (_panelGroup != null) _panelGroup.alpha = 0f;
+            settingsPanel.transform.localScale = Vector3.one * 0.9f;
+            _fadingIn = true;
+            _fadingOut = false;
+            _fadeTimer = 0f;
+        }
         if (ProceduralAudio.Instance != null)
             ProceduralAudio.Instance.PlayUIClick();
         HapticManager.LightTap();
@@ -56,10 +74,39 @@ public class SettingsMenu : MonoBehaviour
     public void Close()
     {
         SaveSettings();
-        if (settingsPanel != null) settingsPanel.SetActive(false);
+        _fadingOut = true;
+        _fadingIn = false;
+        _fadeTimer = 0f;
         if (ProceduralAudio.Instance != null)
             ProceduralAudio.Instance.PlayUIClick();
         HapticManager.LightTap();
+    }
+
+    void Update()
+    {
+        if (_fadingIn && _panelGroup != null)
+        {
+            _fadeTimer += Time.unscaledDeltaTime;
+            float t = Mathf.Clamp01(_fadeTimer / 0.25f);
+            _panelGroup.alpha = t;
+            settingsPanel.transform.localScale = Vector3.one * Mathf.Lerp(0.9f, 1f, t);
+            if (t >= 1f) _fadingIn = false;
+        }
+
+        if (_fadingOut && _panelGroup != null)
+        {
+            _fadeTimer += Time.unscaledDeltaTime;
+            float t = Mathf.Clamp01(_fadeTimer / 0.2f);
+            _panelGroup.alpha = 1f - t;
+            settingsPanel.transform.localScale = Vector3.one * Mathf.Lerp(1f, 0.9f, t);
+            if (t >= 1f)
+            {
+                _fadingOut = false;
+                if (settingsPanel != null) settingsPanel.SetActive(false);
+                _panelGroup.alpha = 1f;
+                settingsPanel.transform.localScale = Vector3.one;
+            }
+        }
     }
 
     void LoadSettings()

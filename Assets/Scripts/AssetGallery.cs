@@ -54,6 +54,10 @@ public class AssetGallery : MonoBehaviour
     private float _orbitAngle = 0f;
     private float _orbitSpeed = 30f;
     private bool _showBackground = false;
+    private CanvasGroup _galleryGroup;
+    private float _fadeTimer;
+    private bool _fadingIn;
+    private bool _fadingOut;
 
     void Awake()
     {
@@ -79,11 +83,39 @@ public class AssetGallery : MonoBehaviour
         if (bgToggleButton != null)
             bgToggleButton.onClick.AddListener(ToggleBackground);
 
+        if (galleryPanel != null)
+        {
+            _galleryGroup = galleryPanel.GetComponent<CanvasGroup>();
+            if (_galleryGroup == null) _galleryGroup = galleryPanel.AddComponent<CanvasGroup>();
+        }
+
         Debug.Log($"TTR Gallery: Start() wired buttons, {_allAssets.Count} assets registered");
     }
 
     void Update()
     {
+        // Panel fade animations
+        if (_fadingIn && _galleryGroup != null)
+        {
+            _fadeTimer += Time.deltaTime;
+            float t = Mathf.Clamp01(_fadeTimer / 0.3f);
+            _galleryGroup.alpha = t;
+            galleryPanel.transform.localScale = Vector3.one * Mathf.Lerp(0.9f, 1f, t);
+            if (t >= 1f) _fadingIn = false;
+        }
+        if (_fadingOut && _galleryGroup != null)
+        {
+            _fadeTimer += Time.deltaTime;
+            float t = Mathf.Clamp01(_fadeTimer / 0.25f);
+            _galleryGroup.alpha = 1f - t;
+            galleryPanel.transform.localScale = Vector3.one * Mathf.Lerp(1f, 0.9f, t);
+            if (t >= 1f)
+            {
+                _fadingOut = false;
+                FinishClose();
+            }
+        }
+
         if (galleryPanel == null || !galleryPanel.activeSelf) return;
 
         _orbitAngle += _orbitSpeed * Time.deltaTime;
@@ -121,6 +153,11 @@ public class AssetGallery : MonoBehaviour
     {
         if (galleryPanel == null) return;
         galleryPanel.SetActive(true);
+        if (_galleryGroup != null) _galleryGroup.alpha = 0f;
+        galleryPanel.transform.localScale = Vector3.one * 0.9f;
+        _fadingIn = true;
+        _fadingOut = false;
+        _fadeTimer = 0f;
 
         if (Camera.main != null && Camera.main != galleryCamera)
         {
@@ -152,8 +189,24 @@ public class AssetGallery : MonoBehaviour
 
     public void Close()
     {
+        // Start fade-out, cleanup happens when fade completes
+        _fadingOut = true;
+        _fadingIn = false;
+        _fadeTimer = 0f;
+
+        if (ProceduralAudio.Instance != null)
+            ProceduralAudio.Instance.PlayUIClick();
+        HapticManager.LightTap();
+    }
+
+    void FinishClose()
+    {
         if (galleryPanel != null)
+        {
             galleryPanel.SetActive(false);
+            if (_galleryGroup != null) _galleryGroup.alpha = 1f;
+            galleryPanel.transform.localScale = Vector3.one;
+        }
 
         ClearInstance();
 
@@ -169,10 +222,6 @@ public class AssetGallery : MonoBehaviour
             var startPanel = GameManager.Instance.gameUI.startPanel;
             if (startPanel != null) startPanel.SetActive(true);
         }
-
-        if (ProceduralAudio.Instance != null)
-            ProceduralAudio.Instance.PlayUIClick();
-        HapticManager.LightTap();
     }
 
     public void FilterCategory(string category)
