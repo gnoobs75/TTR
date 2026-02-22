@@ -133,28 +133,31 @@ public class ComboSystem : MonoBehaviour
         if (lostCount >= 3 && ProceduralAudio.Instance != null)
             ProceduralAudio.Instance.PlayComboBreak();
 
-        // Sad feedback proportional to how big the lost combo was
-        if (lostCount >= 5)
+        // Feedback at every tier so losing even a small combo feels like something
+        if (lostCount >= 3)
         {
+            // Camera dip scales with combo size
             if (PipeCamera.Instance != null)
-                PipeCamera.Instance.PunchFOV(-2f - Mathf.Min(lostCount, 20) * 0.15f);
-            if (ScreenEffects.Instance != null)
-                ScreenEffects.Instance.TriggerHitFlash(new Color(0.3f, 0.3f, 0.4f)); // brief gray desaturation
+                PipeCamera.Instance.PunchFOV(-1.5f - Mathf.Min(lostCount, 20) * 0.15f);
 
-            // Poop crew mourns the lost combo
-            if (lostCount >= 10 && CheerOverlay.Instance != null)
-            {
-                string[] sadWords = { "NOOO!", "RIP COMBO", "WASTED" };
-                CheerOverlay.Instance.ShowCheer(
-                    sadWords[lostCount % sadWords.Length],
-                    new Color(0.5f, 0.4f, 0.6f), false);
-            }
-
-            // Haptic thud for lost combo
+            // Haptic thud at every lost combo (escalates)
             if (lostCount >= 10)
                 HapticManager.MediumTap();
             else
                 HapticManager.LightTap();
+        }
+
+        // Gray desaturation flash at 5+
+        if (lostCount >= 5 && ScreenEffects.Instance != null)
+            ScreenEffects.Instance.TriggerHitFlash(new Color(0.3f, 0.3f, 0.4f));
+
+        // Poop crew mourns the lost combo at 7+ (was 10)
+        if (lostCount >= 7 && CheerOverlay.Instance != null)
+        {
+            string[] sadWords = { "NOOO!", "RIP COMBO", "WASTED", "BRUH" };
+            CheerOverlay.Instance.ShowCheer(
+                sadWords[lostCount % sadWords.Length],
+                new Color(0.5f, 0.4f, 0.6f), lostCount >= 15);
         }
 
         ComboCount = 0;

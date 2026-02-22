@@ -277,12 +277,18 @@ public class PipeZoneSystem : MonoBehaviour
             // Cheer overlay for zone transitions
             if (CheerOverlay.Instance != null)
                 CheerOverlay.Instance.ShowCheer(zones[zoneIdx].name.ToUpper(), zones[zoneIdx].lightColor, zoneIdx >= 3);
-            // Camera rumble for zone transition (stronger in later zones)
+            // Camera rumble + FOV burst for zone transition (stronger in later zones)
             if (PipeCamera.Instance != null)
+            {
                 PipeCamera.Instance.Shake(0.2f + zoneIdx * 0.05f);
+                PipeCamera.Instance.PunchFOV(4f + zoneIdx * 1.5f);
+            }
             // Zone-colored screen flash instead of generic gold
             if (ScreenEffects.Instance != null)
                 ScreenEffects.Instance.TriggerZoneFlash(zones[zoneIdx].lightColor);
+            // Celebration particle burst at player position
+            if (ParticleManager.Instance != null && _tc != null)
+                ParticleManager.Instance.PlayCelebration(_tc.transform.position);
             HapticManager.MediumTap();
         }
     }

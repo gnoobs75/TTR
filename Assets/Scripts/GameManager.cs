@@ -258,6 +258,7 @@ public class GameManager : MonoBehaviour
                         player.transform.position + Vector3.up * 2.5f, "FORK AHEAD!");
                 if (ProceduralAudio.Instance != null)
                     ProceduralAudio.Instance.PlayForkWarning();
+                HapticManager.LightTap();
                 break;
             }
         }
