@@ -6828,6 +6828,8 @@ public class SceneBootstrapper
             TextAnchor.MiddleCenter, textColor,
             Vector2.zero, Vector2.one, true);
 
+        go.AddComponent<ButtonPressEffect>();
+
         return btn;
     }
 }

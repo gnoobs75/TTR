@@ -128,6 +128,7 @@ public class PauseMenu : MonoBehaviour
 
         Button pauseBtn = _pauseButton.AddComponent<Button>();
         pauseBtn.onClick.AddListener(Pause);
+        _pauseButton.AddComponent<ButtonPressEffect>();
 
         // Pause icon (two vertical bars)
         GameObject pauseIcon = new GameObject("PauseIcon");
@@ -252,6 +253,7 @@ public class PauseMenu : MonoBehaviour
         sbBg.color = new Color(0.2f, 0.18f, 0.15f, 0.8f);
         Button sbButton = schemeBtn.AddComponent<Button>();
         sbButton.onClick.AddListener(CycleControlScheme);
+        schemeBtn.AddComponent<ButtonPressEffect>();
 
         GameObject slObj = new GameObject("SchemeText");
         slObj.transform.SetParent(schemeBtn.transform, false);
@@ -305,6 +307,7 @@ public class PauseMenu : MonoBehaviour
 
         Button btn = btnObj.AddComponent<Button>();
         btn.onClick.AddListener(onClick);
+        btnObj.AddComponent<ButtonPressEffect>();
 
         GameObject textObj = new GameObject("Text");
         textObj.transform.SetParent(btnObj.transform, false);

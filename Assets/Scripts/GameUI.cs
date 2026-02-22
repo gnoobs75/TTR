@@ -56,7 +56,11 @@ public class GameUI : MonoBehaviour
     void Start()
     {
         if (gameOverPanel != null)
+        {
             gameOverPanel.SetActive(false);
+            _gameOverGroup = gameOverPanel.GetComponent<CanvasGroup>();
+            if (_gameOverGroup == null) _gameOverGroup = gameOverPanel.AddComponent<CanvasGroup>();
+        }
 
         if (startPanel != null)
             startPanel.SetActive(true);
@@ -173,6 +177,7 @@ public class GameUI : MonoBehaviour
     private bool _gameOverAnimating;
     private bool _isNewHighScore;
     private float _newHighScorePhase;
+    private CanvasGroup _gameOverGroup;
 
     // Shop panel animation
     private CanvasGroup _shopCanvasGroup;
@@ -896,10 +901,14 @@ public class GameUI : MonoBehaviour
                 else
                     scale = Mathf.Lerp(0.95f, 1f, (t - 0.7f) / 0.3f);
                 gameOverPanel.transform.localScale = Vector3.one * scale;
+                // Fade in alpha faster than scale (fully visible by 40% through animation)
+                if (_gameOverGroup != null)
+                    _gameOverGroup.alpha = Mathf.Clamp01(t / 0.4f);
             }
             else
             {
                 gameOverPanel.transform.localScale = Vector3.one;
+                if (_gameOverGroup != null) _gameOverGroup.alpha = 1f;
                 _gameOverAnimating = false;
             }
         }
@@ -1119,10 +1128,11 @@ public class GameUI : MonoBehaviour
         if (gameOverPanel != null)
         {
             gameOverPanel.SetActive(true);
-            // Start animated entrance
+            // Start animated entrance (scale + fade)
             _gameOverShowTime = Time.unscaledTime;
             _gameOverAnimating = true;
             gameOverPanel.transform.localScale = Vector3.one * 0.01f;
+            if (_gameOverGroup != null) _gameOverGroup.alpha = 0f;
         }
 
         if (finalScoreText != null)

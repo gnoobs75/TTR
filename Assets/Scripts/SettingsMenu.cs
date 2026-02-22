@@ -41,10 +41,25 @@ public class SettingsMenu : MonoBehaviour
         if (masterSlider != null) masterSlider.onValueChanged.AddListener(OnMasterChanged);
         if (sfxSlider != null) sfxSlider.onValueChanged.AddListener(OnSFXChanged);
         if (musicSlider != null) musicSlider.onValueChanged.AddListener(OnMusicChanged);
-        if (controlPrevButton != null) controlPrevButton.onClick.AddListener(PrevControl);
-        if (controlNextButton != null) controlNextButton.onClick.AddListener(NextControl);
+        if (controlPrevButton != null)
+        {
+            controlPrevButton.onClick.AddListener(PrevControl);
+            if (controlPrevButton.GetComponent<ButtonPressEffect>() == null)
+                controlPrevButton.gameObject.AddComponent<ButtonPressEffect>();
+        }
+        if (controlNextButton != null)
+        {
+            controlNextButton.onClick.AddListener(NextControl);
+            if (controlNextButton.GetComponent<ButtonPressEffect>() == null)
+                controlNextButton.gameObject.AddComponent<ButtonPressEffect>();
+        }
         if (hapticToggle != null) hapticToggle.onValueChanged.AddListener(OnHapticChanged);
-        if (closeButton != null) closeButton.onClick.AddListener(Close);
+        if (closeButton != null)
+        {
+            closeButton.onClick.AddListener(Close);
+            if (closeButton.GetComponent<ButtonPressEffect>() == null)
+                closeButton.gameObject.AddComponent<ButtonPressEffect>();
+        }
 
         if (settingsPanel != null)
         {
