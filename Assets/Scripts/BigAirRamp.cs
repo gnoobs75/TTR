@@ -77,6 +77,19 @@ public class BigAirRamp : MonoBehaviour
             if (ScorePopup.Instance != null)
                 ScorePopup.Instance.ShowMilestone(tc.transform.position + Vector3.up * 2f, "BIG AIR!");
 
+            // Poop crew hype for launch
+            if (CheerOverlay.Instance != null)
+                CheerOverlay.Instance.ShowCheer("YEET!", new Color(1f, 0.6f, 0.1f), true);
+
+            if (ScreenEffects.Instance != null)
+            {
+                ScreenEffects.Instance.TriggerPowerUpFlash();
+                ScreenEffects.Instance.FlashSpeedStreaks(1.0f);
+            }
+
+            if (ParticleManager.Instance != null)
+                ParticleManager.Instance.PlayCelebration(tc.transform.position);
+
             HapticManager.HeavyTap();
         }
     }

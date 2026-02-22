@@ -291,7 +291,26 @@ public class GameManager : MonoBehaviour
                         if (ScorePopup.Instance != null)
                             ScorePopup.Instance.Show(player.transform.position + Vector3.up * 1.5f, speedBonus);
                     }
-                    HapticManager.LightTap();
+
+                    // Escalating haptics + effects for higher tiers
+                    if (i >= 4)
+                    {
+                        HapticManager.HeavyTap();
+                        if (ScreenEffects.Instance != null)
+                            ScreenEffects.Instance.TriggerMilestoneFlash();
+                        if (ProceduralAudio.Instance != null)
+                            ProceduralAudio.Instance.PlayCelebration();
+                    }
+                    else if (i >= 2)
+                    {
+                        HapticManager.MediumTap();
+                        if (ScreenEffects.Instance != null)
+                            ScreenEffects.Instance.TriggerPowerUpFlash();
+                    }
+                    else
+                    {
+                        HapticManager.LightTap();
+                    }
                     break;
                 }
             }

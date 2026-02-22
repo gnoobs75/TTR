@@ -361,9 +361,37 @@ public class TurdController : MonoBehaviour
                         if (ScorePopup.Instance != null)
                             ScorePopup.Instance.ShowTrick(transform.position, trickName, bonus);
 
-                        // Freeze frame for juice
+                        // Poop crew goes nuts for tricks
+                        if (CheerOverlay.Instance != null)
+                        {
+                            string cheerWord = _tricksCompleted switch
+                            {
+                                1 => "SICK FLIP!",
+                                2 => "DOUBLE FLIP!",
+                                _ => "TRICKSTER!"
+                            };
+                            Color cheerCol = _tricksCompleted >= 2
+                                ? new Color(1f, 0.3f, 0.8f)  // hot pink for multi
+                                : new Color(0.3f, 1f, 0.5f);  // green for single
+                            CheerOverlay.Instance.ShowCheer(cheerWord, cheerCol, _tricksCompleted >= 2);
+                        }
+
+                        // Screen effects escalate with trick count
+                        if (ScreenEffects.Instance != null)
+                        {
+                            if (_tricksCompleted >= 2)
+                                ScreenEffects.Instance.TriggerMilestoneFlash();
+                            else
+                                ScreenEffects.Instance.TriggerPowerUpFlash();
+                        }
+
+                        // Celebration particles
+                        if (ParticleManager.Instance != null)
+                            ParticleManager.Instance.PlayCelebration(transform.position);
+
+                        // Freeze frame for juice (longer for multi-tricks)
                         if (GameManager.Instance != null)
-                            GameManager.Instance.TriggerFreezeFrame(0.06f);
+                            GameManager.Instance.TriggerFreezeFrame(_tricksCompleted >= 2 ? 0.1f : 0.06f);
 
                         HapticManager.HeavyTap();
                     }
