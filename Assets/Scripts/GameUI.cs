@@ -1376,6 +1376,13 @@ public class GameUI : MonoBehaviour
         if (SkinManager.Instance != null)
             SkinManager.Instance.ApplySkin(skinId);
         RefreshShopItems();
+
+        // Confirm skin equipped
+        if (CheerOverlay.Instance != null)
+            CheerOverlay.Instance.ShowCheer("DRIP!", new Color(0.4f, 0.9f, 1f), false);
+        if (ScreenEffects.Instance != null)
+            ScreenEffects.Instance.TriggerPowerUpFlash();
+        HapticManager.LightTap();
     }
 
     void OnBuySkin(string skinId)
@@ -1385,6 +1392,15 @@ public class GameUI : MonoBehaviour
             SkinManager.Instance.ApplySkin(skinId);
             UpdateWallet();
             RefreshShopItems();
+
+            // New skin celebration!
+            if (CheerOverlay.Instance != null)
+                CheerOverlay.Instance.ShowCheer("NEW LOOK!", new Color(1f, 0.7f, 0.9f), true);
+            if (ScreenEffects.Instance != null)
+                ScreenEffects.Instance.TriggerMilestoneFlash();
+            if (ProceduralAudio.Instance != null)
+                ProceduralAudio.Instance.PlayCelebration();
+            HapticManager.HeavyTap();
         }
     }
 

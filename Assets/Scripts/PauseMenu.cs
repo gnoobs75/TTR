@@ -348,6 +348,11 @@ public class PauseMenu : MonoBehaviour
         Time.timeScale = 1f;
         AudioListener.pause = false;
 
+        // Fresh start energy!
+        if (CheerOverlay.Instance != null)
+            CheerOverlay.Instance.ShowCheer("AGAIN!", new Color(1f, 0.6f, 0.2f), true);
+        HapticManager.MediumTap();
+
         if (GameManager.Instance != null)
             GameManager.Instance.RestartGame();
     }
