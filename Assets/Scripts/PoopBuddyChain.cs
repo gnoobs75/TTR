@@ -213,6 +213,17 @@ public class PoopBuddyChain : MonoBehaviour
             ScorePopup.Instance.ShowMilestone(
                 _tc != null ? _tc.transform.position + Vector3.up * 1.5f : Vector3.zero,
                 $"BUDDY x{_chain.Count}!");
+
+        // Poop crew celebrates new buddy
+        if (CheerOverlay.Instance != null)
+            CheerOverlay.Instance.ShowCheer("NEW BUDDY!", new Color(0.9f, 0.7f, 0.3f), _chain.Count >= 3);
+
+        if (ScreenEffects.Instance != null)
+            ScreenEffects.Instance.TriggerPowerUpFlash();
+
+        if (ParticleManager.Instance != null && _tc != null)
+            ParticleManager.Instance.PlayCelebration(_tc.transform.position);
+
         HapticManager.MediumTap();
 
         return true;

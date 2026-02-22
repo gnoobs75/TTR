@@ -603,6 +603,15 @@ public class TurdController : MonoBehaviour
         if (PipeCamera.Instance != null)
             PipeCamera.Instance.Recoil(0.35f);
 
+        // Poop crew sympathizes with the hit
+        if (CheerOverlay.Instance != null)
+        {
+            string[] hitWords = { "OUCH!", "EEK!", "OOF!", "YIKES!", "SPLAT!" };
+            CheerOverlay.Instance.ShowCheer(
+                hitWords[Random.Range(0, hitWords.Length)],
+                new Color(1f, 0.3f, 0.2f), false);
+        }
+
         // Reset multiplier
         if (GameManager.Instance != null)
             GameManager.Instance.OnPlayerHit();
@@ -1074,6 +1083,17 @@ public class TurdController : MonoBehaviour
             ParticleManager.Instance.PlayWaterSplash(transform.position);
             if (Camera.main != null)
                 ParticleManager.Instance.StartSpeedLines(Camera.main.transform);
+        }
+
+        // Poop crew goes WILD for the flush exit
+        if (CheerOverlay.Instance != null)
+            CheerOverlay.Instance.ShowCheer("FLUSH!!!", new Color(0.2f, 0.9f, 1f), true);
+
+        // Screen juice: milestone flash + speed streaks for maximum hype
+        if (ScreenEffects.Instance != null)
+        {
+            ScreenEffects.Instance.TriggerMilestoneFlash();
+            ScreenEffects.Instance.FlashSpeedStreaks(2.0f);
         }
 
         HapticManager.HeavyTap();
