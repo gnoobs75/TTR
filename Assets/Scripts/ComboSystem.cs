@@ -140,6 +140,21 @@ public class ComboSystem : MonoBehaviour
                 PipeCamera.Instance.PunchFOV(-2f - Mathf.Min(lostCount, 20) * 0.15f);
             if (ScreenEffects.Instance != null)
                 ScreenEffects.Instance.TriggerHitFlash(new Color(0.3f, 0.3f, 0.4f)); // brief gray desaturation
+
+            // Poop crew mourns the lost combo
+            if (lostCount >= 10 && CheerOverlay.Instance != null)
+            {
+                string[] sadWords = { "NOOO!", "RIP COMBO", "WASTED" };
+                CheerOverlay.Instance.ShowCheer(
+                    sadWords[lostCount % sadWords.Length],
+                    new Color(0.5f, 0.4f, 0.6f), false);
+            }
+
+            // Haptic thud for lost combo
+            if (lostCount >= 10)
+                HapticManager.MediumTap();
+            else
+                HapticManager.LightTap();
         }
 
         ComboCount = 0;

@@ -131,6 +131,14 @@ public class VerticalDrop : MonoBehaviour
         if (ParticleManager.Instance != null)
             ParticleManager.Instance.PlayWaterSplash(tc.transform.position);
 
+        // Poop crew reacts to the plunge
+        if (CheerOverlay.Instance != null)
+            CheerOverlay.Instance.ShowCheer("SPLOOSH!", new Color(0.2f, 0.8f, 0.5f), true);
+
+        // Underwater tint flash
+        if (ScreenEffects.Instance != null)
+            ScreenEffects.Instance.TriggerPowerUpFlash();
+
         HapticManager.HeavyTap();
     }
 

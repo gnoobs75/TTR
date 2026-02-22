@@ -106,9 +106,16 @@ public class SpeedBoost : MonoBehaviour
             if (ScorePopup.Instance != null)
                 ScorePopup.Instance.ShowMilestone(transform.position + Vector3.up * 1.5f, "SPEED BOOST!");
 
-            // Screen flash for boost pickup
+            // Screen flash + speed streaks for boost pickup
             if (ScreenEffects.Instance != null)
+            {
                 ScreenEffects.Instance.TriggerPowerUpFlash();
+                ScreenEffects.Instance.FlashSpeedStreaks(1.2f);
+            }
+
+            // Poop crew hype
+            if (CheerOverlay.Instance != null)
+                CheerOverlay.Instance.ShowCheer("ZOOM!", new Color(0.1f, 0.9f, 1f), false);
 
             // Camera punch
             if (PipeCamera.Instance != null)
