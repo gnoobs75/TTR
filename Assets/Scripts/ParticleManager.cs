@@ -407,6 +407,18 @@ public class ParticleManager : MonoBehaviour
 
     public void PlayNearMiss(Vector3 position)
     {
+        // Zone-tinted near-miss: blend default cyan with current zone light color
+        if (_nearMissStreak != null && PipeZoneSystem.Instance != null)
+        {
+            int zi = PipeZoneSystem.Instance.CurrentZoneIndex;
+            if (zi >= 2) // Tint in Toxic+ zones for atmosphere
+            {
+                Color zoneLight = PipeZoneSystem.Instance.zones[zi].lightColor;
+                Color tinted = Color.Lerp(new Color(0.3f, 1f, 0.9f), zoneLight, 0.35f);
+                var main = _nearMissStreak.main;
+                main.startColor = new ParticleSystem.MinMaxGradient(tinted, Color.Lerp(tinted, Color.white, 0.5f));
+            }
+        }
         PlayAt(_nearMissStreak, position);
     }
 

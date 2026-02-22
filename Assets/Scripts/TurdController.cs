@@ -611,10 +611,13 @@ public class TurdController : MonoBehaviour
         _hitPhaseTimer = 0f;
         maxSpeed = originalMax;
 
+        float recoveryStartSpeed = _currentSpeed;
         while (_hitPhaseTimer < recoveryDuration)
         {
-            // Gradually ramp speed back up
-            _currentSpeed = Mathf.Lerp(_currentSpeed, forwardSpeed, Time.deltaTime * 3f);
+            // Ease-out quadratic: fast initial snap, smooth settle
+            float t = _hitPhaseTimer / recoveryDuration;
+            float easeT = 1f - (1f - t) * (1f - t); // quadratic ease-out
+            _currentSpeed = Mathf.Lerp(recoveryStartSpeed, forwardSpeed, easeT);
             _hitPhaseTimer += Time.deltaTime;
             yield return null;
         }

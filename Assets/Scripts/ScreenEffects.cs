@@ -690,7 +690,15 @@ public class ScreenEffects : MonoBehaviour
         // Speed streaks: radial lines at high speed
         _speedStreakIntensity = Mathf.Lerp(_speedStreakIntensity, t, Time.deltaTime * 4f);
         // Film grain: starts at moderate speed, intensifies
-        float grainTarget = Mathf.Clamp01((currentSpeed - 9f) / 8f); // kicks in earlier than other effects
+        // Zone baseline: deeper zones have grittier baseline grain
+        float zoneGrainBoost = 0f;
+        if (PipeZoneSystem.Instance != null)
+        {
+            int zi = PipeZoneSystem.Instance.CurrentZoneIndex;
+            // Porcelain=0, Grimy=0.05, Toxic=0.15, Rusty=0.2, Hellsewer=0.3
+            zoneGrainBoost = zi * 0.075f;
+        }
+        float grainTarget = Mathf.Clamp01((currentSpeed - 9f) / 8f) + zoneGrainBoost;
         _grainIntensity = Mathf.Lerp(_grainIntensity, grainTarget, Time.deltaTime * 3f);
         // Speed chromatic: subtle sustained aberration at very high speed
         _speedChromaticTarget = Mathf.Lerp(_speedChromaticTarget, t * 0.4f, Time.deltaTime * 3f);
