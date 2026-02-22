@@ -472,7 +472,22 @@ public class TurdController : MonoBehaviour
         // === INVINCIBILITY FLASH ===
         if (_hitState == HitState.Invincible && _renderers != null)
         {
-            bool visible = Mathf.Sin(Time.time * flashSpeed * Mathf.PI) > 0f;
+            float t = Time.time;
+            float remaining = _hitPhaseDuration > 0f ? 1f - (_hitPhaseTimer / _hitPhaseDuration) : 1f;
+
+            // Multi-frequency flash: primary + secondary beat for organic feel
+            float freq = flashSpeed;
+            // Speed up flashing as invincibility expires (warning)
+            if (remaining < 0.35f)
+                freq *= Mathf.Lerp(3f, 1f, remaining / 0.35f);
+
+            float wave = Mathf.Sin(t * freq * Mathf.PI)
+                       + Mathf.Sin(t * freq * 0.7f * Mathf.PI) * 0.3f;
+
+            // Random glitch frames (5% chance per frame, only in middle of duration)
+            bool glitch = remaining > 0.2f && remaining < 0.8f && Random.value < 0.05f;
+            bool visible = glitch ? !(_renderers[0] != null && _renderers[0].enabled) : wave > 0f;
+
             foreach (var r in _renderers)
             {
                 if (r != null)

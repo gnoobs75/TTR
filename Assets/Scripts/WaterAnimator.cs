@@ -83,11 +83,11 @@ public class WaterAnimator : MonoBehaviour
     private float _zoneDebrisMult = 1f;   // debris spawn rate per zone
     // Per-zone profiles: [waveMult, bubbleMult, debrisMult]
     private static readonly float[][] ZoneWaterProfiles = {
-        new[] { 0.8f,  0.6f, 0.5f },  // Porcelain: calm, clean
+        new[] { 0.7f,  0.5f, 0.4f },  // Porcelain: calm, nearly still
         new[] { 1.0f,  1.0f, 1.0f },  // Grimy: baseline
-        new[] { 1.2f,  1.8f, 1.3f },  // Toxic: choppy, lots of bubbles
-        new[] { 1.1f,  0.8f, 1.5f },  // Rusty: moderate waves, lots of debris
-        new[] { 1.5f,  2.5f, 1.8f },  // Hellsewer: violent, boiling
+        new[] { 1.4f,  2.2f, 1.5f },  // Toxic: choppy, bubbling toxic stew
+        new[] { 1.3f,  1.0f, 2.0f },  // Rusty: industrial churn, debris-heavy
+        new[] { 2.0f,  3.5f, 2.5f },  // Hellsewer: violent boiling chaos
     };
 
     // Floating debris
@@ -271,13 +271,16 @@ public class WaterAnimator : MonoBehaviour
             mesh.uv = scrolledUVs;
             mesh.RecalculateNormals();
 
-            // Enhanced shimmer - pulsing green with occasional bright flickers
+            // Enhanced shimmer - zone-scaled glow with bubble flickers
             var mr = data.filter.GetComponent<MeshRenderer>();
             if (mr != null && mr.material != null)
             {
-                float shimmer = 0.06f + Mathf.Sin(_time * 2.5f) * 0.025f;
-                // Occasional bright flicker (sludge bubble pop glow)
-                float flicker = Mathf.Max(0, Mathf.Sin(_time * 17f) - 0.92f) * 5f * 0.04f;
+                float shimmerBase = 0.06f * _zoneBubbleMult; // brighter in toxic/hell zones
+                float shimmer = shimmerBase + Mathf.Sin(_time * 2.5f) * 0.03f * _zoneBubbleMult;
+                // Bubble pop flicker (more frequent in later zones)
+                float flickerFreq = 17f + _zoneBubbleMult * 5f;
+                float flickerThresh = Mathf.Lerp(0.92f, 0.85f, (_zoneBubbleMult - 1f) / 2.5f);
+                float flicker = Mathf.Max(0, Mathf.Sin(_time * flickerFreq) - flickerThresh) * 5f * 0.05f;
                 shimmer += flicker;
                 mr.material.SetColor("_EmissionColor",
                     new Color(shimmer, shimmer * 1.6f, shimmer * 0.5f));

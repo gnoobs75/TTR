@@ -53,6 +53,31 @@ public class JumpRamp : MonoBehaviour
         if (tc != null)
         {
             tc.LaunchJump(launchHeight, arcDuration);
+
+            // Launch juice
+            if (ProceduralAudio.Instance != null)
+                ProceduralAudio.Instance.PlayJumpLaunch();
+
+            if (PipeCamera.Instance != null)
+            {
+                PipeCamera.Instance.PunchFOV(5f);
+                PipeCamera.Instance.Shake(0.12f);
+            }
+
+            if (ScreenEffects.Instance != null)
+                ScreenEffects.Instance.FlashSpeedStreaks(0.8f);
+
+            if (ParticleManager.Instance != null)
+                ParticleManager.Instance.PlayLandingDust(transform.position);
+
+            HapticManager.MediumTap();
+
+            // Flash arrows bright on launch
+            foreach (var r in _arrowRenderers)
+            {
+                if (r != null && r.material != null)
+                    r.material.SetColor("_EmissionColor", Color.white * 8f);
+            }
         }
     }
 }
