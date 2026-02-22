@@ -61,6 +61,10 @@ public class ProceduralAudio : MonoBehaviour
     private AudioClip _waterSplosh;  // comic water entry
     private AudioClip _waterPloop;   // comic water exit
 
+    // Proximity warning
+    private AudioClip _dangerPing;
+    private AudioSource _dangerSource; // dedicated source for pitch-shifting danger pings
+
     // New feature sounds
     private AudioClip _zoneTransition;
     private AudioClip _flushSound;
@@ -127,6 +131,11 @@ public class ProceduralAudio : MonoBehaviour
         _musicSource.playOnAwake = false;
         _musicSource.spatialBlend = 0f;
         _musicSource.loop = true;
+
+        // Danger ping source (separate so pitch shifts don't affect SFX)
+        _dangerSource = gameObject.AddComponent<AudioSource>();
+        _dangerSource.playOnAwake = false;
+        _dangerSource.spatialBlend = 0f;
 
         // Ambient audio sources (two for crossfading between zones)
         _ambientSource = gameObject.AddComponent<AudioSource>();
@@ -637,6 +646,15 @@ public class ProceduralAudio : MonoBehaviour
             return signal * noteEnv * 0.35f;
         });
 
+        // Danger ping: short urgent beep that rises in pitch (sonar-like)
+        _dangerPing = GenerateClip("DangerPing", 0.08f, (t, dur) =>
+        {
+            float prog = t / dur;
+            float freq = Mathf.Lerp(600f, 900f, prog); // rising chirp
+            float env = Mathf.Sin(Mathf.PI * prog);     // smooth bell envelope
+            return Mathf.Sin(2f * Mathf.PI * freq * t) * env * 0.4f;
+        });
+
         // Background music: simple bass-driven loop
         GenerateBGM();
     }
@@ -780,6 +798,14 @@ public class ProceduralAudio : MonoBehaviour
         else
             PlaySFX(_flushSound); // fall back to procedural flush
     }
+    /// <summary>Play danger proximity ping. Pitch 1.0=far, up to 1.8=very close.</summary>
+    public void PlayDangerPing(float pitch = 1f)
+    {
+        if (_dangerPing == null || _dangerSource == null) return;
+        _dangerSource.pitch = Mathf.Clamp(pitch, 0.8f, 2f);
+        _dangerSource.PlayOneShot(_dangerPing, masterVolume * sfxVolume * 0.5f);
+    }
+
     public void PlayNearMiss() => PlaySFX(_nearMiss);
     public void PlaySpeedBoost() => PlaySFX(_speedBoost);
     public void PlayGameOver() => PlaySFX(_gameOver);

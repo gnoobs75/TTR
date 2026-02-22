@@ -22,10 +22,13 @@ public class ObstacleRadar : MonoBehaviour
     private TurdController _tc;
     private PipeGenerator _pipeGen;
 
-    // Proximity warning
-    private float _dangerWarningCooldown;
-    private const float DANGER_DIST = 6f;      // meters: triggers warning
-    private const float DANGER_SPEED = 12f;     // m/s: must be going fast
+    // Proximity warning - escalating beeps + haptics
+    private float _closestObstacleDist = float.MaxValue;
+    private float _pingCooldown;
+    private float _lastPingDist;
+    private int _lastHapticTier; // 0=none, 1=light, 2=medium, 3=heavy
+    private const float WARNING_RANGE = 15f;   // start pinging at 15m
+    private const float WARNING_SPEED = 6f;    // lower threshold: warn at moderate speed too
 
     void Awake()
     {
@@ -122,12 +125,68 @@ public class ObstacleRadar : MonoBehaviour
 
         _radarBgImage.color = new Color(0.05f, 0.08f, 0.04f, 0.4f * _radarAlpha);
 
-        // Scan for obstacles periodically (every 0.15s for performance)
+        // Scan for obstacles periodically (every 0.1s for responsiveness)
         _scanTimer -= Time.deltaTime;
         if (_scanTimer <= 0f)
         {
-            _scanTimer = 0.15f;
+            _scanTimer = 0.1f;
             ScanObstacles();
+        }
+
+        // Escalating proximity warning (runs every frame for smooth timing)
+        UpdateProximityWarning(speed);
+    }
+
+    void UpdateProximityWarning(float speed)
+    {
+        if (_closestObstacleDist >= WARNING_RANGE || speed < WARNING_SPEED)
+        {
+            _lastHapticTier = 0;
+            return;
+        }
+
+        _pingCooldown -= Time.deltaTime;
+
+        // Urgency: 0 at 15m → 1 at 0m
+        float urgency = 1f - (_closestObstacleDist / WARNING_RANGE);
+        urgency *= urgency; // quadratic: ramps up aggressively as distance closes
+
+        // Speed scaling: warnings are more frequent at higher speed
+        float speedFactor = Mathf.Clamp01((speed - WARNING_SPEED) / 8f) * 0.4f + 0.6f;
+
+        // Ping interval: 0.6s at edge → 0.08s at point-blank
+        float pingInterval = Mathf.Lerp(0.6f, 0.08f, urgency) / speedFactor;
+
+        if (_pingCooldown <= 0f)
+        {
+            _pingCooldown = pingInterval;
+
+            // Audio ping with rising pitch
+            float pitch = Mathf.Lerp(0.9f, 1.8f, urgency);
+            if (ProceduralAudio.Instance != null)
+                ProceduralAudio.Instance.PlayDangerPing(pitch);
+
+            // Tiered haptic feedback
+            int hapticTier;
+            if (_closestObstacleDist < 4f) hapticTier = 3;       // CLOSE: heavy
+            else if (_closestObstacleDist < 8f) hapticTier = 2;  // MEDIUM
+            else hapticTier = 1;                                   // FAR: light
+
+            // Only fire haptic when tier escalates or on heavy-tier pings
+            if (hapticTier > _lastHapticTier || hapticTier == 3)
+            {
+                switch (hapticTier)
+                {
+                    case 1: HapticManager.LightTap(); break;
+                    case 2: HapticManager.MediumTap(); break;
+                    case 3: HapticManager.HeavyTap(); break;
+                }
+            }
+            _lastHapticTier = hapticTier;
+
+            // Screen-edge danger flash at close range
+            if (_closestObstacleDist < 6f && ScreenEffects.Instance != null)
+                ScreenEffects.Instance.TriggerProximityWarning();
         }
     }
 
@@ -200,14 +259,7 @@ public class ObstacleRadar : MonoBehaviour
         for (int i = blipIdx; i < MAX_BLIPS; i++)
             _blips[i].color = new Color(1f, 0.3f, 0.15f, 0f);
 
-        // Proximity warning: red edge flash when obstacle is dangerously close at speed
-        _dangerWarningCooldown -= 0.15f; // scan interval
-        if (closestAhead < DANGER_DIST && speed >= DANGER_SPEED && _dangerWarningCooldown <= 0f)
-        {
-            _dangerWarningCooldown = 0.8f; // don't spam warnings
-            if (ScreenEffects.Instance != null)
-                ScreenEffects.Instance.TriggerProximityWarning();
-            HapticManager.LightTap();
-        }
+        // Update closest obstacle distance for continuous proximity warning
+        _closestObstacleDist = closestAhead;
     }
 }
