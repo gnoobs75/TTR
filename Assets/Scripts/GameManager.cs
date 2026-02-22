@@ -337,6 +337,29 @@ public class GameManager : MonoBehaviour
         _isGameOver = true;
         _gameOverTime = Time.time;
 
+        // Dramatic death freeze
+        TriggerFreezeFrame(0.12f);
+
+        // Death explosion effects at player position
+        if (player != null)
+        {
+            Vector3 deathPos = player.transform.position;
+            if (PipeCamera.Instance != null)
+            {
+                PipeCamera.Instance.Shake(0.6f);
+                PipeCamera.Instance.PunchFOV(-8f);
+                PipeCamera.Instance.Recoil(0.5f);
+            }
+            if (ScreenEffects.Instance != null)
+            {
+                ScreenEffects.Instance.TriggerHitFlash(new Color(0.6f, 0.3f, 0.05f));
+                ScreenEffects.Instance.TriggerSplatter(new Color(0.4f, 0.25f, 0.1f));
+            }
+            if (ParticleManager.Instance != null)
+                ParticleManager.Instance.PlayDeathExplosion(deathPos);
+            HapticManager.HeavyTap();
+        }
+
         distanceTraveled = player.DistanceTraveled;
         int finalScore = score + Mathf.FloorToInt(distanceTraveled * scorePerMeter);
 

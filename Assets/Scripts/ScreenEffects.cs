@@ -58,6 +58,10 @@ public class ScreenEffects : MonoBehaviour
 
     // Impact splatter (cracks/splat on heavy hits)
     private Image _splatter;
+
+    // Invincibility shimmer (golden edge pulse during i-frames)
+    private Image _invincShimmer;
+    private float _invincShimmerAlpha;
     private float _splatterAlpha;
     private Color _splatterColor = Color.white;
     private float _splatterDecay = 1.5f; // seconds to fully fade
@@ -127,6 +131,10 @@ public class ScreenEffects : MonoBehaviour
         // Impact splatter - radial cracks on heavy hits
         _splatter = CreateOverlay("Splatter", new Color(1, 1, 1, 0));
         ApplySplatterTexture(_splatter);
+
+        // Invincibility shimmer - golden vignette glow during i-frames
+        _invincShimmer = CreateOverlay("InvincShimmer", new Color(1f, 0.85f, 0.2f, 0f));
+        ApplyInvincShimmerTexture(_invincShimmer);
     }
 
     void ApplyVignetteTexture(Image img)
@@ -328,6 +336,37 @@ public class ScreenEffects : MonoBehaviour
         img.preserveAspect = false;
     }
 
+    void ApplyInvincShimmerTexture(Image img)
+    {
+        if (img == null) return;
+        int size = 128;
+        Texture2D tex = new Texture2D(size, size, TextureFormat.RGBA32, false);
+        float half = size * 0.5f;
+
+        for (int y = 0; y < size; y++)
+        {
+            for (int x = 0; x < size; x++)
+            {
+                float dx = (x - half) / half;
+                float dy = (y - half) / half;
+                float dist = Mathf.Sqrt(dx * dx + dy * dy);
+
+                // Edge glow: visible only near screen edges (like a protective aura)
+                float edgeX = Mathf.Max(0f, Mathf.Abs(dx) - 0.65f) / 0.35f;
+                float edgeY = Mathf.Max(0f, Mathf.Abs(dy) - 0.65f) / 0.35f;
+                float edge = Mathf.Max(edgeX, edgeY);
+                edge = edge * edge; // quadratic for soft falloff
+
+                tex.SetPixel(x, y, new Color(1f, 0.9f, 0.3f, Mathf.Clamp01(edge * 0.8f)));
+            }
+        }
+        tex.Apply();
+        Sprite spr = Sprite.Create(tex, new Rect(0, 0, size, size), new Vector2(0.5f, 0.5f));
+        img.sprite = spr;
+        img.type = Image.Type.Simple;
+        img.preserveAspect = false;
+    }
+
     Image CreateOverlay(string name, Color color)
     {
         GameObject obj = new GameObject(name);
@@ -492,6 +531,26 @@ public class ScreenEffects : MonoBehaviour
             _splatter.color = new Color(1f, 1f, 1f, 0f);
         }
 
+        // Invincibility shimmer - golden edge glow during i-frames
+        if (_invincShimmerAlpha > 0.005f && _invincShimmer != null)
+        {
+            // Pulsing golden aura at screen edges
+            float shimPulse = 0.6f + Mathf.Sin(Time.time * 4.5f) * 0.3f
+                                   + Mathf.Sin(Time.time * 7.2f) * 0.1f;
+            float shimAlpha = _invincShimmerAlpha * shimPulse;
+            // Color shifts from gold to slightly white for sparkle
+            float sparkle = Mathf.Sin(Time.time * 12f) * 0.5f + 0.5f;
+            Color shimColor = Color.Lerp(
+                new Color(1f, 0.85f, 0.2f, shimAlpha * 0.35f),
+                new Color(1f, 1f, 0.7f, shimAlpha * 0.5f),
+                sparkle * 0.3f);
+            _invincShimmer.color = shimColor;
+        }
+        else if (_invincShimmer != null)
+        {
+            _invincShimmer.color = new Color(1f, 0.85f, 0.2f, 0f);
+        }
+
         // Underwater tint - murky green with caustic ripple
         if (_underwaterIntensity > 0.001f)
         {
@@ -530,11 +589,18 @@ public class ScreenEffects : MonoBehaviour
         Invoke(nameof(ResetFlashColor), 0.4f);
     }
 
+    /// <summary>Set invincibility shimmer intensity (0-1). Call with 1 when entering i-frames, 0 when done.</summary>
+    public void SetInvincShimmer(float intensity)
+    {
+        _invincShimmerAlpha = Mathf.Clamp01(intensity);
+    }
+
     /// <summary>Brief yellow flash for invincibility end.</summary>
     public void TriggerInvincibilityFlash()
     {
         _hitFlashAlpha = 0.2f;
         _hitFlashColor = new Color(1f, 0.9f, 0.2f, 0.4f);
+        _invincShimmerAlpha = 0f; // clear shimmer on invincibility end
         // Reset color after use
         Invoke(nameof(ResetFlashColor), 0.3f);
     }

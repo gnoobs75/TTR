@@ -42,6 +42,12 @@ public class ParticleManager : MonoBehaviour
     private ParticleSystem _stinkCloud;
     private ParticleSystem _sewerFlies;
 
+    // Death explosion (big burst on game over / race crash)
+    private ParticleSystem _deathExplosion;
+
+    // Landing dust ring (puff on jump landing)
+    private ParticleSystem _landingDust;
+
     // Zone-colored ambient motion trail
     private ParticleSystem _zoneTrail;
     private Color _zoneTrailTargetColor = new Color(0.6f, 0.55f, 0.45f, 0.5f);
@@ -107,6 +113,16 @@ public class ParticleManager : MonoBehaviour
         _coinMagnetTrail = CreateTrail("CoinMagnetTrail",
             new Color(1f, 0.85f, 0.1f, 0.9f), new Color(1f, 0.6f, 0f, 0f),
             30, 2f, 0.5f, 0.06f);
+
+        // Death explosion - massive brown burst on game over
+        _deathExplosion = CreateBurst("DeathExplosion",
+            new Color(0.45f, 0.3f, 0.1f), new Color(0.2f, 0.12f, 0.05f),
+            60, 10f, 1.2f, 0.35f);
+
+        // Landing dust - quick small puff on jump landings
+        _landingDust = CreateBurst("LandingDust",
+            new Color(0.5f, 0.45f, 0.35f, 0.5f), new Color(0.35f, 0.3f, 0.25f, 0.2f),
+            12, 3f, 0.4f, 0.08f);
 
         // Water splash burst
         _waterSplash = CreateBurst("WaterSplash",
@@ -442,6 +458,8 @@ public class ParticleManager : MonoBehaviour
 
     public void PlayCelebration(Vector3 position) => PlayAt(_celebration, position);
     public void PlayWaterSplash(Vector3 position) => PlayAt(_waterSplash, position);
+    public void PlayDeathExplosion(Vector3 position) => PlayAt(_deathExplosion, position);
+    public void PlayLandingDust(Vector3 position) => PlayAt(_landingDust, position);
 
     public void UpdateDustMotes(Vector3 playerPos)
     {

@@ -365,11 +365,18 @@ public class TurdController : MonoBehaviour
                     }
                     else
                     {
-                        // Normal landing impact
+                        // Normal landing impact - weighty thud
                         if (PipeCamera.Instance != null)
-                            PipeCamera.Instance.Shake(0.2f);
-                        HapticManager.LightTap();
+                        {
+                            PipeCamera.Instance.Shake(0.15f);
+                            PipeCamera.Instance.PunchFOV(-2f); // brief squish on impact
+                        }
+                        HapticManager.MediumTap();
                     }
+
+                    // Landing dust burst at feet
+                    if (ParticleManager.Instance != null)
+                        ParticleManager.Instance.PlayLandingDust(transform.position);
 
                     if (ProceduralAudio.Instance != null)
                         ProceduralAudio.Instance.PlayObstacleHit();
@@ -512,6 +519,10 @@ public class TurdController : MonoBehaviour
         if (ComboSystem.Instance != null)
             ComboSystem.Instance.ResetCombo();
 
+        // Hitstop freeze frame for that crunchy impact feel
+        if (GameManager.Instance != null)
+            GameManager.Instance.TriggerFreezeFrame(0.07f);
+
         // Camera juice
         if (PipeCamera.Instance != null)
         {
@@ -584,6 +595,11 @@ public class TurdController : MonoBehaviour
 
         // === INVINCIBILITY PHASE ===
         _hitState = HitState.Invincible;
+
+        // Golden shimmer during i-frames so player knows they're protected
+        if (ScreenEffects.Instance != null)
+            ScreenEffects.Instance.SetInvincShimmer(1f);
+
         yield return new WaitForSeconds(invincibilityDuration);
 
         // Ensure all renderers visible
@@ -593,7 +609,7 @@ public class TurdController : MonoBehaviour
                 if (r != null) r.enabled = true;
         }
 
-        // Flash to indicate invincibility ending
+        // Flash to indicate invincibility ending + clear shimmer
         if (ScreenEffects.Instance != null)
             ScreenEffects.Instance.TriggerInvincibilityFlash();
 
