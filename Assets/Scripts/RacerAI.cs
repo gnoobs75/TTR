@@ -423,6 +423,24 @@ public class RacerAI : MonoBehaviour
         _distanceAlongPath = offset;
     }
 
+    // === PERSONALITY TAUNTS ===
+    [HideInInspector] public string[] passQuips;    // said when passing the player
+    [HideInInspector] public string[] passedQuips;  // said when player passes them
+
+    /// <summary>Get a taunt when this racer passes the player.</summary>
+    public string GetPassTaunt()
+    {
+        if (passQuips == null || passQuips.Length == 0) return "";
+        return passQuips[Random.Range(0, passQuips.Length)];
+    }
+
+    /// <summary>Get a reaction when the player passes this racer.</summary>
+    public string GetPassedReaction()
+    {
+        if (passedQuips == null || passedQuips.Length == 0) return "";
+        return passedQuips[Random.Range(0, passedQuips.Length)];
+    }
+
     // === RACER PERSONALITY PRESETS ===
 
     public static void ApplyPreset(RacerAI ai, string preset)
@@ -444,6 +462,8 @@ public class RacerAI : MonoBehaviour
                 ai.rubberBandDistance = 8f; // kicks in sooner
                 // Thrives in grimy/rusty zones, struggles in clean porcelain
                 ai.zoneAffinities = new float[] { 0.94f, 1.06f, 0.98f, 1.08f, 1.02f };
+                ai.passQuips = new[] { "Later, loser!", "Eat my skidmarks!", "Too slow, corn boy!", "Outta my way!" };
+                ai.passedQuips = new[] { "Hey! No fair!", "I'll get you back!", "Lucky shot!", "That was a fluke!" };
                 break;
 
             case "PrincessPlop":
@@ -462,6 +482,8 @@ public class RacerAI : MonoBehaviour
                 ai.rubberBandDistance = 8f;
                 // Princess of the porcelain throne - excels in clean zones, hates filth
                 ai.zoneAffinities = new float[] { 1.08f, 1.02f, 0.95f, 0.93f, 0.90f };
+                ai.passQuips = new[] { "Excuse me, peasant!", "Make way for royalty!", "Toodles!", "A princess always leads!" };
+                ai.passedQuips = new[] { "How DARE you!", "This is unbecoming!", "Hmph!", "I'll allow it... for now." };
                 break;
 
             case "TheLog":
@@ -479,6 +501,8 @@ public class RacerAI : MonoBehaviour
                 ai.rubberBandDistance = 10f;
                 // Ancient sewer dweller - gets stronger deeper in, Hellsewer is home turf
                 ai.zoneAffinities = new float[] { 0.92f, 0.96f, 1.02f, 1.06f, 1.12f };
+                ai.passQuips = new[] { "Slow and steady...", "The Log abides.", "You cannot rush the Log.", "Ancient wisdom prevails." };
+                ai.passedQuips = new[] { "No rush...", "I'll catch up.", "Patience...", "The race is long." };
                 break;
 
             case "LilSquirt":
@@ -497,6 +521,8 @@ public class RacerAI : MonoBehaviour
                 ai.rubberBandDistance = 6f; // rubber-bands very aggressively
                 // Toxic little gremlin - loves the toxic zone, fragile in hellsewer
                 ai.zoneAffinities = new float[] { 1.02f, 1.0f, 1.10f, 0.97f, 0.88f };
+                ai.passQuips = new[] { "WHEEE!", "Zoom zoom!", "Can't catch me!", "Squirty speed!" };
+                ai.passedQuips = new[] { "NOOOO!", "Wait up!", "Aw man!", "I'll be back!" };
                 break;
         }
     }

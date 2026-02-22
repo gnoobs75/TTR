@@ -55,6 +55,10 @@ public class GameManager : MonoBehaviour
     // Fork approach warning
     private PipeFork _warnedFork;
 
+    // Near-miss streak (consecutive dodges without getting hit)
+    private int _nearMissStreak;
+    public int NearMissStreak => _nearMissStreak;
+
     // Speed milestones (one-shot announcements when hitting speed thresholds)
     private int _speedMilestoneReached = -1;
     private static readonly float[] SpeedThresholds = { 9f, 11f, 13f };
@@ -299,6 +303,7 @@ public class GameManager : MonoBehaviour
     {
         _multiplier = Mathf.Max(1f, _multiplier * multiplierDecayOnHit);
         _multiplierTimer = 0f;
+        _nearMissStreak = 0; // reset dodge streak on hit
     }
 
     public void TriggerFreezeFrame(float duration = 0.08f)
@@ -316,6 +321,7 @@ public class GameManager : MonoBehaviour
     public void RecordNearMiss()
     {
         _runNearMisses++;
+        _nearMissStreak++;
     }
 
     public void RecordCombo(int comboCount)

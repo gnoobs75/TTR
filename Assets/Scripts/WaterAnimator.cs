@@ -77,6 +77,19 @@ public class WaterAnimator : MonoBehaviour
     private bool _wasInWaterLocal = false;
     private float _waterEntryTime = 0f;
 
+    // Zone-reactive water parameters (multiplied into base wave/particle settings)
+    private float _zoneWaveMult = 1f;     // wave amplitude multiplier per zone
+    private float _zoneBubbleMult = 1f;   // bubble rate multiplier per zone
+    private float _zoneDebrisMult = 1f;   // debris spawn rate per zone
+    // Per-zone profiles: [waveMult, bubbleMult, debrisMult]
+    private static readonly float[][] ZoneWaterProfiles = {
+        new[] { 0.8f,  0.6f, 0.5f },  // Porcelain: calm, clean
+        new[] { 1.0f,  1.0f, 1.0f },  // Grimy: baseline
+        new[] { 1.2f,  1.8f, 1.3f },  // Toxic: choppy, lots of bubbles
+        new[] { 1.1f,  0.8f, 1.5f },  // Rusty: moderate waves, lots of debris
+        new[] { 1.5f,  2.5f, 1.8f },  // Hellsewer: violent, boiling
+    };
+
     // Floating debris
     struct DebrisObj
     {
@@ -150,6 +163,22 @@ public class WaterAnimator : MonoBehaviour
             ScanForWaterMeshes();
         }
 
+        // Zone-reactive water parameters (smooth transitions)
+        if (PipeZoneSystem.Instance != null)
+        {
+            int zi = PipeZoneSystem.Instance.CurrentZoneIndex;
+            float blend = PipeZoneSystem.Instance.ZoneBlend;
+            int ni = Mathf.Min(zi + 1, ZoneWaterProfiles.Length - 1);
+            float[] curr = ZoneWaterProfiles[Mathf.Clamp(zi, 0, ZoneWaterProfiles.Length - 1)];
+            float[] next = ZoneWaterProfiles[ni];
+            float targetWave = Mathf.Lerp(curr[0], next[0], blend);
+            float targetBubble = Mathf.Lerp(curr[1], next[1], blend);
+            float targetDebris = Mathf.Lerp(curr[2], next[2], blend);
+            _zoneWaveMult = Mathf.Lerp(_zoneWaveMult, targetWave, Time.deltaTime * 2f);
+            _zoneBubbleMult = Mathf.Lerp(_zoneBubbleMult, targetBubble, Time.deltaTime * 2f);
+            _zoneDebrisMult = Mathf.Lerp(_zoneDebrisMult, targetDebris, Time.deltaTime * 2f);
+        }
+
         AnimateWaterMeshes();
         HandleSplash();
         UpdateDebris();
@@ -215,9 +244,10 @@ public class WaterAnimator : MonoBehaviour
             {
                 Vector3 worldPos = tf.TransformPoint(verts[i]);
 
-                // Primary wave - big slow swell
+                // Primary wave - big slow swell (zone-scaled)
+                float zoneAmp = waveAmplitude * _zoneWaveMult;
                 float wave1 = Mathf.Sin(worldPos.x * waveFrequency + _time * waveSpeed * 2f)
-                              * waveAmplitude;
+                              * zoneAmp;
                 // Secondary wave - choppier
                 float wave2 = Mathf.Sin(worldPos.z * secondaryWaveFreq + _time * waveSpeed * 3.5f)
                               * secondaryWaveAmp;
@@ -296,11 +326,12 @@ public class WaterAnimator : MonoBehaviour
 
         float playerDist = _tc.DistanceTraveled;
 
-        // Spawn new debris
+        // Spawn new debris (zone-scaled rate - more debris in dirtier zones)
         _debrisSpawnTimer -= Time.deltaTime;
+        float zoneInterval = debrisSpawnInterval / Mathf.Max(0.3f, _zoneDebrisMult);
         if (_debrisSpawnTimer <= 0f && _debris.Count < maxDebris)
         {
-            _debrisSpawnTimer = debrisSpawnInterval;
+            _debrisSpawnTimer = zoneInterval;
             SpawnDebris(playerDist);
         }
 
@@ -482,11 +513,13 @@ public class WaterAnimator : MonoBehaviour
         float waterHeight = -pipeRadius * 0.82f;
         Vector3 waterCenter = center + up * waterHeight;
 
-        // Foam follows player along water edges
+        // Foam follows player along water edges (zone-scaled rate)
         if (_foamPS != null)
         {
             _foamPS.transform.position = waterCenter + forward * 3f;
             _foamPS.transform.rotation = Quaternion.LookRotation(forward, up);
+            var foamEmission = _foamPS.emission;
+            foamEmission.rateOverTime = foamRate * _zoneBubbleMult;
             if (!_foamPS.isPlaying)
             {
                 _foamPS.gameObject.SetActive(true);
@@ -494,10 +527,12 @@ public class WaterAnimator : MonoBehaviour
             }
         }
 
-        // Bubbles pop up from water ahead of player
+        // Bubbles pop up from water ahead of player (zone-scaled rate)
         if (_bubblePS != null)
         {
             _bubblePS.transform.position = waterCenter + forward * 5f;
+            var bubbleEmission = _bubblePS.emission;
+            bubbleEmission.rateOverTime = bubbleRate * _zoneBubbleMult;
             if (!_bubblePS.isPlaying)
             {
                 _bubblePS.gameObject.SetActive(true);

@@ -742,6 +742,17 @@ public class RaceManager : MonoBehaviour
                         if (ScreenEffects.Instance != null)
                             ScreenEffects.Instance.TriggerMilestoneFlash();
 
+                        // Rival personality reaction (they got passed!)
+                        RacerAI passedAI = GetRacerAIAtPosition(e.position + 1);
+                        if (passedAI != null)
+                        {
+                            string reaction = passedAI.GetPassedReaction();
+                            if (reaction.Length > 0 && ScorePopup.Instance != null)
+                                ScorePopup.Instance.Show(reaction,
+                                    passedAI.transform.position + Vector3.up * 2.5f,
+                                    ScorePopup.PopupType.Milestone, 1.5f);
+                        }
+
                         HapticManager.MediumTap();
 
                         // Taking 1st place is a BIG deal
@@ -756,13 +767,16 @@ public class RaceManager : MonoBehaviour
                     }
                     else
                     {
-                        // Player dropped position - show who passed them
-                        string passerName = GetRacerNameAtPosition(e.position - 1);
-                        string quip = LOSE_QUIPS[Random.Range(0, LOSE_QUIPS.Length)];
+                        // Player dropped position - show who passed them with personality taunt
+                        RacerAI passerAI = GetRacerAIAtPosition(e.position - 1);
+                        string passerName = passerAI != null ? passerAI.racerName : GetRacerNameAtPosition(e.position - 1);
+                        string taunt = passerAI != null ? passerAI.GetPassTaunt() : "";
+                        string quip = taunt.Length > 0 ? taunt : LOSE_QUIPS[Random.Range(0, LOSE_QUIPS.Length)];
+
                         if (ScorePopup.Instance != null && playerController != null && passerName.Length > 0)
                             ScorePopup.Instance.ShowMilestone(
                                 playerController.transform.position + Vector3.up * 2f,
-                                passerName + " PASSES YOU!");
+                                passerName + ": \"" + quip + "\"");
                         if (PipeCamera.Instance != null)
                             PipeCamera.Instance.Shake(0.15f);
                         if (ProceduralAudio.Instance != null)
@@ -771,10 +785,10 @@ public class RaceManager : MonoBehaviour
                         // Show animated DOWN arrow
                         ShowPositionChangeArrow(false);
 
-                        // CheerOverlay reacts to being passed
+                        // CheerOverlay shows the taunt
                         if (CheerOverlay.Instance != null)
                             CheerOverlay.Instance.ShowCheer(quip,
-                                new Color(1f, 0.4f, 0.2f), false);
+                                passerAI != null ? passerAI.racerColor : new Color(1f, 0.4f, 0.2f), false);
 
                         HapticManager.LightTap();
                     }
@@ -1318,6 +1332,14 @@ public class RaceManager : MonoBehaviour
         foreach (var e in _entries)
             if (e.position == pos) return e.name;
         return "";
+    }
+
+    /// <summary>Get the RacerAI at a given race position (null for player).</summary>
+    public RacerAI GetRacerAIAtPosition(int pos)
+    {
+        foreach (var e in _entries)
+            if (e.position == pos && e.ai != null) return e.ai;
+        return null;
     }
 
     static string GetOrdinal(int n)
