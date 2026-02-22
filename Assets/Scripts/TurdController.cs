@@ -803,9 +803,34 @@ public class TurdController : MonoBehaviour
             if (ScreenEffects.Instance != null && t < 0.8f)
                 ScreenEffects.Instance.FlashSpeedStreaks(0.8f);
 
+            // Boost winding down warning: pulses in last 20%
+            if (t >= 0.8f)
+            {
+                float windDown = (t - 0.8f) / 0.2f; // 0→1 over final 20%
+                // Pulsing orange edge flash that accelerates
+                float pulseRate = Mathf.Lerp(3f, 8f, windDown);
+                float pulse = Mathf.Sin(Time.time * pulseRate * Mathf.PI);
+                if (pulse > 0.7f && ScreenEffects.Instance != null)
+                    ScreenEffects.Instance.TriggerProximityWarning(); // orange edge pulse
+
+                // One-shot warning at exactly 80% elapsed
+                if (!_boostWarningFired)
+                {
+                    _boostWarningFired = true;
+                    HapticManager.LightTap();
+                    if (ProceduralAudio.Instance != null)
+                        ProceduralAudio.Instance.PlayComboBreak(); // descending tone = "losing power"
+                }
+
+                // Stutter the speed lines to suggest fading power
+                if (ScreenEffects.Instance != null && pulse > 0f)
+                    ScreenEffects.Instance.FlashSpeedStreaks(0.3f * (1f - windDown));
+            }
+
             yield return null;
         }
 
+        _boostWarningFired = false;
         _boostTimeRemaining = 0f;
         maxSpeed = originalMax;
         if (ParticleManager.Instance != null)
@@ -813,11 +838,17 @@ public class TurdController : MonoBehaviour
             ParticleManager.Instance.StopBoostTrail();
             ParticleManager.Instance.StopSpeedLines();
         }
+
+        // Final haptic + subtle FOV dip when boost ends
+        HapticManager.MediumTap();
+        if (PipeCamera.Instance != null)
+            PipeCamera.Instance.PunchFOV(-3f);
     }
 
     // Boost state for HUD display
     private float _boostTimeRemaining;
     private float _boostDuration;
+    private bool _boostWarningFired;
     public float BoostTimeRemaining => _boostTimeRemaining;
     public float BoostDuration => _boostDuration;
     public bool IsBoosting => _boostTimeRemaining > 0f;

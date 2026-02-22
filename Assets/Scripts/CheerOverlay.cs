@@ -219,19 +219,50 @@ public class CheerOverlay : MonoBehaviour
             rrt.sizeDelta = new Vector2(rrt.sizeDelta.x, lidH);
         }
 
-        // === PUPILS ===
+        // === PUPILS (player-aware gaze) ===
         p.pupilTimer -= dt;
         if (p.pupilTimer <= 0f)
         {
-            p.pupilTarget = new Vector2(Random.Range(-1.5f, 1.5f), Random.Range(-1f, 1f));
-            p.pupilTimer = Random.Range(0.8f, 2.5f);
+            // Decide gaze target: 50% look at camera (player), 25% look at neighbor poop, 25% random
+            float roll = Random.value;
+            if (roll < 0.50f)
+            {
+                // Look toward screen center-bottom (where action happens)
+                // Bias X toward center of screen relative to this poop's position
+                float screenX = POS_X[i];
+                float toCenter = (0.5f - screenX) * 2.5f; // pull toward center
+                p.pupilTarget = new Vector2(
+                    Mathf.Clamp(toCenter + Random.Range(-0.3f, 0.3f), -1.5f, 1.5f),
+                    Random.Range(0.5f, 1.2f)); // look slightly upward (at the game)
+            }
+            else if (roll < 0.75f && COUNT > 1)
+            {
+                // Glance at a neighbor poop
+                int neighbor = (i + (Random.value < 0.5f ? 1 : -1) + COUNT) % COUNT;
+                float nX = POS_X[neighbor];
+                float myX = POS_X[i];
+                p.pupilTarget = new Vector2(
+                    Mathf.Clamp((nX - myX) * 6f, -1.5f, 1.5f),
+                    Random.Range(-0.5f, 0.3f));
+            }
+            else
+            {
+                // Random idle wander
+                p.pupilTarget = new Vector2(Random.Range(-1.5f, 1.5f), Random.Range(-1f, 1f));
+            }
+
+            // Excited poops shift gaze faster (more alert)
+            p.pupilTimer = Mathf.Lerp(Random.Range(0.8f, 2.5f), Random.Range(0.3f, 0.8f), p.excitement);
         }
+
+        // Faster tracking when excited
+        float trackSpeed = Mathf.Lerp(6f, 14f, p.excitement);
         if (p.leftPupilRt != null)
             p.leftPupilRt.anchoredPosition = Vector2.Lerp(
-                p.leftPupilRt.anchoredPosition, p.pupilTarget, dt * 6f);
+                p.leftPupilRt.anchoredPosition, p.pupilTarget, dt * trackSpeed);
         if (p.rightPupilRt != null)
             p.rightPupilRt.anchoredPosition = Vector2.Lerp(
-                p.rightPupilRt.anchoredPosition, p.pupilTarget, dt * 6f);
+                p.rightPupilRt.anchoredPosition, p.pupilTarget, dt * trackSpeed);
 
         // === MOUTH ===
         if (p.mouthRt != null)

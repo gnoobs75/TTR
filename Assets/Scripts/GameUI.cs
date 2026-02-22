@@ -204,6 +204,7 @@ public class GameUI : MonoBehaviour
     private RectTransform _forkLeftArrow;
     private RectTransform _forkRightArrow;
     private bool _forkArrowsCreated;
+    private bool _forkArrowsShown; // one-shot: fires effects when arrows first appear
 
     private static readonly string[] StartQuips = {
         "\"Abandon hope, all ye who flush\"",
@@ -673,6 +674,7 @@ public class GameUI : MonoBehaviour
         if (nearestFork == null)
         {
             HideForkArrows();
+            _forkArrowsShown = false;
             return;
         }
 
@@ -681,13 +683,29 @@ public class GameUI : MonoBehaviour
 
         _forkArrowRoot.gameObject.SetActive(true);
 
+        // One-shot dramatic entrance when arrows first appear
+        if (!_forkArrowsShown)
+        {
+            _forkArrowsShown = true;
+            // Camera rumble: choice is coming!
+            if (PipeCamera.Instance != null)
+                PipeCamera.Instance.Shake(0.15f);
+            // Haptic nudge to draw attention
+            HapticManager.MediumTap();
+            // Poop crew reacts
+            if (CheerOverlay.Instance != null)
+                CheerOverlay.Instance.ShowCheer("FORK", Color.yellow, false);
+        }
+
         // Fade in as player approaches (full at 15m, faint at 45m)
         float fadeT = Mathf.Clamp01((45f - nearestDist) / 30f);
         _forkArrowGroup.alpha = fadeT * (0.7f + Mathf.Sin(Time.time * 3f) * 0.3f);
 
-        // Arrows bob side to side
-        float leftBob = Mathf.Sin(Time.time * 4f) * 8f;
-        float rightBob = Mathf.Sin(Time.time * 4f + Mathf.PI) * 8f;
+        // Arrows bob with urgency that increases as fork approaches
+        float urgency = Mathf.Lerp(4f, 7f, fadeT);
+        float amp = Mathf.Lerp(8f, 14f, fadeT);
+        float leftBob = Mathf.Sin(Time.time * urgency) * amp;
+        float rightBob = Mathf.Sin(Time.time * urgency + Mathf.PI) * amp;
         _forkLeftArrow.localPosition = new Vector3(leftBob, 0f, 0f);
         _forkRightArrow.localPosition = new Vector3(rightBob, 0f, 0f);
     }
