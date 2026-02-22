@@ -68,6 +68,8 @@ public class ProceduralAudio : MonoBehaviour
     private AudioClip _forkWarning;
     private AudioClip _comboBreak;
     private AudioClip _uiClick;
+    private AudioClip _victoryFanfare;
+    private AudioClip _sadTrombone;
 
     // Real audio file clips
     private AudioClip _toiletFlush;
@@ -519,6 +521,84 @@ public class ProceduralAudio : MonoBehaviour
             return Mathf.Sin(2f * Mathf.PI * 1200f * t) * env * env * 0.3f;
         });
 
+        // Victory fanfare: triumphant ascending chord progression (C-E-G-C with trumpety timbre)
+        _victoryFanfare = GenerateClip("VictoryFanfare", 1.2f, (t, dur) =>
+        {
+            float prog = t / dur;
+            // 4 ascending stabs: C5→E5→G5→C6 with overlap
+            float note1T = Mathf.Clamp01(prog / 0.35f);   // C5: 0.0-0.35
+            float note2T = Mathf.Clamp01((prog - 0.2f) / 0.35f);  // E5: 0.2-0.55
+            float note3T = Mathf.Clamp01((prog - 0.4f) / 0.35f);  // G5: 0.4-0.75
+            float note4T = Mathf.Clamp01((prog - 0.55f) / 0.45f); // C6: 0.55-1.0
+
+            float env1 = Mathf.Sin(Mathf.PI * note1T) * (prog < 0.35f ? 1f : 0f);
+            float env2 = Mathf.Sin(Mathf.PI * note2T) * (prog >= 0.2f && prog < 0.55f ? 1f : 0f);
+            float env3 = Mathf.Sin(Mathf.PI * note3T) * (prog >= 0.4f && prog < 0.75f ? 1f : 0f);
+            float env4 = Mathf.Sin(Mathf.PI * note4T) * (prog >= 0.55f ? 1f : 0f);
+
+            // Trumpety timbre: fundamental + 2nd + 3rd harmonics
+            float Trumpet(float freq, float time)
+            {
+                return Mathf.Sin(2f * Mathf.PI * freq * time) * 0.5f
+                     + Mathf.Sin(2f * Mathf.PI * freq * 2f * time) * 0.3f
+                     + Mathf.Sin(2f * Mathf.PI * freq * 3f * time) * 0.15f;
+            }
+
+            float mix = Trumpet(523f, t) * env1
+                      + Trumpet(659f, t) * env2
+                      + Trumpet(784f, t) * env3
+                      + Trumpet(1047f, t) * env4;
+
+            // Final note sustains with slight vibrato
+            if (prog > 0.7f)
+            {
+                float vibrato = 1f + Mathf.Sin(t * 30f) * 0.008f;
+                mix += Trumpet(1047f * vibrato, t) * env4 * 0.3f;
+            }
+
+            return mix * 0.35f;
+        });
+
+        // Sad trombone: classic "wah wah wah wahhhhh" descending
+        _sadTrombone = GenerateClip("SadTrombone", 1.5f, (t, dur) =>
+        {
+            float prog = t / dur;
+            // 4 descending notes: Bb4→A4→Ab4→long G4
+            float freq;
+            float noteEnv;
+            if (prog < 0.2f)
+            {
+                freq = 466f; // Bb4
+                noteEnv = Mathf.Sin(Mathf.PI * prog / 0.2f);
+            }
+            else if (prog < 0.4f)
+            {
+                freq = 440f; // A4
+                noteEnv = Mathf.Sin(Mathf.PI * (prog - 0.2f) / 0.2f);
+            }
+            else if (prog < 0.6f)
+            {
+                freq = 415f; // Ab4
+                noteEnv = Mathf.Sin(Mathf.PI * (prog - 0.4f) / 0.2f);
+            }
+            else
+            {
+                // Final long descending note with vibrato
+                float slideT = (prog - 0.6f) / 0.4f;
+                freq = Mathf.Lerp(392f, 350f, slideT); // G4 sliding down
+                noteEnv = 1f - slideT * 0.7f; // slow fade
+                // Wobble/vibrato gets wider as note dies
+                freq += Mathf.Sin(t * 12f) * (3f + slideT * 8f);
+            }
+
+            // Trombone timbre: warm fundamental + soft harmonics
+            float signal = Mathf.Sin(2f * Mathf.PI * freq * t) * 0.55f
+                         + Mathf.Sin(2f * Mathf.PI * freq * 2f * t) * 0.25f
+                         + Mathf.Sin(2f * Mathf.PI * freq * 3f * t) * 0.08f;
+
+            return signal * noteEnv * 0.35f;
+        });
+
         // Background music: simple bass-driven loop
         GenerateBGM();
     }
@@ -692,6 +772,8 @@ public class ProceduralAudio : MonoBehaviour
     public void PlayForkWarning() => PlaySFX(_forkWarning, 0.8f);
     public void PlayComboBreak() => PlaySFX(_comboBreak, 0.5f);
     public void PlayUIClick() => PlaySFX(_uiClick, 0.6f);
+    public void PlayVictoryFanfare() => PlaySFX(_victoryFanfare, 0.7f);
+    public void PlaySadTrombone() => PlaySFX(_sadTrombone, 0.6f);
 
     public void StartMusic()
     {

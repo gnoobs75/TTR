@@ -42,6 +42,10 @@ public class TouchInput : MonoBehaviour
     private bool[] _swipeConsumed = new bool[5];
     private const float SWIPE_THRESHOLD_PX = 60f;
 
+    // Smoothed release damping (prevents jarring snap to zero)
+    private float _smoothedSteer;
+    private bool _isTouching;
+
     void Awake()
     {
         if (Instance == null) Instance = this;
@@ -78,6 +82,22 @@ public class TouchInput : MonoBehaviour
                 UpdateTilt();
                 break;
         }
+
+        // Release damping: ease steering to zero when not touching (touch modes only)
+        if (controlScheme != ControlScheme.Keyboard && controlScheme != ControlScheme.Tilt)
+        {
+            if (_isTouching)
+            {
+                _smoothedSteer = SteerInput;
+            }
+            else
+            {
+                // Smooth decay toward zero when finger lifts
+                _smoothedSteer = Mathf.Lerp(_smoothedSteer, 0f, Time.deltaTime * 12f);
+                if (Mathf.Abs(_smoothedSteer) < 0.01f) _smoothedSteer = 0f;
+                SteerInput = _smoothedSteer;
+            }
+        }
     }
 
     void UpdateKeyboard()
@@ -100,20 +120,25 @@ public class TouchInput : MonoBehaviour
         if (Touchscreen.current == null) return;
 
         var touches = Touchscreen.current.touches;
+        _isTouching = false;
 
         for (int i = 0; i < touches.Count && i < _touchStartPos.Length; i++)
         {
             var touch = touches[i];
             if (!touch.press.isPressed) continue;
 
+            _isTouching = true;
             Vector2 pos = touch.position.ReadValue();
             float screenHalf = Screen.width * 0.5f;
 
-            // Left half = steer left, right half = steer right
-            if (pos.x < screenHalf)
-                SteerInput += 1f;
-            else
-                SteerInput -= 1f;
+            // Proportional steering: stronger the further from center you tap
+            // Center of each half = full input, near the divider = softer
+            float distFromCenter = (pos.x - screenHalf) / screenHalf; // -1 (far left) to +1 (far right)
+            float magnitude = Mathf.Abs(distFromCenter);
+            // Minimum 0.4 so even taps near center give meaningful input
+            magnitude = Mathf.Lerp(0.4f, 1f, magnitude);
+            // Left half = positive steer (left), right half = negative steer (right)
+            SteerInput += (distFromCenter < 0f ? 1f : -1f) * magnitude;
 
             // Track start position for swipe detection
             if (touch.press.wasPressedThisFrame)
@@ -148,21 +173,41 @@ public class TouchInput : MonoBehaviour
         if (Touchscreen.current == null) return;
 
         var primaryTouch = Touchscreen.current.primaryTouch;
+        _isTouching = false;
 
         if (primaryTouch.press.wasPressedThisFrame)
         {
             _swipeStart = primaryTouch.position.ReadValue();
             _isSwiping = true;
             ActionPressed = true;
+            _touchStartPos[0] = _swipeStart;
+            _swipeConsumed[0] = false;
         }
 
         if (_isSwiping && primaryTouch.press.isPressed)
         {
+            _isTouching = true;
             Vector2 current = primaryTouch.position.ReadValue();
             float deltaX = (current.x - _swipeStart.x) / Screen.width;
             // Negative deltaX = swipe left = steer left = positive input
             _swipeSteer = Mathf.Lerp(_swipeSteer, -deltaX * swipeSensitivity, Time.deltaTime * 10f);
             SteerInput = Mathf.Clamp(_swipeSteer, -1f, 1f);
+
+            // Vertical swipe for tricks (same as touch zones)
+            if (!_swipeConsumed[0])
+            {
+                float deltaY = current.y - _touchStartPos[0].y;
+                if (Mathf.Abs(deltaY) > SWIPE_THRESHOLD_PX)
+                {
+                    if (deltaY > 0) SwipeUp = true;
+                    else SwipeDown = true;
+                    _swipeConsumed[0] = true;
+                }
+            }
+
+            // Vertical input for drops/swimming
+            float yNorm = (current.y - Screen.height * 0.5f) / (Screen.height * 0.35f);
+            VerticalInput = Mathf.Clamp(yNorm, -1f, 1f);
         }
 
         if (primaryTouch.press.wasReleasedThisFrame)
@@ -200,9 +245,29 @@ public class TouchInput : MonoBehaviour
         else tiltY = (tiltY - Mathf.Sign(tiltY) * tiltDeadZone) / (1f - tiltDeadZone);
         VerticalInput = Mathf.Clamp(tiltY * tiltSensitivity, -1f, 1f);
 
-        // Any screen tap = action
-        if (Touchscreen.current != null && Touchscreen.current.primaryTouch.press.wasPressedThisFrame)
-            ActionPressed = true;
+        // Screen tap = action, plus swipe detection for tricks
+        if (Touchscreen.current != null)
+        {
+            var primaryTouch = Touchscreen.current.primaryTouch;
+            if (primaryTouch.press.wasPressedThisFrame)
+            {
+                ActionPressed = true;
+                _touchStartPos[0] = primaryTouch.position.ReadValue();
+                _swipeConsumed[0] = false;
+            }
+
+            if (primaryTouch.press.isPressed && !_swipeConsumed[0])
+            {
+                Vector2 current = primaryTouch.position.ReadValue();
+                float deltaY = current.y - _touchStartPos[0].y;
+                if (Mathf.Abs(deltaY) > SWIPE_THRESHOLD_PX)
+                {
+                    if (deltaY > 0) SwipeUp = true;
+                    else SwipeDown = true;
+                    _swipeConsumed[0] = true;
+                }
+            }
+        }
     }
 
     /// <summary>Switch control scheme at runtime (from settings menu).</summary>

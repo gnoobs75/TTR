@@ -340,7 +340,10 @@ public class RaceFinish : MonoBehaviour
         {
             // 1ST PLACE - maximum celebration
             if (ProceduralAudio.Instance != null)
+            {
+                ProceduralAudio.Instance.PlayVictoryFanfare();
                 ProceduralAudio.Instance.PlayCelebration();
+            }
             if (ScreenEffects.Instance != null)
             {
                 ScreenEffects.Instance.TriggerMilestoneFlash();
@@ -380,6 +383,8 @@ public class RaceFinish : MonoBehaviour
         else
         {
             // Back of the pack - sad trombone
+            if (ProceduralAudio.Instance != null)
+                ProceduralAudio.Instance.PlaySadTrombone();
             if (ScreenEffects.Instance != null)
                 ScreenEffects.Instance.TriggerHitFlash();
             if (PipeCamera.Instance != null)

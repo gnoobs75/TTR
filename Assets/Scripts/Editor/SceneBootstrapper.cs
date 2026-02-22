@@ -1293,7 +1293,9 @@ public class SceneBootstrapper
         "DANGER\nTOXIC\nGAS", "CAUTION\nWET\nFLOOR", "BEWARE\nOF\nRATS",
         "WARNING\nSLIPPERY\nWHEN GROSS", "DANGER\nDO NOT\nSWIM", "CAUTION\nFALLING\nTURDS",
         "WARNING\nHIGH\nSTINK ZONE", "DANGER\nLOW\nFLUSH AREA", "CAUTION\nGATOR\nCROSSING",
-        "WARNING\nBROWN\nWATER ONLY"
+        "WARNING\nBROWN\nWATER ONLY", "DANGER\nUNSTABLE\nFLOATERS", "CAUTION\nEXPLOSIVE\nGAS BUILDUP",
+        "WARNING\nMUTANT\nGOLDFISH", "DANGER\nPIPE\nNARROWS AHEAD", "CAUTION\nRATTLESNAKE\nNEST",
+        "WARNING\nDO NOT\nLICK WALLS", "NOTICE\nNO DIVING\n(SERIOUSLY)", "DANGER\nEELS\nBELOW"
     };
     static int _warningIndex = 0;
 
@@ -1376,7 +1378,8 @@ public class SceneBootstrapper
     static readonly string[] PipeNumbers = {
         "SECTOR 7G", "PIPE 42", "TUNNEL B-12", "DRAIN 69",
         "ZONE 404", "DUCT 13", "SHAFT 99", "MAIN 1A",
-        "OVERFLOW 3", "JUNCTION 8"
+        "OVERFLOW 3", "JUNCTION 8", "SLUDGE LINE 5", "OUTFALL 17",
+        "BYPASS C-4", "TRUNK 88", "LATERAL 2B", "INTERCEPTOR 6"
     };
     static int _pipeNumIndex = 0;
 
@@ -1464,7 +1467,12 @@ public class SceneBootstrapper
         "LIVE\nLAUGH\nFLUSH", "NOT ALL\nWHO WANDER\nARE FLUSHED",
         "CORNY\n4\nPRESIDENT", "SEWER\nPUNKS\nNOT DEAD",
         "EAT\nSLEEP\nFLUSH\nREPEAT", "PIPE\nDREAMS", "DRIP\nDROP\nPLOP",
-        "RATED\nE FOR\nEWWW", "TURD\nBURGLAR\nWAS HERE", "FLOATERS\nUNITE"
+        "RATED\nE FOR\nEWWW", "TURD\nBURGLAR\nWAS HERE", "FLOATERS\nUNITE",
+        "WHAT\nGOES DOWN\nMUST COME UP", "LOG\nJAM\nAHEAD", "FREE\nCORN\n(USED)",
+        "TOILET\nHUMOR\nIS VALID", "THE\nPIPES\nHAVE EARS", "BORN\nTO\nFLOAT",
+        "KEEP\nCALM\nAND FLUSH", "DOOKIE\nWAS HERE\n10/10", "FLUSH\nMOB\n2024",
+        "SEWAGE\nIS JUST\nLIQUID HISTORY", "ONE MAN'S\nTRASH IS\nOUR HOME",
+        "PLUMBER\nTRUTHER", "GRAVITY\nIS A\nFLUSH MYTH", "I CAME\nI SAW\nI FLUSHED"
     };
 
     static int _graffitiIndex = 0;
@@ -1759,6 +1767,11 @@ public class SceneBootstrapper
         new[] { "THE DAILY FLUSH", "Newspaper", "\"All the news\nthat's fit to wipe\"", "Subscribe:\n1 corn coin/week" },
         new[] { "GATOR TOURS", "Premium Guided", "\"See the sewer\nbefore it sees you\"", "Survival rate: 73%" },
         new[] { "CORN COIN", "Crypto Exchange", "\"To the toilet\nand beyond!\"", "100% Organic\nCurrency" },
+        new[] { "TURD TAXI", "Express Service", "\"We pick up\nwhat others\nwon't!\"", "Flat rate:\n3 Fartcoins" },
+        new[] { "PLOP FITNESS", "Sewer Gym", "\"Get ripped\nbefore you\nget flushed\"", "First dump free!" },
+        new[] { "CORNY'S DELI", "Fine Cuisine", "\"Our corn chowder\nis surprisingly\nfamiliar\"", "Open 24/7\n(We never close)" },
+        new[] { "SEWER U", "Online Degrees", "\"Learn to float\nwith the best!\"", "Majors in\nPipe Science" },
+        new[] { "POOP DECK", "Cruise Lines", "\"Luxury travel\nthrough the finest\npipes in town\"", "All-inclusive\n5 Fartcoins" },
     };
     static int _adIndex = 0;
 
@@ -1890,7 +1903,9 @@ public class SceneBootstrapper
     static readonly string[] ArrowTexts = {
         "THIS WAY >>>", "NO EXIT", "DANGER\nAHEAD", "TURN BACK\nNOW",
         ">>> FLUSH >>>", "KEEP LEFT\n(or don't)", "SPEED UP!\n(you'll need it)",
-        "EXIT\n(just kidding)", "PIPE 7G >>>", "SHORTCUT\n(it's not)"
+        "EXIT\n(just kidding)", "PIPE 7G >>>", "SHORTCUT\n(it's not)",
+        "BROWN TOWN\n>>> 500m", "POINT OF\nNO RETURN", "SEWAGE PLANT\n>>>",
+        "YOU ARE\nHERE\n(unfortunately)", "SCENIC\nROUTE\n(it's all gross)"
     };
     static int _arrowIndex = 0;
 
@@ -1965,6 +1980,10 @@ public class SceneBootstrapper
         new[] { "WANTED", "FLUSH GORDON", "Crimes: Excessive\nflushing, water\nwaste, pipe surfing", "LAST SEEN:\nPipe Junction 4" },
         new[] { "WANTED", "EL TURDO", "Crimes: Illegal\nwrestling moves,\nmask violations", "REWARD:\n200 Fartcoins" },
         new[] { "MISSING", "MY DIGNITY", "Last seen: Before\nentering this pipe.\nPlease return.", "NO REWARD\n(obviously)" },
+        new[] { "WANTED", "PRINCESS PLOP", "Crimes: Clogging\nthe royal pipes,\ntiara theft", "REWARD:\n750 Fartcoins" },
+        new[] { "WANTED", "SKIDMARK STEVE", "Crimes: Leaving marks\neverywhere, excessive\nbraking", "REWARD:\n300 Fartcoins" },
+        new[] { "WANTED", "THE LOG", "Crimes: Impersonating\na log, pipe surfing\nwithout a license", "CAUTION:\nVERY DENSE" },
+        new[] { "MISSING", "CLEAN WATER", "Last seen: 1987.\nIf found, contact\nBrown Town PD.", "NOT EXPECTED\nTO RETURN" },
     };
     static int _wantedIndex = 0;
 

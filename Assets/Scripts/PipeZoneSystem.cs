@@ -248,11 +248,17 @@ public class PipeZoneSystem : MonoBehaviour
         {
             if (ProceduralAudio.Instance != null)
                 ProceduralAudio.Instance.PlayZoneTransition();
-            // Show zone name announcement
+            // Show zone name with sewer-themed subtitle
             if (ScorePopup.Instance != null && _tc != null)
+            {
+                string subtitle = ZoneSubtitle(zoneIdx);
                 ScorePopup.Instance.ShowMilestone(
                     _tc.transform.position + Vector3.up * 2.5f,
-                    zones[zoneIdx].name.ToUpper());
+                    zones[zoneIdx].name.ToUpper() + "\n" + subtitle);
+            }
+            // Cheer overlay for zone transitions
+            if (CheerOverlay.Instance != null)
+                CheerOverlay.Instance.ShowCheer(zones[zoneIdx].name.ToUpper(), zones[zoneIdx].lightColor, zoneIdx >= 3);
             // Camera rumble for zone transition (stronger in later zones)
             if (PipeCamera.Instance != null)
                 PipeCamera.Instance.Shake(0.2f + zoneIdx * 0.05f);
@@ -261,5 +267,19 @@ public class PipeZoneSystem : MonoBehaviour
                 ScreenEffects.Instance.TriggerZoneFlash(zones[zoneIdx].lightColor);
             HapticManager.MediumTap();
         }
+    }
+
+    static readonly string[][] ZoneSubtitles = {
+        new[] { "\"Clean-ish\"", "\"It only goes down from here\"", "\"Don't touch the walls\"" },
+        new[] { "\"What IS that smell?\"", "\"Pipes don't clean themselves\"", "\"Watch your step\"" },
+        new[] { "\"Don't breathe\"", "\"Glow = bad\"", "\"EPA was never here\"" },
+        new[] { "\"Industrial strength stink\"", "\"Tetanus not included\"", "\"Mind the rust\"" },
+        new[] { "\"Abandon hope, all ye who flush\"", "\"The final frontier of sewage\"", "\"It's worse than it sounds\"" },
+    };
+
+    static string ZoneSubtitle(int zoneIdx)
+    {
+        var subs = ZoneSubtitles[Mathf.Clamp(zoneIdx, 0, ZoneSubtitles.Length - 1)];
+        return subs[Random.Range(0, subs.Length)];
     }
 }
