@@ -22,6 +22,7 @@ public class ToxicFrogBehavior : ObstacleBehavior
     private float _hopTimer = -1f;
     private float _throatPhase;
     private bool _isHopping;
+    private bool _reactCroaked;
 
     // Body parts
     private Transform _throat;
@@ -124,6 +125,12 @@ public class ToxicFrogBehavior : ObstacleBehavior
 
     System.Collections.IEnumerator LandSquash()
     {
+        // Landing impact effects
+        if (ParticleManager.Instance != null)
+            ParticleManager.Instance.PlayLandingDust(transform.position);
+        if (ProceduralAudio.Instance != null)
+            ProceduralAudio.Instance.PlayStomp();
+
         // Quick squash on landing
         float dur = 0.15f;
         float elapsed = 0f;
@@ -144,6 +151,14 @@ public class ToxicFrogBehavior : ObstacleBehavior
     protected override void DoReact()
     {
         float t = Time.time;
+
+        // Warning croak on react entry
+        if (!_reactCroaked)
+        {
+            _reactCroaked = true;
+            if (ProceduralAudio.Instance != null)
+                ProceduralAudio.Instance.PlayFrogCroak();
+        }
 
         // Puff up when player approaches
         float puff = 1f + Mathf.Sin(t * throatPulseSpeed * 3f) * 0.1f;

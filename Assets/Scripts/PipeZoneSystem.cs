@@ -201,11 +201,14 @@ public class PipeZoneSystem : MonoBehaviour
         CurrentBumpScale = Mathf.Lerp(current.bumpScale, next.bumpScale, blend);
         CurrentEmissionBoost = Mathf.Lerp(current.emissionBoost, next.emissionBoost, blend);
 
-        // Update fog
+        // Update fog (with organic breathing oscillation)
         Color fogCol = Color.Lerp(current.fogColor, next.fogColor, blend);
         float fogDensity = Mathf.Lerp(current.fogDensity, next.fogDensity, blend);
+        // Fog breathing: deeper zones have stronger oscillation
+        float breatheAmp = Mathf.Lerp(0.03f, 0.10f, zoneIdx / 4f);
+        float breathe = 1f + (Mathf.PerlinNoise(Time.time * 0.5f, 3.7f) - 0.5f) * breatheAmp;
         RenderSettings.fogColor = fogCol;
-        RenderSettings.fogDensity = fogDensity;
+        RenderSettings.fogDensity = fogDensity * breathe;
 
         // Update ambient
         Color ambient = Color.Lerp(current.ambientColor, next.ambientColor, blend);
@@ -218,13 +221,25 @@ public class PipeZoneSystem : MonoBehaviour
             _mainLight.intensity = Mathf.Lerp(current.lightIntensity, next.lightIntensity, blend);
         }
 
-        // Light flicker in dark zones (Rusty + Hellsewer) for aging infrastructure feel
-        if (_mainLight != null && zoneIdx >= 3)
+        // Light flicker in dark zones (Toxic + Rusty + Hellsewer) for atmosphere
+        if (_mainLight != null && zoneIdx >= 2)
         {
-            float flickerStrength = (zoneIdx == 4) ? 0.08f : 0.04f;
+            float flickerStrength;
+            if (zoneIdx >= 4) flickerStrength = 0.14f;       // Hellsewer: aggressive
+            else if (zoneIdx >= 3) flickerStrength = 0.05f;   // Rusty: industrial
+            else flickerStrength = 0.025f;                     // Toxic: eerie subtle
+
             float flicker = 1f + (Mathf.PerlinNoise(Time.time * 8f, 0f) - 0.5f) * flickerStrength
                               + (Mathf.PerlinNoise(Time.time * 23f, 5f) - 0.5f) * flickerStrength * 0.5f;
             _mainLight.intensity *= flicker;
+
+            // Hellsewer: color shifts toward deeper red during flicker dips
+            if (zoneIdx >= 4 && flicker < 0.97f)
+            {
+                float redShift = (0.97f - flicker) * 3f;
+                _mainLight.color = Color.Lerp(_mainLight.color,
+                    new Color(1f, 0.15f, 0.05f), Mathf.Clamp01(redShift));
+            }
         }
 
         // Zone vignette: subtle atmosphere tint at screen edges (stronger in deeper zones)

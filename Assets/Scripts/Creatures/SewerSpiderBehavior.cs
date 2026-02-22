@@ -18,6 +18,7 @@ public class SewerSpiderBehavior : ObstacleBehavior
     private Vector3 _baseScale;
     private float _scuttlePhase;
     private bool _hasDropped;
+    private bool _reactHissed;
     private float _dropProgress;
     private float _dropStart;
     private Renderer[] _renderers;
@@ -69,6 +70,14 @@ public class SewerSpiderBehavior : ObstacleBehavior
     protected override void DoReact()
     {
         float t = Time.time;
+
+        // Warning hiss on react entry
+        if (!_reactHissed)
+        {
+            _reactHissed = true;
+            if (ProceduralAudio.Instance != null)
+                ProceduralAudio.Instance.PlaySpiderHiss();
+        }
 
         // Drop down toward player path
         if (!_hasDropped)
