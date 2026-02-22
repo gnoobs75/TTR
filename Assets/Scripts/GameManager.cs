@@ -1,6 +1,8 @@
 using UnityEngine;
 using UnityEngine.SceneManagement;
 using UnityEngine.InputSystem;
+using UnityEngine.UI;
+using System.Collections;
 
 /// <summary>
 /// Central game state manager for Turd Tunnel Rush.
@@ -31,6 +33,7 @@ public class GameManager : MonoBehaviour
 
     private bool _isGameOver = false;
     private float _gameOverTime;
+    private bool _restarting = false;
 
     // Run stats (reset each run)
     private int _runCoins = 0;
@@ -189,7 +192,7 @@ public class GameManager : MonoBehaviour
                 StartGame();
                 return;
             }
-            if (_isGameOver && Time.time - _gameOverTime > 0.5f)
+            if (_isGameOver && !_restarting && Time.time - _gameOverTime > 0.5f)
             {
                 RestartGame();
                 return;
@@ -492,6 +495,48 @@ public class GameManager : MonoBehaviour
 
     public void RestartGame()
     {
+        if (_restarting) return;
+        _restarting = true;
+        StartCoroutine(RestartWithFade());
+    }
+
+    IEnumerator RestartWithFade()
+    {
+        // Create full-screen black overlay on the highest-order canvas
+        Canvas canvas = null;
+        foreach (var c in Object.FindObjectsByType<Canvas>(FindObjectsSortMode.None))
+        {
+            if (c.renderMode == RenderMode.ScreenSpaceOverlay && c.sortingOrder >= 100)
+            { canvas = c; break; }
+        }
+
+        Image fadeOverlay = null;
+        if (canvas != null)
+        {
+            GameObject fadeObj = new GameObject("RestartFade");
+            fadeObj.transform.SetParent(canvas.transform, false);
+            RectTransform rt = fadeObj.AddComponent<RectTransform>();
+            rt.anchorMin = Vector2.zero;
+            rt.anchorMax = Vector2.one;
+            rt.offsetMin = Vector2.zero;
+            rt.offsetMax = Vector2.zero;
+            fadeOverlay = fadeObj.AddComponent<Image>();
+            fadeOverlay.color = new Color(0.02f, 0.03f, 0.01f, 0f);
+            fadeOverlay.raycastTarget = true; // block input during fade
+        }
+
+        // Fade to black over 0.35s
+        float elapsed = 0f;
+        float duration = 0.35f;
+        while (elapsed < duration)
+        {
+            elapsed += Time.unscaledDeltaTime;
+            float t = Mathf.Clamp01(elapsed / duration);
+            if (fadeOverlay != null)
+                fadeOverlay.color = new Color(0.02f, 0.03f, 0.01f, t);
+            yield return null;
+        }
+
         SceneManager.LoadScene(SceneManager.GetActiveScene().buildIndex);
     }
 }
