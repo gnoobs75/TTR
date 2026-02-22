@@ -62,6 +62,8 @@ public class TurdController : MonoBehaviour
     private HitState _hitState = HitState.Normal;
     private Renderer[] _renderers;
     private Coroutine _stunCoroutine;
+    private float _hitPhaseTimer;    // tracks time within current hit phase
+    private float _hitPhaseDuration; // total duration of current hit phase
 
     // Jump state
     private bool _isJumping = false;
@@ -106,12 +108,14 @@ public class TurdController : MonoBehaviour
     public float CurrentAngle => _currentAngle;
     public float AngularVelocity => _angularVelocity;
     public HitState CurrentHitState => _hitState;
+    public float HitPhaseProgress => _hitPhaseDuration > 0f ? Mathf.Clamp01(_hitPhaseTimer / _hitPhaseDuration) : 0f;
     public int ForkBranch => _forkBranch;
     public PipeFork CurrentFork => _currentFork;
     public bool IsInvincible => _hitState == HitState.Invincible || _hitState == HitState.Stunned;
     public bool IsStunned => _hitState == HitState.Stunned;
     public bool IsJumping => _isJumping;
     public bool IsDropping => _isDropping;
+    public bool IsMagnetActive => _coinMagnetTimer > 0f;
 
     void Start()
     {
@@ -571,6 +575,8 @@ public class TurdController : MonoBehaviour
     {
         // === STUN PHASE ===
         _hitState = HitState.Stunned;
+        _hitPhaseDuration = stunDuration;
+        _hitPhaseTimer = 0f;
         float originalMax = maxSpeed;
 
         // Immediate slowdown
@@ -578,29 +584,40 @@ public class TurdController : MonoBehaviour
         _currentSpeed *= stunSpeedMult;
         _angularVelocity *= 0.2f; // kill momentum
 
-        yield return new WaitForSeconds(stunDuration);
+        while (_hitPhaseTimer < stunDuration)
+        {
+            _hitPhaseTimer += Time.deltaTime;
+            yield return null;
+        }
 
         // === RECOVERY PHASE ===
         _hitState = HitState.Recovering;
+        _hitPhaseDuration = recoveryDuration;
+        _hitPhaseTimer = 0f;
         maxSpeed = originalMax;
 
-        float elapsed = 0f;
-        while (elapsed < recoveryDuration)
+        while (_hitPhaseTimer < recoveryDuration)
         {
             // Gradually ramp speed back up
             _currentSpeed = Mathf.Lerp(_currentSpeed, forwardSpeed, Time.deltaTime * 3f);
-            elapsed += Time.deltaTime;
+            _hitPhaseTimer += Time.deltaTime;
             yield return null;
         }
 
         // === INVINCIBILITY PHASE ===
         _hitState = HitState.Invincible;
+        _hitPhaseDuration = invincibilityDuration;
+        _hitPhaseTimer = 0f;
 
         // Golden shimmer during i-frames so player knows they're protected
         if (ScreenEffects.Instance != null)
             ScreenEffects.Instance.SetInvincShimmer(1f);
 
-        yield return new WaitForSeconds(invincibilityDuration);
+        while (_hitPhaseTimer < invincibilityDuration)
+        {
+            _hitPhaseTimer += Time.deltaTime;
+            yield return null;
+        }
 
         // Ensure all renderers visible
         if (_renderers != null)
@@ -614,6 +631,8 @@ public class TurdController : MonoBehaviour
             ScreenEffects.Instance.TriggerInvincibilityFlash();
 
         _hitState = HitState.Normal;
+        _hitPhaseDuration = 0f;
+        _hitPhaseTimer = 0f;
     }
 
     // === STOMP SYSTEM ===

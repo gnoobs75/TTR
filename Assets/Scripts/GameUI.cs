@@ -180,6 +180,25 @@ public class GameUI : MonoBehaviour
     private Text _boostLabel;
     private bool _boostBarCreated;
 
+    // Stun recovery indicator
+    private RectTransform _stunIndicatorBg;
+    private Image _stunFillImage;
+    private Text _stunLabel;
+    private bool _stunIndicatorCreated;
+
+    // Coin magnet indicator
+    private Text _magnetIndicator;
+    private bool _magnetIndicatorCreated;
+
+    // Fork preview arrows
+    private RectTransform _forkArrowRoot;
+    private CanvasGroup _forkArrowGroup;
+    private Text _forkLeftLabel;
+    private Text _forkRightLabel;
+    private RectTransform _forkLeftArrow;
+    private RectTransform _forkRightArrow;
+    private bool _forkArrowsCreated;
+
     private static readonly string[] StartQuips = {
         "\"Abandon hope, all ye who flush\"",
         "\"It's a dirty job, but someone's gotta race it\"",
@@ -244,6 +263,15 @@ public class GameUI : MonoBehaviour
 
         // Update boost timer bar
         UpdateBoostBar();
+
+        // Update stun recovery indicator
+        UpdateStunIndicator();
+
+        // Update coin magnet indicator
+        UpdateMagnetIndicator();
+
+        // Update fork preview arrows
+        UpdateForkArrows();
     }
 
     void CreateBoostBar()
@@ -339,6 +367,326 @@ public class GameUI : MonoBehaviour
             barColor = Color.Lerp(barColor, Color.white, flash * 0.3f);
         }
         _boostFillImage.color = barColor;
+    }
+
+    void CreateStunIndicator()
+    {
+        if (_stunIndicatorCreated) return;
+        _stunIndicatorCreated = true;
+
+        Canvas canvas = GetComponentInParent<Canvas>();
+        if (canvas == null) return;
+
+        // Small pill-shaped bar above boost bar position
+        GameObject bgObj = new GameObject("StunIndicatorBg");
+        _stunIndicatorBg = bgObj.AddComponent<RectTransform>();
+        _stunIndicatorBg.SetParent(canvas.transform, false);
+        _stunIndicatorBg.anchorMin = new Vector2(0.30f, 0.09f);
+        _stunIndicatorBg.anchorMax = new Vector2(0.70f, 0.105f);
+        _stunIndicatorBg.offsetMin = Vector2.zero;
+        _stunIndicatorBg.offsetMax = Vector2.zero;
+
+        Image bgImg = bgObj.AddComponent<Image>();
+        bgImg.color = new Color(0.15f, 0.05f, 0.05f, 0.7f);
+
+        // Fill
+        GameObject fillObj = new GameObject("StunFill");
+        RectTransform fillRT = fillObj.AddComponent<RectTransform>();
+        fillRT.SetParent(_stunIndicatorBg, false);
+        fillRT.anchorMin = Vector2.zero;
+        fillRT.anchorMax = Vector2.one;
+        fillRT.offsetMin = Vector2.zero;
+        fillRT.offsetMax = Vector2.zero;
+        _stunFillImage = fillObj.AddComponent<Image>();
+        _stunFillImage.color = new Color(1f, 0.2f, 0.1f);
+
+        // Label
+        Font font = Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
+        if (font == null) font = Resources.GetBuiltinResource<Font>("Arial.ttf");
+        GameObject labelObj = new GameObject("StunLabel");
+        RectTransform lrt = labelObj.AddComponent<RectTransform>();
+        lrt.SetParent(_stunIndicatorBg, false);
+        lrt.anchorMin = Vector2.zero;
+        lrt.anchorMax = Vector2.one;
+        lrt.offsetMin = Vector2.zero;
+        lrt.offsetMax = Vector2.zero;
+        _stunLabel = labelObj.AddComponent<Text>();
+        _stunLabel.font = font;
+        _stunLabel.fontSize = 10;
+        _stunLabel.alignment = TextAnchor.MiddleCenter;
+        _stunLabel.color = Color.white;
+        _stunLabel.fontStyle = FontStyle.Bold;
+
+        Outline lo = labelObj.AddComponent<Outline>();
+        lo.effectColor = new Color(0, 0, 0, 0.8f);
+        lo.effectDistance = new Vector2(1, -1);
+
+        bgObj.SetActive(false);
+    }
+
+    void UpdateStunIndicator()
+    {
+        if (GameManager.Instance == null || GameManager.Instance.player == null) return;
+        TurdController tc = GameManager.Instance.player;
+        var state = tc.CurrentHitState;
+
+        if (state == TurdController.HitState.Normal)
+        {
+            if (_stunIndicatorBg != null && _stunIndicatorBg.gameObject.activeSelf)
+                _stunIndicatorBg.gameObject.SetActive(false);
+            return;
+        }
+
+        if (!_stunIndicatorCreated) CreateStunIndicator();
+        if (_stunIndicatorBg == null) return;
+
+        _stunIndicatorBg.gameObject.SetActive(true);
+        float progress = tc.HitPhaseProgress;
+
+        // Color and label based on phase
+        Color fillColor;
+        string label;
+        if (state == TurdController.HitState.Stunned)
+        {
+            fillColor = Color.Lerp(new Color(1f, 0.15f, 0.05f), new Color(1f, 0.4f, 0.1f), progress);
+            label = "STUNNED";
+            // Pulse for urgency
+            float pulse = Mathf.Abs(Mathf.Sin(Time.time * 6f));
+            fillColor = Color.Lerp(fillColor, Color.white, pulse * 0.15f);
+        }
+        else if (state == TurdController.HitState.Recovering)
+        {
+            fillColor = Color.Lerp(new Color(1f, 0.5f, 0.1f), new Color(1f, 0.9f, 0.2f), progress);
+            label = "RECOVERING";
+        }
+        else // Invincible
+        {
+            fillColor = Color.Lerp(new Color(1f, 0.9f, 0.2f), new Color(0.3f, 1f, 0.4f), progress);
+            label = "PROTECTED";
+        }
+
+        _stunFillImage.color = fillColor;
+        // Fill bar shows time remaining (drains left to right)
+        RectTransform fillRT = _stunFillImage.GetComponent<RectTransform>();
+        fillRT.anchorMax = new Vector2(1f - progress, 1f);
+
+        _stunLabel.text = label;
+    }
+
+    void CreateMagnetIndicator()
+    {
+        if (_magnetIndicatorCreated) return;
+        _magnetIndicatorCreated = true;
+
+        Canvas canvas = GetComponentInParent<Canvas>();
+        if (canvas == null) return;
+
+        Font font = Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
+        if (font == null) font = Font.CreateDynamicFontFromOSFont("Arial", 14);
+
+        // Small golden label above the coin count area
+        GameObject obj = new GameObject("MagnetIndicator");
+        RectTransform rt = obj.AddComponent<RectTransform>();
+        rt.SetParent(canvas.transform, false);
+        rt.anchorMin = new Vector2(0.78f, 0.90f);
+        rt.anchorMax = new Vector2(0.98f, 0.95f);
+        rt.offsetMin = Vector2.zero;
+        rt.offsetMax = Vector2.zero;
+
+        _magnetIndicator = obj.AddComponent<Text>();
+        _magnetIndicator.font = font;
+        _magnetIndicator.fontSize = Mathf.RoundToInt(14 * _uiScale);
+        _magnetIndicator.alignment = TextAnchor.MiddleCenter;
+        _magnetIndicator.fontStyle = FontStyle.Bold;
+        _magnetIndicator.color = new Color(1f, 0.85f, 0.2f);
+        _magnetIndicator.text = "MAGNET";
+
+        Outline ol = obj.AddComponent<Outline>();
+        ol.effectColor = new Color(0.4f, 0.2f, 0f, 0.9f);
+        ol.effectDistance = new Vector2(1, -1);
+
+        obj.SetActive(false);
+    }
+
+    void UpdateMagnetIndicator()
+    {
+        if (GameManager.Instance == null || GameManager.Instance.player == null) return;
+        TurdController tc = GameManager.Instance.player;
+
+        if (!tc.IsMagnetActive)
+        {
+            if (_magnetIndicator != null && _magnetIndicator.gameObject.activeSelf)
+                _magnetIndicator.gameObject.SetActive(false);
+            return;
+        }
+
+        if (!_magnetIndicatorCreated) CreateMagnetIndicator();
+        if (_magnetIndicator == null) return;
+
+        _magnetIndicator.gameObject.SetActive(true);
+
+        // Pulsing golden glow
+        float pulse = 0.7f + Mathf.Sin(Time.time * 5f) * 0.3f;
+        _magnetIndicator.color = new Color(1f, 0.85f, 0.2f, pulse);
+
+        // Gentle scale breathing
+        float scale = 1f + Mathf.Sin(Time.time * 3f) * 0.08f;
+        _magnetIndicator.transform.localScale = Vector3.one * scale;
+    }
+
+    void CreateForkArrows()
+    {
+        if (_forkArrowsCreated) return;
+        _forkArrowsCreated = true;
+
+        Canvas canvas = GetComponentInParent<Canvas>();
+        if (canvas == null) return;
+
+        Font font = Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
+        if (font == null) font = Font.CreateDynamicFontFromOSFont("Arial", 14);
+
+        // Root container (center of screen, lower third)
+        GameObject rootObj = new GameObject("ForkArrows");
+        _forkArrowRoot = rootObj.AddComponent<RectTransform>();
+        _forkArrowRoot.SetParent(canvas.transform, false);
+        _forkArrowRoot.anchorMin = new Vector2(0.1f, 0.35f);
+        _forkArrowRoot.anchorMax = new Vector2(0.9f, 0.55f);
+        _forkArrowRoot.offsetMin = Vector2.zero;
+        _forkArrowRoot.offsetMax = Vector2.zero;
+
+        _forkArrowGroup = rootObj.AddComponent<CanvasGroup>();
+        _forkArrowGroup.alpha = 0f;
+
+        // Left arrow (SAFE - green)
+        GameObject leftObj = new GameObject("LeftArrow");
+        _forkLeftArrow = leftObj.AddComponent<RectTransform>();
+        _forkLeftArrow.SetParent(_forkArrowRoot, false);
+        _forkLeftArrow.anchorMin = new Vector2(0f, 0f);
+        _forkLeftArrow.anchorMax = new Vector2(0.4f, 1f);
+        _forkLeftArrow.offsetMin = Vector2.zero;
+        _forkLeftArrow.offsetMax = Vector2.zero;
+
+        // Arrow shape background
+        Image leftBg = leftObj.AddComponent<Image>();
+        leftBg.color = new Color(0.15f, 0.5f, 0.2f, 0.6f);
+
+        _forkLeftLabel = CreateArrowLabel(leftObj.transform, font,
+            "\u25C0 SAFE", new Color(0.4f, 1f, 0.5f));
+
+        // Right arrow (RISKY - red)
+        GameObject rightObj = new GameObject("RightArrow");
+        _forkRightArrow = rightObj.AddComponent<RectTransform>();
+        _forkRightArrow.SetParent(_forkArrowRoot, false);
+        _forkRightArrow.anchorMin = new Vector2(0.6f, 0f);
+        _forkRightArrow.anchorMax = new Vector2(1f, 1f);
+        _forkRightArrow.offsetMin = Vector2.zero;
+        _forkRightArrow.offsetMax = Vector2.zero;
+
+        Image rightBg = rightObj.AddComponent<Image>();
+        rightBg.color = new Color(0.5f, 0.15f, 0.1f, 0.6f);
+
+        _forkRightLabel = CreateArrowLabel(rightObj.transform, font,
+            "RISKY \u25B6", new Color(1f, 0.4f, 0.3f));
+
+        // Center "FORK!" label
+        GameObject centerObj = new GameObject("ForkCenter");
+        RectTransform crt = centerObj.AddComponent<RectTransform>();
+        crt.SetParent(_forkArrowRoot, false);
+        crt.anchorMin = new Vector2(0.35f, 0.1f);
+        crt.anchorMax = new Vector2(0.65f, 0.9f);
+        crt.offsetMin = Vector2.zero;
+        crt.offsetMax = Vector2.zero;
+
+        Text centerText = centerObj.AddComponent<Text>();
+        centerText.font = font;
+        centerText.fontSize = Mathf.RoundToInt(18 * _uiScale);
+        centerText.alignment = TextAnchor.MiddleCenter;
+        centerText.fontStyle = FontStyle.Bold;
+        centerText.color = new Color(1f, 0.9f, 0.3f);
+        centerText.text = "FORK!";
+
+        Outline co = centerObj.AddComponent<Outline>();
+        co.effectColor = new Color(0, 0, 0, 0.9f);
+        co.effectDistance = new Vector2(1, -1);
+
+        rootObj.SetActive(false);
+    }
+
+    Text CreateArrowLabel(Transform parent, Font font, string text, Color color)
+    {
+        GameObject obj = new GameObject("Label");
+        RectTransform rt = obj.AddComponent<RectTransform>();
+        rt.SetParent(parent, false);
+        rt.anchorMin = Vector2.zero;
+        rt.anchorMax = Vector2.one;
+        rt.offsetMin = Vector2.zero;
+        rt.offsetMax = Vector2.zero;
+
+        Text t = obj.AddComponent<Text>();
+        t.font = font;
+        t.fontSize = Mathf.RoundToInt(16 * _uiScale);
+        t.alignment = TextAnchor.MiddleCenter;
+        t.fontStyle = FontStyle.Bold;
+        t.color = color;
+        t.text = text;
+
+        Outline ol = obj.AddComponent<Outline>();
+        ol.effectColor = new Color(0, 0, 0, 0.9f);
+        ol.effectDistance = new Vector2(1, -1);
+
+        return t;
+    }
+
+    void UpdateForkArrows()
+    {
+        if (GameManager.Instance == null || GameManager.Instance.player == null)
+        {
+            HideForkArrows();
+            return;
+        }
+
+        float dist = GameManager.Instance.distanceTraveled;
+        PipeFork nearestFork = null;
+        float nearestDist = float.MaxValue;
+
+        foreach (var fork in PipeFork.ActiveForks)
+        {
+            if (fork == null) continue;
+            float ahead = fork.forkDistance - dist;
+            // Show arrows when 5-45m ahead of fork
+            if (ahead > 5f && ahead < 45f && ahead < nearestDist)
+            {
+                nearestDist = ahead;
+                nearestFork = fork;
+            }
+        }
+
+        if (nearestFork == null)
+        {
+            HideForkArrows();
+            return;
+        }
+
+        if (!_forkArrowsCreated) CreateForkArrows();
+        if (_forkArrowRoot == null) return;
+
+        _forkArrowRoot.gameObject.SetActive(true);
+
+        // Fade in as player approaches (full at 15m, faint at 45m)
+        float fadeT = Mathf.Clamp01((45f - nearestDist) / 30f);
+        _forkArrowGroup.alpha = fadeT * (0.7f + Mathf.Sin(Time.time * 3f) * 0.3f);
+
+        // Arrows bob side to side
+        float leftBob = Mathf.Sin(Time.time * 4f) * 8f;
+        float rightBob = Mathf.Sin(Time.time * 4f + Mathf.PI) * 8f;
+        _forkLeftArrow.localPosition = new Vector3(leftBob, 0f, 0f);
+        _forkRightArrow.localPosition = new Vector3(rightBob, 0f, 0f);
+    }
+
+    void HideForkArrows()
+    {
+        if (_forkArrowRoot != null && _forkArrowRoot.gameObject.activeSelf)
+            _forkArrowRoot.gameObject.SetActive(false);
     }
 
     public void UpdateMultiplier(float mult)

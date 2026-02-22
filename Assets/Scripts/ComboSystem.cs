@@ -69,6 +69,31 @@ public class ComboSystem : MonoBehaviour
 
         GameManager.Instance.RecordCombo(ComboCount);
 
+        // Escalating screen effects for sustained combos
+        if (ComboCount >= 5 && ScreenEffects.Instance != null)
+        {
+            // Intensity scales with combo (capped at 20)
+            float intensity = Mathf.Clamp01((ComboCount - 5f) / 15f);
+
+            // Edge glow at 5+ (golden, subtle and building)
+            ScreenEffects.Instance.SetComboGlow(intensity);
+
+            // Chromatic pulse per event at 10+
+            if (ComboCount >= 10)
+                ScreenEffects.Instance.TriggerComboPulse(intensity);
+        }
+
+        // Per-event camera micro-shake scales with combo
+        if (ComboCount >= 3 && PipeCamera.Instance != null)
+        {
+            float microShake = Mathf.Min(ComboCount * 0.008f, 0.1f);
+            PipeCamera.Instance.Shake(microShake);
+        }
+
+        // Per-event haptic escalation
+        if (ComboCount >= 8)
+            HapticManager.LightTap();
+
         // Milestone bonuses and camera effects
         if (ComboCount == 5 || ComboCount == 10 || ComboCount == 20 || ComboCount == 50)
         {
@@ -107,12 +132,16 @@ public class ComboSystem : MonoBehaviour
         if (ComboCount >= 3 && ProceduralAudio.Instance != null)
             ProceduralAudio.Instance.PlayComboBreak();
         ComboCount = 0;
+        if (ScreenEffects.Instance != null)
+            ScreenEffects.Instance.SetComboGlow(0f);
     }
 
     public void ResetCombo()
     {
         ComboCount = 0;
         _lastEventTime = 0f;
+        if (ScreenEffects.Instance != null)
+            ScreenEffects.Instance.SetComboGlow(0f);
     }
 
     void UpdateUI()

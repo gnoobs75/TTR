@@ -62,6 +62,10 @@ public class ScreenEffects : MonoBehaviour
     // Invincibility shimmer (golden edge pulse during i-frames)
     private Image _invincShimmer;
     private float _invincShimmerAlpha;
+
+    // Combo glow (escalating edge glow during combos)
+    private float _comboGlowTarget;
+    private float _comboGlowCurrent;
     private float _splatterAlpha;
     private Color _splatterColor = Color.white;
     private float _splatterDecay = 1.5f; // seconds to fully fade
@@ -531,6 +535,21 @@ public class ScreenEffects : MonoBehaviour
             _splatter.color = new Color(1f, 1f, 1f, 0f);
         }
 
+        // Combo glow - smooth ramp to target, adds golden-orange edge effect
+        _comboGlowCurrent = Mathf.Lerp(_comboGlowCurrent, _comboGlowTarget, dt * 3f);
+        if (_comboGlowCurrent > 0.01f)
+        {
+            // Repurpose speed streaks with warm combo coloring when active
+            float comboPulse = 0.7f + Mathf.Sin(Time.time * 4f) * 0.3f;
+            float comboAlpha = _comboGlowCurrent * 0.08f * comboPulse;
+            // Blend golden color into the vignette
+            if (_vignetteOverlay != null)
+            {
+                float existingVig = _vignetteIntensity;
+                _vignetteIntensity = Mathf.Max(_vignetteIntensity, _comboGlowCurrent * 0.15f);
+            }
+        }
+
         // Invincibility shimmer - golden edge glow during i-frames
         if (_invincShimmerAlpha > 0.005f && _invincShimmer != null)
         {
@@ -603,6 +622,19 @@ public class ScreenEffects : MonoBehaviour
         _invincShimmerAlpha = 0f; // clear shimmer on invincibility end
         // Reset color after use
         Invoke(nameof(ResetFlashColor), 0.3f);
+    }
+
+    /// <summary>Set combo edge glow intensity (0-1). Higher = more visible edge glow.</summary>
+    public void SetComboGlow(float intensity)
+    {
+        _comboGlowTarget = Mathf.Clamp01(intensity);
+    }
+
+    /// <summary>Brief chromatic pulse on combo event at 10+ chains.</summary>
+    public void TriggerComboPulse(float intensity)
+    {
+        _chromaticIntensity = Mathf.Max(_chromaticIntensity, intensity * 0.5f);
+        _speedStreakIntensity = Mathf.Max(_speedStreakIntensity, intensity * 0.3f);
     }
 
     /// <summary>Brief red edge flash as proximity warning for fast-approaching obstacles.</summary>
