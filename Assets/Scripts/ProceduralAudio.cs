@@ -103,6 +103,11 @@ public class ProceduralAudio : MonoBehaviour
     private bool _photoFinishAnnounced;  // one-shot at 50m
     private float _heartbeatPhase;       // pulsing bass in final stretch
 
+    // Speed wind loop (airflow sound that scales with player speed)
+    private AudioClip _windLoop;
+    private AudioSource _windSource;
+    private float _windVolTarget;
+
     // Zone ambient audio (environmental layers per zone)
     private AudioSource _ambientSource;
     private AudioClip[] _zoneAmbientClips; // one loop per zone
@@ -149,6 +154,13 @@ public class ProceduralAudio : MonoBehaviour
         _driftSource.loop = true;
         _driftSource.volume = 0f;
 
+        // Wind loop source (continuous airflow that scales with speed)
+        _windSource = gameObject.AddComponent<AudioSource>();
+        _windSource.playOnAwake = false;
+        _windSource.spatialBlend = 0f;
+        _windSource.loop = true;
+        _windSource.volume = 0f;
+
         // Ambient audio sources (two for crossfading between zones)
         _ambientSource = gameObject.AddComponent<AudioSource>();
         _ambientSource.playOnAwake = false;
@@ -163,6 +175,7 @@ public class ProceduralAudio : MonoBehaviour
         _ambientSource2.volume = 0f;
 
         GenerateAllClips();
+        GenerateWindLoop();
         GenerateZoneAmbientClips();
         LoadAudioFiles();
     }
@@ -942,6 +955,74 @@ public class ProceduralAudio : MonoBehaviour
     /// <summary>Brief pitch wobble on zone transition.</summary>
     public void TriggerZoneSweep() { _zoneTransitionSweep = 0.5f; }
 
+    void GenerateWindLoop()
+    {
+        // Loopable tunnel wind: band-pass filtered noise simulating air rushing through a pipe
+        // Uses a longer clip (1s) for smoother looping
+        float dur = 1.0f;
+        int samples = Mathf.RoundToInt(SAMPLE_RATE * dur);
+        float[] data = new float[samples];
+
+        // Pre-generate white noise, then apply simple low-pass + high-pass for band-pass effect
+        System.Random rng = new System.Random(777); // deterministic for consistent sound
+        float prevLow = 0f;
+        float prevHigh = 0f;
+        float prevOut = 0f;
+
+        for (int i = 0; i < samples; i++)
+        {
+            float t = (float)i / SAMPLE_RATE;
+            float noise = (float)(rng.NextDouble() * 2.0 - 1.0);
+
+            // Low-pass at ~800Hz (smooths out harshness)
+            float lpAlpha = 0.11f; // cutoff ~800Hz at 44100
+            prevLow += lpAlpha * (noise - prevLow);
+
+            // High-pass at ~200Hz (removes low rumble, keeps airy quality)
+            float hpAlpha = 0.97f;
+            prevHigh = hpAlpha * (prevHigh + prevLow - prevOut);
+            prevOut = prevLow;
+
+            float signal = prevHigh;
+
+            // Add subtle tonal resonance (pipe harmonic at ~350Hz)
+            signal += Mathf.Sin(2f * Mathf.PI * 350f * t) * 0.08f;
+            // Second harmonic for richer pipe sound
+            signal += Mathf.Sin(2f * Mathf.PI * 700f * t + Mathf.Sin(t * 5f)) * 0.04f;
+
+            // Smooth loop envelope (gentle fade at edges to prevent click)
+            float loopEnv = 1f;
+            float fadeZone = 0.02f; // 20ms fade
+            if (t < fadeZone) loopEnv = t / fadeZone;
+            else if (t > dur - fadeZone) loopEnv = (dur - t) / fadeZone;
+
+            data[i] = signal * loopEnv * 0.25f;
+        }
+
+        _windLoop = AudioClip.Create("WindLoop", samples, 1, SAMPLE_RATE, false);
+        _windLoop.SetData(data, 0);
+    }
+
+    /// <summary>Update wind loop volume/pitch based on player speed. Call from game loop.</summary>
+    public void UpdateWindLoop(float speed)
+    {
+        if (_windSource == null || _windLoop == null) return;
+
+        // Wind fades in starting at 4 SMPH, full intensity at 16+
+        float intensity = Mathf.Clamp01((speed - 4f) / 12f);
+        _windVolTarget = intensity;
+
+        // Start playing when needed
+        if (intensity > 0.01f && !_windSource.isPlaying)
+        {
+            _windSource.clip = _windLoop;
+            _windSource.Play();
+        }
+
+        // Pitch rises with speed (deeper at slow, higher/whistlier at fast)
+        _windSource.pitch = Mathf.Lerp(0.7f, 1.5f, intensity);
+    }
+
     void GenerateZoneAmbientClips()
     {
         _zoneAmbientClips = new AudioClip[5];
@@ -1070,6 +1151,15 @@ public class ProceduralAudio : MonoBehaviour
             _driftSource.volume = Mathf.Lerp(_driftSource.volume, targetVol, Time.deltaTime * 8f);
             if (_driftSource.volume < 0.005f && _driftSource.isPlaying && _driftVolTarget <= 0f)
                 _driftSource.Stop();
+        }
+
+        // Wind loop: smooth volume ramp with speed
+        if (_windSource != null)
+        {
+            float targetVol = _windVolTarget * masterVolume * sfxVolume * 0.28f;
+            _windSource.volume = Mathf.Lerp(_windSource.volume, targetVol, Time.deltaTime * 4f);
+            if (_windSource.volume < 0.003f && _windSource.isPlaying && _windVolTarget <= 0f)
+                _windSource.Stop();
         }
 
         if (_musicSource != null && _musicPlaying)

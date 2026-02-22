@@ -289,6 +289,10 @@ public class GameUI : MonoBehaviour
         if (ScreenEffects.Instance != null)
             ScreenEffects.Instance.UpdateSpeed(speed);
 
+        // Speed wind loop
+        if (ProceduralAudio.Instance != null)
+            ProceduralAudio.Instance.UpdateWindLoop(speed);
+
         // Update boost timer bar
         UpdateBoostBar();
 
