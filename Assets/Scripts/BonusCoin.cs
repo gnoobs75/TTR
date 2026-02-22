@@ -19,6 +19,9 @@ public class BonusCoin : MonoBehaviour
     private Renderer[] _renderers;
     private MaterialPropertyBlock _mpb;
     private Quaternion _baseRotation;
+    private Transform _player;
+    private const float MAGNET_RANGE = 4.5f; // bigger magnet range for bonus coins
+    private const float MAGNET_SPEED = 14f;
 
     void Start()
     {
@@ -32,6 +35,9 @@ public class BonusCoin : MonoBehaviour
 
         // Save spawn rotation for standing-up tilt + spin
         _baseRotation = transform.rotation;
+
+        var tc = Object.FindFirstObjectByType<TurdController>();
+        if (tc != null) _player = tc.transform;
     }
 
     void Update()
@@ -45,11 +51,28 @@ public class BonusCoin : MonoBehaviour
         if (transform.parent != null)
             transform.localPosition = _startLocalPos + transform.parent.InverseTransformDirection(Vector3.up) * bob;
 
-        // Subtle rainbow shimmer glow
+        // Coin magnetism: pull toward player with bigger range than normal coins
+        float proximity = 0f;
+        if (_player != null)
+        {
+            float dist = Vector3.Distance(transform.position, _player.position);
+            if (dist < MAGNET_RANGE)
+            {
+                proximity = 1f - (dist / MAGNET_RANGE);
+                float pullStrength = proximity * proximity * MAGNET_SPEED;
+                Vector3 toPlayer = (_player.position - transform.position).normalized;
+                transform.position += toPlayer * pullStrength * Time.deltaTime;
+                if (proximity > 0.5f)
+                    _startLocalPos = transform.localPosition;
+            }
+        }
+
+        // Rainbow shimmer glow + proximity boost
         float pulse = 0.8f + Mathf.Sin(Time.time * pulseFrequency * Mathf.PI) * 0.4f;
         float hue = (Time.time * 0.3f) % 1f;
         Color baseGlow = Color.HSVToRGB(hue, 0.3f, 1f);
-        Color glow = baseGlow * pulse;
+        float proximityBoost = 1f + proximity * 2f;
+        Color glow = baseGlow * pulse * proximityBoost;
 
         foreach (var r in _renderers)
         {

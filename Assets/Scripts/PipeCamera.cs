@@ -190,12 +190,45 @@ public class PipeCamera : MonoBehaviour
                 _cam.fieldOfView = Mathf.Lerp(_cam.fieldOfView, targetFOV, Time.deltaTime * 5f);
             }
 
-            // Subtle camera breathing - organic feel, more pronounced at low speed
+            // Zone-aware camera breathing: each zone has a unique feel
             _breathePhase += Time.deltaTime;
-            float breatheSpeed = Mathf.Lerp(1.8f, 0.8f, Mathf.Clamp01((_tc.CurrentSpeed - 4f) / 10f));
-            float breatheAmp = Mathf.Lerp(0.02f, 0.005f, Mathf.Clamp01((_tc.CurrentSpeed - 4f) / 10f));
+            float speedT = Mathf.Clamp01((_tc.CurrentSpeed - 4f) / 10f);
+
+            // Per-zone breathing personality
+            float zoneSpeedMult = 1f;    // breathing frequency multiplier
+            float zoneAmpMult = 1f;      // breathing amplitude multiplier
+            float zoneSecondary = 0.5f;  // secondary axis ratio (side wobble)
+            float zoneTertiary = 0f;     // third axis (forward lurch) ratio
+
+            if (PipeZoneSystem.Instance != null)
+            {
+                int zi = PipeZoneSystem.Instance.CurrentZoneIndex;
+                float zb = PipeZoneSystem.Instance.ZoneBlend;
+                // Zone breathing profiles: [speedMult, ampMult, secondary, tertiary]
+                // Porcelain: calm and gentle
+                // Grimy: slightly rougher, more side wobble
+                // Toxic: slow and uneasy, forward lurching
+                // Rusty: industrial rumble, fast and tight
+                // Hellsewer: claustrophobic, rapid shallow breathing
+                float[][] profiles = {
+                    new[] { 1.0f, 1.0f, 0.4f, 0.0f },  // Porcelain: calm
+                    new[] { 1.15f, 1.1f, 0.6f, 0.1f },  // Grimy: rough
+                    new[] { 0.7f, 1.4f, 0.5f, 0.25f },  // Toxic: slow uneasy
+                    new[] { 1.6f, 0.8f, 0.7f, 0.15f },  // Rusty: industrial
+                    new[] { 2.0f, 1.3f, 0.8f, 0.3f },   // Hellsewer: tense
+                };
+                int next = Mathf.Min(zi + 1, profiles.Length - 1);
+                zoneSpeedMult = Mathf.Lerp(profiles[zi][0], profiles[next][0], zb);
+                zoneAmpMult = Mathf.Lerp(profiles[zi][1], profiles[next][1], zb);
+                zoneSecondary = Mathf.Lerp(profiles[zi][2], profiles[next][2], zb);
+                zoneTertiary = Mathf.Lerp(profiles[zi][3], profiles[next][3], zb);
+            }
+
+            float breatheSpeed = Mathf.Lerp(1.8f, 0.8f, speedT) * zoneSpeedMult;
+            float breatheAmp = Mathf.Lerp(0.02f, 0.005f, speedT) * zoneAmpMult;
             Vector3 breatheOffset = camUp * Mathf.Sin(_breathePhase * breatheSpeed) * breatheAmp
-                                  + camRight * Mathf.Sin(_breathePhase * breatheSpeed * 0.7f) * breatheAmp * 0.5f;
+                                  + camRight * Mathf.Sin(_breathePhase * breatheSpeed * 0.7f) * breatheAmp * zoneSecondary
+                                  + camFwd * Mathf.Sin(_breathePhase * breatheSpeed * 0.4f) * breatheAmp * zoneTertiary;
             transform.position += breatheOffset;
         }
         else

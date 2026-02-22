@@ -15,6 +15,9 @@ public class ProceduralAudio : MonoBehaviour
     [Range(0f, 1f)] public float musicVolume = 0.4f;
 
     private AudioSource _sfxSource;
+    private AudioSource _coinSource; // dedicated source for pitch-shifted coin streaks
+    private int _coinStreak;
+    private float _lastCoinTime;
     private AudioSource _musicSource;
 
     // Cached clips
@@ -97,6 +100,11 @@ public class ProceduralAudio : MonoBehaviour
         _sfxSource = gameObject.AddComponent<AudioSource>();
         _sfxSource.playOnAwake = false;
         _sfxSource.spatialBlend = 0f; // 2D
+
+        // Coin audio source (separate so pitch doesn't affect other SFX)
+        _coinSource = gameObject.AddComponent<AudioSource>();
+        _coinSource.playOnAwake = false;
+        _coinSource.spatialBlend = 0f;
 
         // Music audio source
         _musicSource = gameObject.AddComponent<AudioSource>();
@@ -710,13 +718,29 @@ public class ProceduralAudio : MonoBehaviour
 
     public void PlayCoinCollect()
     {
-        // Play random fart sound for fartcoin pickup, fall back to procedural if not loaded
+        // Streak tracking: coins collected within 0.8s of each other raise pitch
+        float now = Time.time;
+        if (now - _lastCoinTime < 0.8f)
+            _coinStreak = Mathf.Min(_coinStreak + 1, 12);
+        else
+            _coinStreak = 0;
+        _lastCoinTime = now;
+
+        // Rising pitch: base 1.0 → up to 1.8 over 12-streak (musical scale feel)
+        float pitch = 1f + _coinStreak * 0.065f;
+
+        AudioClip clip = _coinCollect;
         if (_fartClips != null && _fartClips.Length > 0)
         {
             AudioClip fart = _fartClips[Random.Range(0, _fartClips.Length)];
-            if (fart != null) { PlaySFX(fart); return; }
+            if (fart != null) clip = fart;
         }
-        PlaySFX(_coinCollect);
+
+        if (clip != null && _coinSource != null)
+        {
+            _coinSource.pitch = pitch;
+            _coinSource.PlayOneShot(clip, masterVolume * sfxVolume);
+        }
     }
 
     public void PlayToiletFlush()

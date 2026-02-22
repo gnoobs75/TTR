@@ -77,6 +77,16 @@ public class RacerAI : MonoBehaviour
     private bool _nearMissTriggered;
     private const float NEAR_MISS_DIST = 2.5f;
 
+    // Zone affinity: per-zone speed multiplier (some racers excel in certain zones)
+    // Index 0-4 maps to Porcelain, Grimy, Toxic, Rusty, Hellsewer
+    [HideInInspector] public float[] zoneAffinities = { 1f, 1f, 1f, 1f, 1f };
+
+    // Final stretch push
+    private bool _finalStretchActive;
+    private float _finalStretchMult = 1f;
+    private const float FINISH_DISTANCE = 1000f;
+    private const float FINAL_STRETCH_START = 850f; // last 150m
+
     // Public accessors
     public float DistanceTraveled => _distanceAlongPath;
     public bool IsFinished => _finished;
@@ -174,6 +184,20 @@ public class RacerAI : MonoBehaviour
         }
 
         targetSpeed = Mathf.Clamp(targetSpeed, baseSpeed * 0.4f, maxSpeed);
+
+        // Zone affinity: racers excel or struggle in different zones
+        if (PipeZoneSystem.Instance != null)
+        {
+            int zi = PipeZoneSystem.Instance.CurrentZoneIndex;
+            float blend = PipeZoneSystem.Instance.ZoneBlend;
+            float affCurr = zoneAffinities[Mathf.Clamp(zi, 0, zoneAffinities.Length - 1)];
+            float affNext = zoneAffinities[Mathf.Clamp(zi + 1, 0, zoneAffinities.Length - 1)];
+            targetSpeed *= Mathf.Lerp(affCurr, affNext, blend);
+        }
+
+        // Final stretch push: personality-driven sprint to the finish
+        UpdateFinalStretch(dt);
+        targetSpeed *= _finalStretchMult;
 
         // Personality bursts (erratic racers get speed surges)
         UpdateBurst(dt);
@@ -326,6 +350,30 @@ public class RacerAI : MonoBehaviour
         }
     }
 
+    void UpdateFinalStretch(float dt)
+    {
+        if (_distanceAlongPath < FINAL_STRETCH_START)
+        {
+            _finalStretchMult = 1f;
+            return;
+        }
+
+        if (!_finalStretchActive)
+        {
+            _finalStretchActive = true;
+            // Aggressive racers push harder in the final stretch
+            // Consistent racers maintain a steady push; erratic ones are wilder
+            float pushBase = 1.05f + aggression * 0.1f;
+            float variance = (1f - consistency) * 0.08f;
+            _finalStretchMult = pushBase + Random.Range(-variance, variance);
+        }
+
+        // Ramp up as we approach the line
+        float progress = (_distanceAlongPath - FINAL_STRETCH_START) / (FINISH_DISTANCE - FINAL_STRETCH_START);
+        progress = Mathf.Clamp01(progress);
+        _finalStretchMult = Mathf.Lerp(1f, _finalStretchMult, progress);
+    }
+
     void UpdateBurst(float dt)
     {
         // Erratic racers get random speed surges
@@ -394,6 +442,8 @@ public class RacerAI : MonoBehaviour
                 ai.stumbleChance = 0.025f; // sloppy but not as much
                 ai.catchUpMultiplier = 1.45f; // closes gaps fast
                 ai.rubberBandDistance = 8f; // kicks in sooner
+                // Thrives in grimy/rusty zones, struggles in clean porcelain
+                ai.zoneAffinities = new float[] { 0.94f, 1.06f, 0.98f, 1.08f, 1.02f };
                 break;
 
             case "PrincessPlop":
@@ -410,6 +460,8 @@ public class RacerAI : MonoBehaviour
                 ai.slowDownMultiplier = 0.92f; // barely slows when ahead
                 ai.catchUpMultiplier = 1.3f;
                 ai.rubberBandDistance = 8f;
+                // Princess of the porcelain throne - excels in clean zones, hates filth
+                ai.zoneAffinities = new float[] { 1.08f, 1.02f, 0.95f, 0.93f, 0.90f };
                 break;
 
             case "TheLog":
@@ -425,6 +477,8 @@ public class RacerAI : MonoBehaviour
                 ai.acceleration = 1.8f; // still slow to accelerate but not as bad
                 ai.catchUpMultiplier = 1.3f;
                 ai.rubberBandDistance = 10f;
+                // Ancient sewer dweller - gets stronger deeper in, Hellsewer is home turf
+                ai.zoneAffinities = new float[] { 0.92f, 0.96f, 1.02f, 1.06f, 1.12f };
                 break;
 
             case "LilSquirt":
@@ -441,6 +495,8 @@ public class RacerAI : MonoBehaviour
                 ai.steerChangeInterval = 0.8f; // changes direction rapidly
                 ai.catchUpMultiplier = 1.4f;
                 ai.rubberBandDistance = 6f; // rubber-bands very aggressively
+                // Toxic little gremlin - loves the toxic zone, fragile in hellsewer
+                ai.zoneAffinities = new float[] { 1.02f, 1.0f, 1.10f, 0.97f, 0.88f };
                 break;
         }
     }
