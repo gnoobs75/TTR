@@ -801,6 +801,18 @@ public class TurdController : MonoBehaviour
             ParticleManager.Instance.StartCoinMagnet(transform);
         if (ProceduralAudio.Instance != null)
             ProceduralAudio.Instance.PlayCoinMagnet();
+
+        // Magnet powerup hype
+        if (CheerOverlay.Instance != null)
+            CheerOverlay.Instance.ShowCheer("MAGNET!", new Color(1f, 0.85f, 0.1f), true);
+        if (ScreenEffects.Instance != null)
+        {
+            ScreenEffects.Instance.TriggerPowerUpFlash();
+            ScreenEffects.Instance.FlashSpeedStreaks(0.8f);
+        }
+        if (PipeCamera.Instance != null)
+            PipeCamera.Instance.PunchFOV(3f);
+        HapticManager.MediumTap();
     }
 
     void AttractNearbyCoins()

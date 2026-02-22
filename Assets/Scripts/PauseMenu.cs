@@ -334,6 +334,11 @@ public class PauseMenu : MonoBehaviour
 
         AudioListener.pause = false;
 
+        // Welcome back!
+        if (CheerOverlay.Instance != null)
+            CheerOverlay.Instance.ShowCheer("LET'S GO!", new Color(0.3f, 1f, 0.5f), false);
+        if (ProceduralAudio.Instance != null)
+            ProceduralAudio.Instance.PlayCoinCollect();
         HapticManager.LightTap();
     }
 

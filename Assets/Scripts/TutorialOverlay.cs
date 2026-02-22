@@ -181,9 +181,19 @@ public class TutorialOverlay : MonoBehaviour
     /// Mark tutorial as complete (called after all hints shown or game over)
     public void CompleteTutorial()
     {
+        if (_tutorialDone) return; // Don't celebrate twice
         _tutorialDone = true;
         PlayerPrefs.SetInt(PREFS_KEY, 1);
         PlayerPrefs.Save();
+
+        // You did it, little turd!
+        if (CheerOverlay.Instance != null)
+            CheerOverlay.Instance.ShowCheer("YOU GOT THIS!", new Color(0.3f, 1f, 0.6f), true);
+        if (ScreenEffects.Instance != null)
+            ScreenEffects.Instance.TriggerPowerUpFlash();
+        if (ProceduralAudio.Instance != null)
+            ProceduralAudio.Instance.PlayCelebration();
+        HapticManager.LightTap();
     }
 
     public void ResetForNewRun()
