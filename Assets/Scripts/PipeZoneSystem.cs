@@ -50,7 +50,7 @@ public class PipeZoneSystem : MonoBehaviour
         },
         new ZoneData {
             name = "Grimy Pipes",
-            startDistance = 80f,
+            startDistance = 155f,
             pipeColor = new Color(0.65f, 0.58f, 0.48f),        // Warm dirty concrete (subtle brown tint)
             pipeEmission = new Color(0.04f, 0.035f, 0.02f),
             waterColor = new Color(0.12f, 0.18f, 0.08f),        // Darker green-brown murk
@@ -66,13 +66,13 @@ public class PipeZoneSystem : MonoBehaviour
         },
         new ZoneData {
             name = "Toxic Tunnels",
-            startDistance = 250f,
+            startDistance = 510f,
             pipeColor = new Color(0.55f, 0.62f, 0.45f),        // Subtle green tint on concrete (not neon)
             pipeEmission = new Color(0.02f, 0.07f, 0.015f),
             waterColor = new Color(0.10f, 0.25f, 0.06f),        // Dark toxic green (not neon)
             waterEmission = new Color(0.03f, 0.12f, 0.015f),
             fogColor = new Color(0.03f, 0.08f, 0.02f),          // Murkier toxic green fog
-            fogDensity = 0.015f,
+            fogDensity = 0.010f,
             ambientColor = new Color(0.10f, 0.18f, 0.06f),      // Darker, more saturated green
             lightColor = new Color(0.55f, 0.88f, 0.45f),        // More saturated toxic green light
             lightIntensity = 0.9f,                               // Dimmer - feels more dangerous
@@ -82,13 +82,13 @@ public class PipeZoneSystem : MonoBehaviour
         },
         new ZoneData {
             name = "Rusty Works",
-            startDistance = 500f,
+            startDistance = 1020f,
             pipeColor = new Color(0.65f, 0.50f, 0.38f),        // Warm rust-brown (not bright orange)
             pipeEmission = new Color(0.06f, 0.03f, 0.01f),
             waterColor = new Color(0.18f, 0.12f, 0.06f),        // Dark brown water
             waterEmission = new Color(0.05f, 0.03f, 0.01f),
             fogColor = new Color(0.08f, 0.05f, 0.02f),
-            fogDensity = 0.012f,
+            fogDensity = 0.009f,
             ambientColor = new Color(0.22f, 0.16f, 0.10f),
             lightColor = new Color(0.95f, 0.72f, 0.45f),
             lightIntensity = 1.2f,
@@ -98,13 +98,13 @@ public class PipeZoneSystem : MonoBehaviour
         },
         new ZoneData {
             name = "Hellsewer",
-            startDistance = 800f,
+            startDistance = 1600f,
             pipeColor = new Color(0.45f, 0.22f, 0.15f),        // Dark reddish-brown (not bright crimson)
             pipeEmission = new Color(0.14f, 0.03f, 0.01f),      // Stronger hellish glow
             waterColor = new Color(0.25f, 0.08f, 0.04f),        // Dark blood-brown
             waterEmission = new Color(0.12f, 0.02f, 0.008f),    // Blood-red glow
             fogColor = new Color(0.10f, 0.02f, 0.008f),         // Blood-red murk
-            fogDensity = 0.02f,                                  // Dense, claustrophobic
+            fogDensity = 0.012f,                                  // Atmospheric but visible
             ambientColor = new Color(0.14f, 0.06f, 0.03f),      // Much darker, oppressive
             lightColor = new Color(1.0f, 0.38f, 0.18f),         // Deep crimson light
             lightIntensity = 0.75f,                              // Darker, more oppressive
@@ -118,6 +118,7 @@ public class PipeZoneSystem : MonoBehaviour
     private int _currentZoneIndex = 0;
     private float _zoneBlend = 0f; // 0-1 blend between current and next zone
     private Light _mainLight;
+    private bool _preWarningPlayed = false; // per-zone pre-transition audio cue
 
     // Current interpolated values for other systems to read
     public Color CurrentPipeColor { get; private set; }
@@ -184,7 +185,28 @@ public class PipeZoneSystem : MonoBehaviour
                 blend = Mathf.Clamp01((dist - blendStart) / transitionLength);
         }
 
+        // Pre-transition warning: foreboding audio build ~60m before zone boundary
+        if (zoneIdx < zones.Length - 1)
+        {
+            float nextStart = zones[zoneIdx + 1].startDistance;
+            float distToNext = nextStart - dist;
+            if (distToNext < 60f && distToNext > 30f && !_preWarningPlayed)
+            {
+                _preWarningPlayed = true;
+                if (ProceduralAudio.Instance != null)
+                    ProceduralAudio.Instance.PlayZoneApproachBuild();
+                // Subtle vignette pulse as foreboding cue
+                if (ScreenEffects.Instance != null)
+                    ScreenEffects.Instance.TriggerProximityWarning();
+                HapticManager.LightTap();
+            }
+        }
+
         bool zoneChanged = zoneIdx != _currentZoneIndex;
+#if UNITY_EDITOR
+        if (zoneChanged)
+            Debug.Log($"[ZONE] Transition: {zones[_currentZoneIndex].name} → {zones[zoneIdx].name} at dist={dist:F0}");
+#endif
         _currentZoneIndex = zoneIdx;
         _zoneBlend = blend;
 
@@ -201,11 +223,24 @@ public class PipeZoneSystem : MonoBehaviour
         CurrentBumpScale = Mathf.Lerp(current.bumpScale, next.bumpScale, blend);
         CurrentEmissionBoost = Mathf.Lerp(current.emissionBoost, next.emissionBoost, blend);
 
+        // Speed corridor visual identity: cyan glow + reduced fog
+        bool inCorridor = ObstacleSpawner.IsSpeedCorridor(dist);
+        if (inCorridor)
+        {
+            Color corridorGlow = new Color(0.05f, 0.15f, 0.2f);
+            CurrentPipeEmission = Color.Lerp(CurrentPipeEmission, corridorGlow, 0.4f);
+        }
+
         // Update fog (with organic breathing oscillation)
         Color fogCol = Color.Lerp(current.fogColor, next.fogColor, blend);
         float fogDensity = Mathf.Lerp(current.fogDensity, next.fogDensity, blend);
+
+        // Reduce fog by 30% in speed corridors for better visibility
+        if (inCorridor)
+            fogDensity *= 0.7f;
+
         // Fog breathing: deeper zones have stronger oscillation
-        float breatheAmp = Mathf.Lerp(0.03f, 0.10f, zoneIdx / 4f);
+        float breatheAmp = Mathf.Lerp(0.02f, 0.05f, zoneIdx / 4f);
         float breathe = 1f + (Mathf.PerlinNoise(Time.time * 0.5f, 3.7f) - 0.5f) * breatheAmp;
         RenderSettings.fogColor = fogCol;
         RenderSettings.fogDensity = fogDensity * breathe;
@@ -261,6 +296,7 @@ public class PipeZoneSystem : MonoBehaviour
         // Announce zone change with full fanfare
         if (zoneChanged)
         {
+            _preWarningPlayed = false; // reset for next zone boundary
             if (ProceduralAudio.Instance != null)
             {
                 ProceduralAudio.Instance.PlayZoneTransition();

@@ -30,6 +30,10 @@ public class ObstacleRadar : MonoBehaviour
     private const float WARNING_RANGE = 15f;   // start pinging at 15m
     private const float WARNING_SPEED = 6f;    // lower threshold: warn at moderate speed too
 
+    // Danger zone flash tracking
+    private float _dangerFlashTimer;
+    private bool _wasInDangerZone;
+
     void Awake()
     {
         Instance = this;
@@ -123,7 +127,18 @@ public class ObstacleRadar : MonoBehaviour
             return;
         }
 
-        _radarBgImage.color = new Color(0.05f, 0.08f, 0.04f, 0.4f * _radarAlpha);
+        // Radar background: flashes red-ish when entering danger zone
+        if (_dangerFlashTimer > 0f)
+        {
+            _dangerFlashTimer -= Time.deltaTime;
+            float flashT = _dangerFlashTimer / 0.3f;
+            Color bgCol = Color.Lerp(new Color(0.05f, 0.08f, 0.04f), new Color(0.35f, 0.08f, 0.04f), flashT);
+            _radarBgImage.color = new Color(bgCol.r, bgCol.g, bgCol.b, Mathf.Lerp(0.4f, 0.65f, flashT) * _radarAlpha);
+        }
+        else
+        {
+            _radarBgImage.color = new Color(0.05f, 0.08f, 0.04f, 0.4f * _radarAlpha);
+        }
 
         // Scan for obstacles periodically (every 0.1s for responsiveness)
         _scanTimer -= Time.deltaTime;
@@ -142,8 +157,18 @@ public class ObstacleRadar : MonoBehaviour
         if (_closestObstacleDist >= WARNING_RANGE || speed < WARNING_SPEED)
         {
             _lastHapticTier = 0;
+            _wasInDangerZone = false;
             return;
         }
+
+        // Flash when first entering danger zone (< 8m)
+        bool inDangerZone = _closestObstacleDist < 8f;
+        if (inDangerZone && !_wasInDangerZone)
+        {
+            // Brief radar background flash
+            _dangerFlashTimer = 0.3f;
+        }
+        _wasInDangerZone = inDangerZone;
 
         _pingCooldown -= Time.deltaTime;
 
@@ -234,22 +259,28 @@ public class ObstacleRadar : MonoBehaviour
 
             _blipRTs[blipIdx].anchoredPosition = new Vector2(radarX, radarY);
 
-            // Color based on proximity: far = dim yellow, close = bright red
+            // Type-based color from ObstacleBehavior, with proximity brightness
             float urgency = 1f - (fwdDist / SCAN_RANGE);
+            ObstacleBehavior behavior = obs.GetComponent<ObstacleBehavior>();
+            Color typeColor = behavior != null ? behavior.HitFlashColor : new Color(1f, 0.8f, 0.2f);
+            // Blend toward bright red as urgency rises
             Color blipColor = Color.Lerp(
-                new Color(1f, 0.8f, 0.2f, 0.5f),
-                new Color(1f, 0.2f, 0.1f, 0.9f),
+                new Color(typeColor.r, typeColor.g, typeColor.b, 0.5f),
+                new Color(Mathf.Min(typeColor.r + 0.3f, 1f), typeColor.g * 0.3f, typeColor.b * 0.2f, 0.95f),
                 urgency);
             blipColor.a *= _radarAlpha;
 
-            // Pulse close obstacles
-            if (urgency > 0.6f)
-                blipColor.a *= 0.7f + Mathf.Abs(Mathf.Sin(Time.time * 6f)) * 0.3f;
+            // Pulse close obstacles with faster pulse rate
+            if (urgency > 0.5f)
+            {
+                float pulseRate = Mathf.Lerp(4f, 12f, urgency);
+                blipColor.a *= 0.6f + Mathf.Abs(Mathf.Sin(Time.time * pulseRate)) * 0.4f;
+            }
 
             _blips[blipIdx].color = blipColor;
 
-            // Size: closer = bigger
-            float size = Mathf.Lerp(4f, 8f, urgency);
+            // Size: closer = bigger (larger range for visibility)
+            float size = Mathf.Lerp(8f, 14f, urgency);
             _blipRTs[blipIdx].sizeDelta = new Vector2(size, size);
 
             blipIdx++;

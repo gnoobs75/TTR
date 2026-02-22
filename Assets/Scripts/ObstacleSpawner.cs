@@ -10,8 +10,8 @@ public class ObstacleSpawner : MonoBehaviour
 {
     [Header("Spawn Settings")]
     public float spawnDistance = 80f;
-    public float minSpacing = 16f;
-    public float maxSpacing = 30f;
+    public float minSpacing = 24f;
+    public float maxSpacing = 48f;
     public float pipeRadius = 3.5f;
 
     [Header("Obstacle Prefabs")]
@@ -27,7 +27,7 @@ public class ObstacleSpawner : MonoBehaviour
 
     [Header("Difficulty")]
     [Range(0f, 1f)]
-    public float obstacleChance = 0.4f;
+    public float obstacleChance = 0.3f;
     public float difficultyRamp = 0.01f;
 
     [Header("Player Reference")]
@@ -40,16 +40,164 @@ public class ObstacleSpawner : MonoBehaviour
     private float _cleanupDistance = 50f;
     private int _obstacleIndex = 0;
 
+    // Zone-themed obstacle pools (built once at Start from obstaclePrefabs)
+    // Porcelain: PoopBlob, ToxicBarrel, Duck (easy intro)
+    // Grimy: HairWad (the clog)
+    // Toxic: ToxicFrog, SewerJellyfish, SewerMine (toxic hazards)
+    // Rusty: SewerRat, Cockroach, SewerSpider (pest infestation)
+    // Hellsewer: ALL (everything at once)
+    private List<GameObject>[] _zonePools;
+    private int[] _zonePoolIndex; // per-zone cycling index
+
     // Special event tracking
     private float _nextBigAirDist = 300f;
     private float _nextDropDist = 200f;
     private float _nextGrateDist = 80f;
+
+    // Speed corridors: obstacle-free stretches packed with boosts and coins
+    private static readonly Vector2[] SpeedCorridors = {
+        new Vector2(280f, 360f),    // Late Porcelain → Grimy transition
+        new Vector2(770f, 850f),    // Mid Toxic, before Rusty
+        new Vector2(1350f, 1430f),  // Late Rusty, approaching Hellsewer
+    };
+    private bool[] _corridorAnnounced;
+
+    /// <summary>Returns true if distance is inside a speed corridor (no obstacles).</summary>
+    public static bool IsSpeedCorridor(float dist)
+    {
+        for (int i = 0; i < SpeedCorridors.Length; i++)
+        {
+            if (dist >= SpeedCorridors[i].x && dist <= SpeedCorridors[i].y)
+                return true;
+        }
+        return false;
+    }
+
+    /// <summary>Returns the end distance of the corridor containing dist, or dist if not in one.</summary>
+    public static float GetCorridorEnd(float dist)
+    {
+        for (int i = 0; i < SpeedCorridors.Length; i++)
+        {
+            if (dist >= SpeedCorridors[i].x && dist <= SpeedCorridors[i].y)
+                return SpeedCorridors[i].y;
+        }
+        return dist;
+    }
+
+    /// <summary>Returns a spacing multiplier based on proximity to corridors.
+    /// Spacing opens up approaching corridors, tightens after.</summary>
+    public static float GetCorridorSpacingMultiplier(float dist)
+    {
+        for (int i = 0; i < SpeedCorridors.Length; i++)
+        {
+            float start = SpeedCorridors[i].x;
+            float end = SpeedCorridors[i].y;
+            // 20m approach: gradually open up
+            if (dist >= start - 20f && dist < start)
+            {
+                float t = (dist - (start - 20f)) / 20f;
+                return Mathf.Lerp(1f, 1.5f, t);
+            }
+            // 20m after: gradually tighten back
+            if (dist > end && dist <= end + 20f)
+            {
+                float t = (dist - end) / 20f;
+                return Mathf.Lerp(1.5f, 0.8f, t);
+            }
+        }
+        return 1f;
+    }
 
     void Start()
     {
         _pipeGen = Object.FindFirstObjectByType<PipeGenerator>();
         if (player != null)
             _tc = player.GetComponent<TurdController>();
+        _corridorAnnounced = new bool[SpeedCorridors.Length];
+        BuildZonePools();
+    }
+
+    void BuildZonePools()
+    {
+        _zonePools = new List<GameObject>[5];
+        _zonePoolIndex = new int[5];
+        for (int i = 0; i < 5; i++)
+        {
+            _zonePools[i] = new List<GameObject>();
+            _zonePoolIndex[i] = 0;
+        }
+
+        if (obstaclePrefabs == null) return;
+
+        foreach (var prefab in obstaclePrefabs)
+        {
+            if (prefab == null) continue;
+
+            // Classify by behavior component or name
+            if (prefab.GetComponent<PoopBlobBehavior>() != null ||
+                prefab.GetComponent<ToxicBarrelBehavior>() != null ||
+                prefab.name.IndexOf("Duck", System.StringComparison.OrdinalIgnoreCase) >= 0)
+            {
+                _zonePools[0].Add(prefab); // Porcelain
+            }
+            else if (prefab.GetComponent<HairWadBehavior>() != null)
+            {
+                _zonePools[1].Add(prefab); // Grimy
+            }
+            else if (prefab.GetComponent<ToxicFrogBehavior>() != null ||
+                     prefab.GetComponent<SewerJellyfishBehavior>() != null ||
+                     prefab.GetComponent<SewerMineBehavior>() != null)
+            {
+                _zonePools[2].Add(prefab); // Toxic
+            }
+            else if (prefab.GetComponent<SewerRatBehavior>() != null ||
+                     prefab.GetComponent<CockroachBehavior>() != null ||
+                     prefab.GetComponent<SewerSpiderBehavior>() != null)
+            {
+                _zonePools[3].Add(prefab); // Rusty
+            }
+            else
+            {
+                // Unclassified: add to Porcelain as fallback
+                _zonePools[0].Add(prefab);
+            }
+        }
+
+        // Hellsewer (zone 4) gets ALL obstacle types
+        _zonePools[4].AddRange(obstaclePrefabs);
+    }
+
+    GameObject GetZoneObstacle(float dist)
+    {
+        if (obstaclePrefabs == null || obstaclePrefabs.Length == 0) return null;
+
+        // Determine zone from distance (matches PipeZoneSystem boundaries)
+        int zoneIdx;
+        if (dist < 155f) zoneIdx = 0;       // Porcelain
+        else if (dist < 510f) zoneIdx = 1;   // Grimy
+        else if (dist < 1020f) zoneIdx = 2;  // Toxic
+        else if (dist < 1600f) zoneIdx = 3;  // Rusty
+        else zoneIdx = 4;                     // Hellsewer
+
+        // 15% chance of a "wanderer" from the full pool for variety
+        if (Random.value < 0.15f)
+        {
+            _obstacleIndex = (_obstacleIndex + 1) % obstaclePrefabs.Length;
+            return obstaclePrefabs[_obstacleIndex];
+        }
+
+        // Use zone pool; fall back to full pool if zone pool is empty
+        var pool = _zonePools[zoneIdx];
+        if (pool == null || pool.Count == 0)
+        {
+            _obstacleIndex = (_obstacleIndex + 1) % obstaclePrefabs.Length;
+            return obstaclePrefabs[_obstacleIndex];
+        }
+
+        // Cycle through zone pool sequentially for fairness
+        int idx = _zonePoolIndex[zoneIdx];
+        _zonePoolIndex[zoneIdx] = (idx + 1) % pool.Count;
+        return pool[idx];
     }
 
     void Update()
@@ -62,29 +210,49 @@ public class ObstacleSpawner : MonoBehaviour
         while (_nextSpawnDist < playerDist + spawnDistance)
         {
             SpawnAtDistance(_nextSpawnDist);
-            _nextSpawnDist += Random.Range(minSpacing, maxSpacing);
+            // Spacing opens up near corridors, tightens after
+            float spacingMult = GetCorridorSpacingMultiplier(_nextSpawnDist);
+            _nextSpawnDist += Random.Range(minSpacing, maxSpacing) * spacingMult;
         }
 
-        // Special events: big air ramps (every 300-500m)
+        // Special events: big air ramps (every 300-500m) — skip in corridors
         if (bigAirRampPrefab != null && _nextBigAirDist < playerDist + spawnDistance)
         {
-            SpawnBigAirRamp(_nextBigAirDist);
-            _nextBigAirDist += Random.Range(300f, 500f);
+            if (IsSpeedCorridor(_nextBigAirDist))
+                _nextBigAirDist = GetCorridorEnd(_nextBigAirDist) + 20f; // push past corridor
+            else
+            {
+                SpawnBigAirRamp(_nextBigAirDist);
+                _nextBigAirDist += Random.Range(300f, 500f);
+            }
         }
 
-        // Special events: vertical drops (every 400-600m, starts after 200m)
+        // Special events: vertical drops (every 400-600m, starts after 200m) — skip in corridors
         if (dropZonePrefab != null && _nextDropDist < playerDist + spawnDistance)
         {
-            SpawnDropZone(_nextDropDist);
-            _nextDropDist += Random.Range(400f, 600f);
+            if (IsSpeedCorridor(_nextDropDist))
+                _nextDropDist = GetCorridorEnd(_nextDropDist) + 20f;
+            else
+            {
+                SpawnDropZone(_nextDropDist);
+                _nextDropDist += Random.Range(400f, 600f);
+            }
         }
 
-        // Grate obstacles (every 60-120m, starts after 80m)
+        // Grate obstacles (every 60-120m, starts after 80m) — skip in corridors
         if (gratePrefab != null && _nextGrateDist < playerDist + spawnDistance)
         {
-            SpawnGrate(_nextGrateDist);
-            _nextGrateDist += Random.Range(60f, 120f);
+            if (IsSpeedCorridor(_nextGrateDist))
+                _nextGrateDist = GetCorridorEnd(_nextGrateDist) + 10f;
+            else
+            {
+                SpawnGrate(_nextGrateDist);
+                _nextGrateDist += Random.Range(60f, 120f);
+            }
         }
+
+        // Speed corridor entry announcements
+        CheckCorridorEntry(playerDist);
 
         // Cleanup behind
         for (int i = _spawnedObjects.Count - 1; i >= 0; i--)
@@ -106,7 +274,26 @@ public class ObstacleSpawner : MonoBehaviour
 
     void SpawnAtDistance(float dist)
     {
+        // Speed corridors: no obstacles, always spawn dense coin trails
+        if (IsSpeedCorridor(dist))
+        {
+            if (coinPrefab != null)
+            {
+                // Always Spiral or FullLoop patterns in corridors for max collection
+                if (Random.value < 0.5f)
+                    SpawnCoinsSpiral(dist);
+                else
+                    SpawnCoinsFullLoop(dist);
+            }
+            return;
+        }
+
         float currentChance = Mathf.Min(obstacleChance + dist * difficultyRamp * 0.001f, 0.7f);
+
+        // Corridor proximity spacing modifier
+        float spacingMult = GetCorridorSpacingMultiplier(dist);
+        if (spacingMult > 1f)
+            currentChance *= (1f / spacingMult); // reduce obstacle chance near corridors
 
         // Fork density modifier: if in a fork zone, adjust spawn rates
         float coinMult = 1f;
@@ -164,6 +351,50 @@ public class ObstacleSpawner : MonoBehaviour
         }
     }
 
+    static readonly string[] CorridorSubtitles = {
+        "OPEN ROAD!", "PEDAL TO THE METAL!", "FULL FLUSH AHEAD!"
+    };
+
+    void CheckCorridorEntry(float playerDist)
+    {
+        if (_corridorAnnounced == null) return;
+        for (int i = 0; i < SpeedCorridors.Length; i++)
+        {
+            if (_corridorAnnounced[i]) continue;
+            float start = SpeedCorridors[i].x;
+            if (playerDist >= start && playerDist <= start + 5f)
+            {
+                _corridorAnnounced[i] = true;
+#if UNITY_EDITOR
+                Debug.Log($"[CORRIDOR] Entering speed corridor {i} at dist={playerDist:F0}");
+#endif
+                // "SPEED ZONE!" popup
+                if (ScorePopup.Instance != null && _tc != null)
+                    ScorePopup.Instance.ShowMilestone(
+                        _tc.transform.position + Vector3.up * 2.5f,
+                        "SPEED ZONE!\n" + CorridorSubtitles[i % CorridorSubtitles.Length]);
+
+                // Cheer overlay
+                if (CheerOverlay.Instance != null)
+                    CheerOverlay.Instance.ShowCheer("ZOOM!", new Color(0.1f, 0.9f, 1f), false);
+
+                // Camera: wide open FOV punch
+                if (PipeCamera.Instance != null)
+                    PipeCamera.Instance.PunchFOV(4f);
+
+                // Green flash for speed zone entry
+                if (ScreenEffects.Instance != null)
+                    ScreenEffects.Instance.TriggerPowerUpFlash();
+
+                // Audio cue
+                if (ProceduralAudio.Instance != null)
+                    ProceduralAudio.Instance.PlayCelebration();
+
+                HapticManager.MediumTap();
+            }
+        }
+    }
+
     void SpawnObstacle(float dist, Vector3 center, Vector3 forward, Vector3 right, Vector3 up)
     {
         // Pick placement zone - obstacles can appear anywhere around the pipe
@@ -190,9 +421,9 @@ public class ObstacleSpawner : MonoBehaviour
             angleDeg = Random.Range(60f, 120f);
         }
 
-        // Cycle through obstacle types to guarantee variety
-        _obstacleIndex = (_obstacleIndex + 1) % obstaclePrefabs.Length;
-        GameObject prefab = obstaclePrefabs[_obstacleIndex];
+        // Zone-themed obstacle selection
+        GameObject prefab = GetZoneObstacle(dist);
+        if (prefab == null) return;
 
         // Mines always float in the water at the pipe bottom
         bool isMine = prefab.GetComponent<SewerMineBehavior>() != null;
@@ -228,6 +459,9 @@ public class ObstacleSpawner : MonoBehaviour
             rot = Quaternion.LookRotation(forward, inward);
         GameObject obj = Instantiate(prefab, pos, rot, transform);
         _spawnedObjects.Add(obj);
+#if UNITY_EDITOR
+        Debug.Log($"[SPAWN] {prefab.name} at dist={dist:F0} angle={angleDeg:F0}° radius={spawnRadius:F1} fork={fork != null}");
+#endif
 
         // Pass actual spawn distance to rat for accurate orbit
         SewerRatBehavior rat = obj.GetComponent<SewerRatBehavior>();

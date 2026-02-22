@@ -29,6 +29,9 @@ public class PoopBuddyChain : MonoBehaviour
         public Vector3 targetPos;
         public float wobblePhase;
         public ParticleSystem skiWake;  // tiny spray behind each skier
+        public Transform leftEye;
+        public Transform rightEye;
+        public float eyeScaleBase;     // normal eye scale
     }
     private List<ChainBuddy> _chain = new List<ChainBuddy>();
 
@@ -132,6 +135,26 @@ public class PoopBuddyChain : MonoBehaviour
                     buddy.obj.transform.rotation, targetRot, Time.deltaTime * 10f);
             }
 
+            // Eye reactions: widen at high speed, shrink pupils when stunned
+            if (buddy.leftEye != null && buddy.rightEye != null)
+            {
+                float speedT = Mathf.InverseLerp(5f, 14f, _tc.CurrentSpeed);
+                bool stunned = _tc.CurrentHitState == TurdController.HitState.Stunned;
+
+                // Eyes widen with speed (excitement) or stun (shock)
+                float eyeScale = buddy.eyeScaleBase * (1f + speedT * 0.3f + (stunned ? 0.5f : 0f));
+                // Pupils shrink with speed (focused) or widen when stunned (shock)
+                float pupilMul = stunned ? 1.4f : Mathf.Lerp(1f, 0.7f, speedT);
+
+                foreach (var eye in new[] { buddy.leftEye, buddy.rightEye })
+                {
+                    if (eye.childCount >= 1)
+                        eye.GetChild(0).localScale = Vector3.one * eyeScale;
+                    if (eye.childCount >= 2)
+                        eye.GetChild(1).localScale = Vector3.one * buddy.eyeScaleBase * 0.5f * pupilMul;
+                }
+            }
+
             // Ski wake particles
             if (buddy.skiWake != null)
             {
@@ -197,11 +220,19 @@ public class PoopBuddyChain : MonoBehaviour
         if (enableSkiWake)
             wake = CreateSkiWakePS(buddy.transform);
 
+        // Find eye transforms for reactive expressions
+        Transform lEye = buddy.transform.Find("LeftEye");
+        Transform rEye = buddy.transform.Find("RightEye");
+        float eyeBase = lEye != null ? lEye.GetChild(0).localScale.x : 0.03f;
+
         _chain.Add(new ChainBuddy
         {
             obj = buddy,
             wobblePhase = Random.Range(0f, Mathf.PI * 2f),
-            skiWake = wake
+            skiWake = wake,
+            leftEye = lEye,
+            rightEye = rEye,
+            eyeScaleBase = eyeBase
         });
 
         // Celebration feedback

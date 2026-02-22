@@ -52,6 +52,9 @@ public class JumpRamp : MonoBehaviour
         TurdController tc = other.GetComponent<TurdController>();
         if (tc != null)
         {
+#if UNITY_EDITOR
+            Debug.Log($"[RAMP] JumpRamp h={launchHeight:F1} dur={arcDuration:F1} at dist={tc.DistanceTraveled:F0}");
+#endif
             tc.LaunchJump(launchHeight, arcDuration);
 
             // Launch juice
@@ -61,7 +64,7 @@ public class JumpRamp : MonoBehaviour
             if (PipeCamera.Instance != null)
             {
                 PipeCamera.Instance.PunchFOV(5f);
-                PipeCamera.Instance.Shake(0.12f);
+                PipeCamera.Instance.Shake(0.18f);
             }
 
             if (ScreenEffects.Instance != null)

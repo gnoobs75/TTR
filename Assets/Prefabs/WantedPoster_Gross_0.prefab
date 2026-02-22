@@ -116,7 +116,7 @@ Transform:
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 1042646996112964972}
   serializedVersion: 2
-  m_LocalRotation: {x: 0, y: 0, z: 0.0011908864, w: 0.9999993}
+  m_LocalRotation: {x: 0, y: 0, z: -0.012427667, w: 0.9999228}
   m_LocalPosition: {x: 0, y: -0.03, z: 0.006}
   m_LocalScale: {x: 1, y: 1, z: 1}
   m_ConstrainProportionsScale: 0
@@ -148,7 +148,7 @@ MeshRenderer:
   m_RenderingLayerMask: 1
   m_RendererPriority: 0
   m_Materials:
-  - {fileID: 10100, guid: 0000000000000000e000000000000000, type: 0}
+  - {fileID: 0}
   m_StaticBatchInfo:
     firstSubMesh: 0
     subMeshCount: 0
@@ -186,7 +186,7 @@ TextMesh:
 
     with corn.'
   m_OffsetZ: 0
-  m_CharacterSize: 0.007
+  m_CharacterSize: 0.02
   m_LineSpacing: 1
   m_Anchor: 4
   m_Alignment: 1
@@ -194,7 +194,7 @@ TextMesh:
   m_FontSize: 28
   m_FontStyle: 0
   m_RichText: 1
-  m_Font: {fileID: 0}
+  m_Font: {fileID: 10102, guid: 0000000000000000e000000000000000, type: 0}
   m_Color:
     serializedVersion: 2
     rgba: 4280233523
@@ -354,7 +354,7 @@ Transform:
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 4814011911506556182}
   serializedVersion: 2
-  m_LocalRotation: {x: 0, y: 0, z: 0.0011908864, w: 0.9999993}
+  m_LocalRotation: {x: 0, y: 0, z: -0.012427667, w: 0.9999228}
   m_LocalPosition: {x: 0, y: -0.1, z: 0.006}
   m_LocalScale: {x: 1, y: 1, z: 1}
   m_ConstrainProportionsScale: 0
@@ -386,7 +386,7 @@ MeshRenderer:
   m_RenderingLayerMask: 1
   m_RendererPriority: 0
   m_Materials:
-  - {fileID: 10100, guid: 0000000000000000e000000000000000, type: 0}
+  - {fileID: 0}
   m_StaticBatchInfo:
     firstSubMesh: 0
     subMeshCount: 0
@@ -422,7 +422,7 @@ TextMesh:
 
     500 Fartcoins'
   m_OffsetZ: 0
-  m_CharacterSize: 0.007
+  m_CharacterSize: 0.02
   m_LineSpacing: 1
   m_Anchor: 4
   m_Alignment: 1
@@ -430,7 +430,7 @@ TextMesh:
   m_FontSize: 30
   m_FontStyle: 1
   m_RichText: 1
-  m_Font: {fileID: 0}
+  m_Font: {fileID: 10102, guid: 0000000000000000e000000000000000, type: 0}
   m_Color:
     serializedVersion: 2
     rgba: 3423212697
@@ -640,7 +640,7 @@ Transform:
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 8339192113739372106}
   serializedVersion: 2
-  m_LocalRotation: {x: 0, y: 0, z: 0.0011908864, w: 0.9999993}
+  m_LocalRotation: {x: 0, y: 0, z: -0.012427667, w: 0.9999228}
   m_LocalPosition: {x: 0, y: 0.055, z: 0.006}
   m_LocalScale: {x: 1, y: 1, z: 1}
   m_ConstrainProportionsScale: 0
@@ -672,7 +672,7 @@ MeshRenderer:
   m_RenderingLayerMask: 1
   m_RendererPriority: 0
   m_Materials:
-  - {fileID: 10100, guid: 0000000000000000e000000000000000, type: 0}
+  - {fileID: 0}
   m_StaticBatchInfo:
     firstSubMesh: 0
     subMeshCount: 0
@@ -706,7 +706,7 @@ TextMesh:
   m_GameObject: {fileID: 8339192113739372106}
   m_Text: MR. CORNY
   m_OffsetZ: 0
-  m_CharacterSize: 0.009
+  m_CharacterSize: 0.025
   m_LineSpacing: 1
   m_Anchor: 4
   m_Alignment: 1
@@ -714,7 +714,7 @@ TextMesh:
   m_FontSize: 40
   m_FontStyle: 1
   m_RichText: 1
-  m_Font: {fileID: 0}
+  m_Font: {fileID: 10102, guid: 0000000000000000e000000000000000, type: 0}
   m_Color:
     serializedVersion: 2
     rgba: 4279508774
@@ -834,7 +834,7 @@ Transform:
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 8727843185239861117}
   serializedVersion: 2
-  m_LocalRotation: {x: 0, y: 0, z: 0.0011908864, w: 0.9999993}
+  m_LocalRotation: {x: 0, y: 0, z: -0.012427667, w: 0.9999228}
   m_LocalPosition: {x: 0, y: 0.1, z: 0.006}
   m_LocalScale: {x: 1, y: 1, z: 1}
   m_ConstrainProportionsScale: 0
@@ -866,7 +866,7 @@ MeshRenderer:
   m_RenderingLayerMask: 1
   m_RendererPriority: 0
   m_Materials:
-  - {fileID: 10100, guid: 0000000000000000e000000000000000, type: 0}
+  - {fileID: 0}
   m_StaticBatchInfo:
     firstSubMesh: 0
     subMeshCount: 0
@@ -900,7 +900,7 @@ TextMesh:
   m_GameObject: {fileID: 8727843185239861117}
   m_Text: WANTED
   m_OffsetZ: 0
-  m_CharacterSize: 0.01
+  m_CharacterSize: 0.03
   m_LineSpacing: 1
   m_Anchor: 4
   m_Alignment: 1
@@ -908,7 +908,7 @@ TextMesh:
   m_FontSize: 52
   m_FontStyle: 1
   m_RichText: 1
-  m_Font: {fileID: 0}
+  m_Font: {fileID: 10102, guid: 0000000000000000e000000000000000, type: 0}
   m_Color:
     serializedVersion: 2
     rgba: 4279048895

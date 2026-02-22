@@ -207,7 +207,7 @@ public class CheerOverlay : MonoBehaviour
         float exciteLid = Mathf.Lerp(p.defLidPct, Mathf.Max(0f, p.defLidPct - 0.3f), p.excitement);
         float finalLid = blinking ? 1f : exciteLid;
 
-        float lidH = Mathf.Lerp(0f, 11f, finalLid);
+        float lidH = Mathf.Lerp(0f, 22f, finalLid);
         if (p.leftEyelid != null)
         {
             RectTransform lrt = p.leftEyelid.rectTransform;
@@ -268,7 +268,7 @@ public class CheerOverlay : MonoBehaviour
         if (p.mouthRt != null)
         {
             float mw = Mathf.Lerp(p.defMouthW, p.defMouthW * 1.4f, p.excitement);
-            float mh = Mathf.Lerp(p.defMouthH, p.defMouthH + 5f, p.excitement);
+            float mh = Mathf.Lerp(p.defMouthH, p.defMouthH + 10f, p.excitement);
             p.mouthRt.sizeDelta = new Vector2(mw, mh);
         }
 
@@ -323,41 +323,41 @@ public class CheerOverlay : MonoBehaviour
         p.root.anchorMin = new Vector2(POS_X[idx], 0f);
         p.root.anchorMax = new Vector2(POS_X[idx], 0f);
         p.root.pivot = new Vector2(0.5f, 0f);
-        p.root.sizeDelta = new Vector2(55, 75);
-        p.root.anchoredPosition = new Vector2(0, 5);
-        p.baseY = 5f;
+        p.root.sizeDelta = new Vector2(220, 300);
+        p.root.anchoredPosition = new Vector2(0, 10);
+        p.baseY = 10f;
         p.phase = idx * 1.1f + Random.Range(0f, 1.5f);
 
         // Body
-        Circle(root.transform, "Base", b1, new Vector2(0, 5), new Vector2(36, 30));
-        Circle(root.transform, "Body", b2, new Vector2(0, 19), new Vector2(28, 24));
-        Circle(root.transform, "Tip", b3, new Vector2(3, 34), new Vector2(17, 15));
+        Circle(root.transform, "Base", b1, new Vector2(0, 10), new Vector2(72, 60));
+        Circle(root.transform, "Body", b2, new Vector2(0, 38), new Vector2(56, 48));
+        Circle(root.transform, "Tip", b3, new Vector2(6, 68), new Vector2(34, 30));
 
         // Eyes
-        GameObject le = Circle(root.transform, "LEye", eyeW, new Vector2(-7, 24), new Vector2(11, 11));
-        p.leftPupilRt = Circle(le.transform, "LP", pupilC, Vector2.zero, new Vector2(5, 5))
+        GameObject le = Circle(root.transform, "LEye", eyeW, new Vector2(-14, 48), new Vector2(22, 22));
+        p.leftPupilRt = Circle(le.transform, "LP", pupilC, Vector2.zero, new Vector2(10, 10))
             .GetComponent<RectTransform>();
-        GameObject re = Circle(root.transform, "REye", eyeW, new Vector2(7, 24), new Vector2(11, 11));
-        p.rightPupilRt = Circle(re.transform, "RP", pupilC, Vector2.zero, new Vector2(5, 5))
+        GameObject re = Circle(root.transform, "REye", eyeW, new Vector2(14, 48), new Vector2(22, 22));
+        p.rightPupilRt = Circle(re.transform, "RP", pupilC, Vector2.zero, new Vector2(10, 10))
             .GetComponent<RectTransform>();
 
         // Eyelids (anchored at top of eye, grow downward to close)
-        p.leftEyelid = Rect(le.transform, "LLid", lidC, new Vector2(0, 5.5f),
-            new Vector2(12, 0), new Vector2(0.5f, 1f));
-        p.rightEyelid = Rect(re.transform, "RLid", lidC, new Vector2(0, 5.5f),
-            new Vector2(12, 0), new Vector2(0.5f, 1f));
+        p.leftEyelid = Rect(le.transform, "LLid", lidC, new Vector2(0, 11f),
+            new Vector2(24, 0), new Vector2(0.5f, 1f));
+        p.rightEyelid = Rect(re.transform, "RLid", lidC, new Vector2(0, 11f),
+            new Vector2(24, 0), new Vector2(0.5f, 1f));
 
         // Expression defaults per accessory/personality
         SetDefaults(ref p, idx);
 
         // Mouth
         GameObject mo = Circle(root.transform, "Mouth", mouthC,
-            new Vector2(0, 16), new Vector2(p.defMouthW, p.defMouthH));
+            new Vector2(0, 32), new Vector2(p.defMouthW, p.defMouthH));
         p.mouthRt = mo.GetComponent<RectTransform>();
 
         // Arms
-        p.leftArm = Arm(root.transform, "LA", b1, new Vector2(-18, 15), 50f, true);
-        p.rightArm = Arm(root.transform, "RA", b1, new Vector2(18, 15), -50f, false);
+        p.leftArm = Arm(root.transform, "LA", b1, new Vector2(-36, 30), 50f, true);
+        p.rightArm = Arm(root.transform, "RA", b1, new Vector2(36, 30), -50f, false);
 
         // Sign (middle 4 only)
         if (idx >= SIGN_FIRST && idx <= SIGN_LAST)
@@ -381,17 +381,17 @@ public class CheerOverlay : MonoBehaviour
         switch (idx)
         {
             case 0: // Baseball Cap — happy
-                p.defLidPct = 0.05f; p.defMouthW = 9f; p.defMouthH = 3.5f; break;
+                p.defLidPct = 0.05f; p.defMouthW = 18f; p.defMouthH = 7f; break;
             case 1: // Bow — sparkly/excited
-                p.defLidPct = 0f; p.defMouthW = 7f; p.defMouthH = 4f; break;
+                p.defLidPct = 0f; p.defMouthW = 14f; p.defMouthH = 8f; break;
             case 2: // Sunglasses — cool
-                p.defLidPct = 0.4f; p.defMouthW = 6f; p.defMouthH = 2f; break;
+                p.defLidPct = 0.4f; p.defMouthW = 12f; p.defMouthH = 4f; break;
             case 3: // Bandana — tough
-                p.defLidPct = 0.35f; p.defMouthW = 8f; p.defMouthH = 2.5f; break;
+                p.defLidPct = 0.35f; p.defMouthW = 16f; p.defMouthH = 5f; break;
             case 4: // Crown — surprised
-                p.defLidPct = 0f; p.defMouthW = 6f; p.defMouthH = 6f; break;
+                p.defLidPct = 0f; p.defMouthW = 12f; p.defMouthH = 12f; break;
             case 5: // Rosy Cheeks — sweet
-                p.defLidPct = 0.1f; p.defMouthW = 8f; p.defMouthH = 3f; break;
+                p.defLidPct = 0.1f; p.defMouthW = 16f; p.defMouthH = 6f; break;
         }
     }
 
@@ -400,8 +400,8 @@ public class CheerOverlay : MonoBehaviour
         GameObject board = new GameObject("Sign");
         board.transform.SetParent(parent, false);
         p.signBoard = board.AddComponent<RectTransform>();
-        p.signBoard.anchoredPosition = new Vector2(0, 58);
-        p.signBoard.sizeDelta = new Vector2(26, 22);
+        p.signBoard.anchoredPosition = new Vector2(0, 116);
+        p.signBoard.sizeDelta = new Vector2(52, 44);
 
         Image bg = board.AddComponent<Image>();
         bg.sprite = _circle;
@@ -409,14 +409,14 @@ public class CheerOverlay : MonoBehaviour
 
         Outline ol = board.AddComponent<Outline>();
         ol.effectColor = new Color(0.3f, 0.25f, 0.2f);
-        ol.effectDistance = new Vector2(1.5f, -1.5f);
+        ol.effectDistance = new Vector2(3f, -3f);
 
         // Stick connecting sign to arm area
         GameObject stick = new GameObject("Stick");
         stick.transform.SetParent(parent, false);
         RectTransform stickRt = stick.AddComponent<RectTransform>();
-        stickRt.anchoredPosition = new Vector2(0, 48);
-        stickRt.sizeDelta = new Vector2(2, 14);
+        stickRt.anchoredPosition = new Vector2(0, 96);
+        stickRt.sizeDelta = new Vector2(4, 28);
         Image stickImg = stick.AddComponent<Image>();
         stickImg.color = new Color(0.5f, 0.4f, 0.3f);
 
@@ -434,7 +434,7 @@ public class CheerOverlay : MonoBehaviour
 
         p.signLetter = ltr.AddComponent<Text>();
         p.signLetter.font = font;
-        p.signLetter.fontSize = 18;
+        p.signLetter.fontSize = 36;
         p.signLetter.alignment = TextAnchor.MiddleCenter;
         p.signLetter.fontStyle = FontStyle.Bold;
         p.signLetter.color = new Color(0.15f, 0.1f, 0.05f);
@@ -447,56 +447,56 @@ public class CheerOverlay : MonoBehaviour
             case 0: // Baseball cap
             {
                 Color red = new Color(0.85f, 0.15f, 0.1f);
-                Circle(parent, "CapBrim", red, new Vector2(-3, 39), new Vector2(24, 6));
-                Circle(parent, "CapTop", red, new Vector2(1, 43), new Vector2(18, 10));
+                Circle(parent, "CapBrim", red, new Vector2(-6, 78), new Vector2(48, 12));
+                Circle(parent, "CapTop", red, new Vector2(2, 86), new Vector2(36, 20));
                 // Little button on top
-                Circle(parent, "Button", new Color(0.95f, 0.9f, 0.8f), new Vector2(1, 48), new Vector2(4, 4));
+                Circle(parent, "Button", new Color(0.95f, 0.9f, 0.8f), new Vector2(2, 96), new Vector2(8, 8));
                 break;
             }
             case 1: // Bow
             {
                 Color pink = new Color(1f, 0.4f, 0.6f);
-                Circle(parent, "BowL", pink, new Vector2(-3, 41), new Vector2(10, 8));
-                Circle(parent, "BowR", pink, new Vector2(9, 41), new Vector2(10, 8));
-                Circle(parent, "Knot", new Color(0.9f, 0.3f, 0.5f), new Vector2(3, 41), new Vector2(5, 5));
+                Circle(parent, "BowL", pink, new Vector2(-6, 82), new Vector2(20, 16));
+                Circle(parent, "BowR", pink, new Vector2(18, 82), new Vector2(20, 16));
+                Circle(parent, "Knot", new Color(0.9f, 0.3f, 0.5f), new Vector2(6, 82), new Vector2(10, 10));
                 break;
             }
             case 2: // Sunglasses
             {
                 Color dark = new Color(0.08f, 0.06f, 0.12f, 0.92f);
-                Rect(parent, "GlL", dark, new Vector2(-7, 24), new Vector2(13, 9), new Vector2(0.5f, 0.5f));
-                Rect(parent, "GlR", dark, new Vector2(7, 24), new Vector2(13, 9), new Vector2(0.5f, 0.5f));
-                Rect(parent, "Bridge", dark, new Vector2(0, 25), new Vector2(4, 2), new Vector2(0.5f, 0.5f));
+                Rect(parent, "GlL", dark, new Vector2(-14, 48), new Vector2(26, 18), new Vector2(0.5f, 0.5f));
+                Rect(parent, "GlR", dark, new Vector2(14, 48), new Vector2(26, 18), new Vector2(0.5f, 0.5f));
+                Rect(parent, "Bridge", dark, new Vector2(0, 50), new Vector2(8, 4), new Vector2(0.5f, 0.5f));
                 // Glint
-                Circle(parent, "Glint", new Color(1f, 1f, 1f, 0.4f), new Vector2(-9, 26), new Vector2(3, 3));
+                Circle(parent, "Glint", new Color(1f, 1f, 1f, 0.4f), new Vector2(-18, 52), new Vector2(6, 6));
                 break;
             }
             case 3: // Bandana
             {
                 Color green = new Color(0.15f, 0.6f, 0.2f);
-                Rect(parent, "Band", green, new Vector2(0, 31), new Vector2(32, 5), new Vector2(0.5f, 0.5f));
-                Rect(parent, "Tail1", green, new Vector2(16, 28), new Vector2(9, 4), new Vector2(0f, 1f));
-                Rect(parent, "Tail2", green, new Vector2(18, 25), new Vector2(7, 3), new Vector2(0f, 1f));
+                Rect(parent, "Band", green, new Vector2(0, 62), new Vector2(64, 10), new Vector2(0.5f, 0.5f));
+                Rect(parent, "Tail1", green, new Vector2(32, 56), new Vector2(18, 8), new Vector2(0f, 1f));
+                Rect(parent, "Tail2", green, new Vector2(36, 50), new Vector2(14, 6), new Vector2(0f, 1f));
                 break;
             }
             case 4: // Crown
             {
                 Color gold = new Color(1f, 0.85f, 0.15f);
-                Rect(parent, "CrownBase", gold, new Vector2(3, 41), new Vector2(20, 5), new Vector2(0.5f, 0.5f));
-                Circle(parent, "Pt1", gold, new Vector2(-3, 47), new Vector2(5, 7));
-                Circle(parent, "Pt2", gold, new Vector2(3, 49), new Vector2(5, 8));
-                Circle(parent, "Pt3", gold, new Vector2(9, 47), new Vector2(5, 7));
-                Circle(parent, "Gem", new Color(0.9f, 0.1f, 0.15f), new Vector2(3, 43), new Vector2(4, 4));
+                Rect(parent, "CrownBase", gold, new Vector2(6, 82), new Vector2(40, 10), new Vector2(0.5f, 0.5f));
+                Circle(parent, "Pt1", gold, new Vector2(-6, 94), new Vector2(10, 14));
+                Circle(parent, "Pt2", gold, new Vector2(6, 98), new Vector2(10, 16));
+                Circle(parent, "Pt3", gold, new Vector2(18, 94), new Vector2(10, 14));
+                Circle(parent, "Gem", new Color(0.9f, 0.1f, 0.15f), new Vector2(6, 86), new Vector2(8, 8));
                 break;
             }
             case 5: // Rosy cheeks
             {
                 Color blush = new Color(1f, 0.5f, 0.55f, 0.5f);
-                Circle(parent, "BlL", blush, new Vector2(-12, 20), new Vector2(8, 6));
-                Circle(parent, "BlR", blush, new Vector2(12, 20), new Vector2(8, 6));
+                Circle(parent, "BlL", blush, new Vector2(-24, 40), new Vector2(16, 12));
+                Circle(parent, "BlR", blush, new Vector2(24, 40), new Vector2(16, 12));
                 // Sparkle
-                Circle(parent, "Sp1", new Color(1f, 1f, 1f, 0.7f), new Vector2(-9, 28), new Vector2(3, 3));
-                Circle(parent, "Sp2", new Color(1f, 1f, 0.8f, 0.5f), new Vector2(10, 29), new Vector2(2, 2));
+                Circle(parent, "Sp1", new Color(1f, 1f, 1f, 0.7f), new Vector2(-18, 56), new Vector2(6, 6));
+                Circle(parent, "Sp2", new Color(1f, 1f, 0.8f, 0.5f), new Vector2(20, 58), new Vector2(4, 4));
                 break;
             }
         }
@@ -536,7 +536,7 @@ public class CheerOverlay : MonoBehaviour
         go.transform.SetParent(parent, false);
         RectTransform rt = go.AddComponent<RectTransform>();
         rt.anchoredPosition = pos;
-        rt.sizeDelta = new Vector2(12, 4);
+        rt.sizeDelta = new Vector2(24, 8);
         rt.pivot = isLeft ? new Vector2(1f, 0.5f) : new Vector2(0f, 0.5f);
         rt.localRotation = Quaternion.Euler(0, 0, angle);
         Image img = go.AddComponent<Image>();

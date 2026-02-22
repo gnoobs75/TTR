@@ -99,6 +99,9 @@ public class SpeedBoost : MonoBehaviour
         TurdController tc = other.GetComponent<TurdController>();
         if (tc != null)
         {
+#if UNITY_EDITOR
+            Debug.Log($"[BOOST] SpeedBoost x{speedMultiplier:F1} for {duration:F1}s at dist={tc.DistanceTraveled:F0}");
+#endif
             tc.ApplySpeedBoost(speedMultiplier, duration);
             _used = true;
 

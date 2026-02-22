@@ -590,6 +590,10 @@ public class SewerWaterEffects : MonoBehaviour
         if (ProceduralAudio.Instance != null)
             ProceduralAudio.Instance.PlayWaterfallSplash();
 
+        // Murky blue-green screen tint (wet lens feel)
+        if (ScreenEffects.Instance != null)
+            ScreenEffects.Instance.TriggerWaterfallTint();
+
         if (PipeCamera.Instance != null)
             PipeCamera.Instance.Shake(0.15f);
 

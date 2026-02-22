@@ -56,7 +56,11 @@ public class RacerAI : MonoBehaviour
     private bool _stumbling;
     private float _stumbleTimer;
     private float _stumbleSpeedMult = 1f;
-    private const float STUMBLE_DURATION = 1.2f;
+    private const float STUMBLE_DURATION = 1.8f;
+    private float _stumbleInvincibleTimer; // post-stumble invincibility
+
+    // Water/drop zone slowdown
+    private float _waterSlowMult = 1f;
 
     // Burst (personality-driven speed surges)
     private float _burstTimer;
@@ -132,6 +136,10 @@ public class RacerAI : MonoBehaviour
             _nextSteerChange = Time.time + Random.Range(interval * 0.5f, interval);
         }
 
+        // Stumble invincibility cooldown
+        if (_stumbleInvincibleTimer > 0f)
+            _stumbleInvincibleTimer -= dt;
+
         // Obstacle dodge
         float dodgeSteer = 0f;
         Collider[] nearby = Physics.OverlapSphere(
@@ -142,12 +150,16 @@ public class RacerAI : MonoBehaviour
             if (col.CompareTag("Obstacle") && col.transform.root != transform)
             {
                 Vector3 toObs = col.transform.position - transform.position;
+                float obsDist = toObs.magnitude;
                 Vector3 localObs = transform.InverseTransformDirection(toObs);
                 dodgeSteer = localObs.x > 0 ? -dodgeSteerStrength : dodgeSteerStrength;
 
-                // Stumble check: personality-based chance to hit obstacle
-                if (!_stumbling && Random.value < stumbleChance)
-                    TriggerStumble();
+                // Deterministic stumble: close obstacle + not invincible = stumble
+                if (!_stumbling && _stumbleInvincibleTimer <= 0f)
+                {
+                    if (obsDist < 1.5f || Random.value < stumbleChance)
+                        TriggerStumble();
+                }
                 break;
             }
         }
@@ -196,6 +208,10 @@ public class RacerAI : MonoBehaviour
             float affNext = zoneAffinities[Mathf.Clamp(zi + 1, 0, zoneAffinities.Length - 1)];
             targetSpeed *= Mathf.Lerp(affCurr, affNext, blend);
         }
+
+        // Water/drop zone slowdown: AI slows in water sections like the player does
+        UpdateWaterSlow();
+        targetSpeed *= _waterSlowMult;
 
         // Final stretch push: personality-driven sprint to the finish
         UpdateFinalStretch(dt);
@@ -268,6 +284,12 @@ public class RacerAI : MonoBehaviour
             float wobble = Mathf.Sin(Time.time * 25f) * 0.3f * (1f - _stumbleTimer / STUMBLE_DURATION);
             targetPos += right * wobble;
         }
+        // Water zone wobble (slight unsteadiness in water)
+        if (_waterSlowMult < 1f)
+        {
+            float waterWobble = Mathf.Sin(Time.time * 8f + _currentAngle) * 0.15f;
+            targetPos += right * waterWobble;
+        }
 
         transform.position = Vector3.Lerp(transform.position, targetPos, dt * 6f);
 
@@ -303,7 +325,7 @@ public class RacerAI : MonoBehaviour
                 if (ComboSystem.Instance != null)
                     ComboSystem.Instance.RegisterEvent(ComboSystem.EventType.NearMiss);
                 if (ParticleManager.Instance != null)
-                    ParticleManager.Instance.PlayNearMissStreak(transform.position);
+                    ParticleManager.Instance.PlayNearMiss(transform.position);
                 // Show popup with racer name
                 if (ScorePopup.Instance != null)
                 {
@@ -339,17 +361,32 @@ public class RacerAI : MonoBehaviour
         if (!_stumbling) return;
         _stumbleTimer += dt;
         float t = _stumbleTimer / STUMBLE_DURATION;
-        // Quick slowdown, gradual recovery
+        // Quick slowdown to 0.25x, gradual recovery (closer to player's stun experience)
         if (t < 0.2f)
-            _stumbleSpeedMult = Mathf.Lerp(1f, 0.4f, t / 0.2f);
+            _stumbleSpeedMult = Mathf.Lerp(1f, 0.25f, t / 0.2f);
         else
-            _stumbleSpeedMult = Mathf.Lerp(0.4f, 1f, (t - 0.2f) / 0.8f);
+            _stumbleSpeedMult = Mathf.Lerp(0.25f, 1f, (t - 0.2f) / 0.8f);
 
         if (_stumbleTimer >= STUMBLE_DURATION)
         {
             _stumbling = false;
             _stumbleSpeedMult = 1f;
+            _stumbleInvincibleTimer = 1.5f; // post-stumble invincibility
         }
+    }
+
+    void UpdateWaterSlow()
+    {
+        // Detect water/drop zones by checking if the pipe goes steeply downward
+        bool inWater = false;
+        if (pipeGen != null)
+        {
+            Vector3 c, fwd, r, u;
+            pipeGen.GetPathFrame(_distanceAlongPath, out c, out fwd, out r, out u);
+            float downDot = Vector3.Dot(fwd, Vector3.down);
+            inWater = downDot > 0.5f; // steep downward = drop zone / water
+        }
+        _waterSlowMult = inWater ? 0.75f : 1f;
     }
 
     void UpdateFinalStretch(float dt)
@@ -413,6 +450,9 @@ public class RacerAI : MonoBehaviour
     public void TriggerStumble()
     {
         if (_stumbling || _finished) return;
+#if UNITY_EDITOR
+        Debug.Log($"[AI] {gameObject.name} STUMBLE at dist={_distanceAlongPath:F0} speed={_currentSpeed:F1}");
+#endif
         _stumbling = true;
         _stumbleTimer = 0f;
         _stumbleSpeedMult = 1f;

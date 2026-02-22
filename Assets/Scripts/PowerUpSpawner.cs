@@ -43,7 +43,12 @@ public class PowerUpSpawner : MonoBehaviour
         while (_nextSpawnDist < playerDist + spawnDistance)
         {
             SpawnAtDistance(_nextSpawnDist);
-            _nextSpawnDist += Random.Range(minSpacing, maxSpacing);
+
+            // Dense boost spacing in speed corridors (12-15m vs normal 30-60m)
+            if (ObstacleSpawner.IsSpeedCorridor(_nextSpawnDist))
+                _nextSpawnDist += Random.Range(12f, 15f);
+            else
+                _nextSpawnDist += Random.Range(minSpacing, maxSpacing);
         }
 
         // Cleanup behind
@@ -70,10 +75,22 @@ public class PowerUpSpawner : MonoBehaviour
         _pipeGen.GetPathFrame(dist, out center, out forward, out right, out up);
 
         // Power-ups can appear ANYWHERE on the pipe - floor, walls, ceiling
+        // In speed corridors: mostly floor for easy chain collection
         // This rewards players who explore the full circumference
         float angleDeg;
+        bool inCorridor = ObstacleSpawner.IsSpeedCorridor(dist);
         float zonePick = Random.value;
-        if (zonePick < 0.4f)
+        if (inCorridor)
+        {
+            // Speed corridors: 80% floor, 10% left, 10% right (easy to chain)
+            if (zonePick < 0.8f)
+                angleDeg = 270f + Random.Range(-20f, 20f);
+            else if (zonePick < 0.9f)
+                angleDeg = Random.Range(200f, 240f);
+            else
+                angleDeg = Random.Range(300f, 340f);
+        }
+        else if (zonePick < 0.4f)
         {
             // Floor (easiest to hit)
             angleDeg = 270f + Random.Range(-25f, 25f);
@@ -98,9 +115,18 @@ public class PowerUpSpawner : MonoBehaviour
         float spawnRadius = pipeRadius * 0.82f;
         Vector3 pos = center + (right * Mathf.Cos(angle) + up * Mathf.Sin(angle)) * spawnRadius;
 
-        // Alternate between speed boost and jump ramp (2:1 ratio)
-        _typeIndex = (_typeIndex + 1) % 3;
-        GameObject prefab = _typeIndex < 2 ? speedBoostPrefab : jumpRampPrefab;
+        // In speed corridors: always speed boosts (no jump ramps)
+        // Normal: alternate between speed boost and jump ramp (2:1 ratio)
+        GameObject prefab;
+        if (ObstacleSpawner.IsSpeedCorridor(dist))
+        {
+            prefab = speedBoostPrefab;
+        }
+        else
+        {
+            _typeIndex = (_typeIndex + 1) % 3;
+            prefab = _typeIndex < 2 ? speedBoostPrefab : jumpRampPrefab;
+        }
         if (prefab == null) return;
 
         // Orient: face forward, "up" points inward so it sits on any surface

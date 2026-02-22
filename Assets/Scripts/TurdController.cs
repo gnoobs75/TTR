@@ -84,6 +84,12 @@ public class TurdController : MonoBehaviour
     // Water tracking
     private bool _wasInWater = false;
     private bool _isDriftSparking = false;
+    private bool _isWallRunning = false;
+    private float _wallRunIntensity;
+
+    // Shield bubble during invincibility
+    private GameObject _shieldBubble;
+    private Material _shieldMat;
 
     // Coin magnet
     private float _coinMagnetTimer = 0f;
@@ -131,6 +137,14 @@ public class TurdController : MonoBehaviour
     void Update()
     {
         if (GameManager.Instance != null && !GameManager.Instance.isPlaying) return;
+
+        // === BOOST CHAIN TIMER ===
+        if (_boostChainTimer > 0f)
+        {
+            _boostChainTimer -= Time.deltaTime;
+            if (_boostChainTimer <= 0f)
+                _boostChainCount = 0;
+        }
 
         // === VERTICAL DROP MODE (2D freefall) ===
         if (_isDropping)
@@ -278,6 +292,31 @@ public class TurdController : MonoBehaviour
             ProceduralAudio.Instance?.UpdateDriftGrind(0f);
         }
 
+        // === WALL-RUN FEEDBACK: sparks + grinding when on walls/ceiling ===
+        float angleFromBottom = Mathf.Abs(Mathf.DeltaAngle(_currentAngle, 270f));
+        float wallRunT = Mathf.Clamp01((angleFromBottom - 45f) / 90f); // 0 when <45° from bottom, 1 at 135°+ (ceiling)
+        wallRunT *= Mathf.Clamp01(CurrentSpeed / 8f); // scale with speed
+        _wallRunIntensity = Mathf.Lerp(_wallRunIntensity, wallRunT, Time.deltaTime * 6f);
+
+        if (_wallRunIntensity > 0.1f && !_isJumping)
+        {
+            if (!_isWallRunning)
+            {
+                _isWallRunning = true;
+                ParticleManager.Instance?.StartDriftSparks(transform);
+            }
+            // Blend wall-run sparks with drift (whichever is stronger)
+            float wallSparks = Mathf.Max(driftIntensity, _wallRunIntensity * 0.6f);
+            ParticleManager.Instance?.UpdateDriftSparks(wallSparks);
+            ProceduralAudio.Instance?.UpdateDriftGrind(wallSparks * 0.7f);
+        }
+        else if (_isWallRunning && !_isDriftSparking)
+        {
+            _isWallRunning = false;
+            ParticleManager.Instance?.StopDriftSparks();
+            ProceduralAudio.Instance?.UpdateDriftGrind(0f);
+        }
+
         // === FORK CHECK (visual only - tracks branch for spawn density) ===
         if (pipeGen != null)
         {
@@ -288,10 +327,16 @@ public class TurdController : MonoBehaviour
                 _currentFork = fork;
                 fork.AssignPlayer(_currentAngle);
                 _forkBranch = fork.PlayerBranch;
+#if UNITY_EDITOR
+                Debug.Log($"[FORK] Entered fork at dist={_distanceAlongPath:F1} angle={_currentAngle:F0}° → branch={_forkBranch} forkDist={fork.forkDistance:F0} rejoin={fork.rejoinDistance:F0}");
+#endif
             }
             else if (fork == null && _currentFork != null)
             {
                 // Exited fork zone
+#if UNITY_EDITOR
+                Debug.Log($"[FORK] Exited fork at dist={_distanceAlongPath:F1}");
+#endif
                 _currentFork.ResetPlayerBranch();
                 _currentFork = null;
                 _forkBranch = -1;
@@ -421,13 +466,17 @@ public class TurdController : MonoBehaviour
                     }
                     else
                     {
-                        // Normal landing impact - weighty thud
+                        // Normal landing impact - scales with jump height for more weight
+                        float heightScale = Mathf.Clamp01(_jumpHeight / 4f); // 0 at low jumps, 1 at big air
                         if (PipeCamera.Instance != null)
                         {
-                            PipeCamera.Instance.Shake(0.15f);
-                            PipeCamera.Instance.PunchFOV(-2f); // brief squish on impact
+                            PipeCamera.Instance.Shake(Mathf.Lerp(0.12f, 0.25f, heightScale));
+                            PipeCamera.Instance.PunchFOV(Mathf.Lerp(-2f, -5f, heightScale));
                         }
-                        HapticManager.MediumTap();
+                        if (heightScale > 0.5f)
+                            HapticManager.HeavyTap();
+                        else
+                            HapticManager.MediumTap();
                     }
 
                     // Landing dust burst at feet
@@ -545,6 +594,16 @@ public class TurdController : MonoBehaviour
                 if (r != null)
                     r.enabled = visible;
             }
+
+            // Shield bubble pulse: breathes with golden glow, fades as invincibility expires
+            if (_shieldBubble != null && _shieldMat != null)
+            {
+                float pulse = 1f + Mathf.Sin(t * 4f) * 0.08f;
+                _shieldBubble.transform.localScale = Vector3.one * 0.6f * pulse;
+                float alpha = remaining * 0.18f;
+                Color c = _shieldMat.GetColor("_BaseColor");
+                _shieldMat.SetColor("_BaseColor", new Color(c.r, c.g, c.b, alpha));
+            }
         }
         else if (_renderers != null)
         {
@@ -565,6 +624,9 @@ public class TurdController : MonoBehaviour
     public void TakeHit(ObstacleBehavior obstacle)
     {
         if (_hitState != HitState.Normal) return;
+#if UNITY_EDITOR
+        Debug.Log($"[HIT] TakeHit by {(obstacle != null ? obstacle.name : "null")} at dist={DistanceTraveled:F1} speed={_currentSpeed:F1} state={_hitState} drop={_isDropping}");
+#endif
 
         // Underwater hit: push player to a random direction, brief stagger
         if (_isDropping)
@@ -654,6 +716,9 @@ public class TurdController : MonoBehaviour
         _hitPhaseDuration = stunDuration;
         _hitPhaseTimer = 0f;
         float originalMax = maxSpeed;
+#if UNITY_EDITOR
+        Debug.Log($"[HIT] → STUNNED speed={_currentSpeed:F1} maxSpeed={maxSpeed:F1}");
+#endif
 
         // Immediate slowdown
         maxSpeed *= stunSpeedMult;
@@ -671,6 +736,9 @@ public class TurdController : MonoBehaviour
         _hitPhaseDuration = recoveryDuration;
         _hitPhaseTimer = 0f;
         maxSpeed = originalMax;
+#if UNITY_EDITOR
+        Debug.Log($"[HIT] → RECOVERING speed={_currentSpeed:F1}");
+#endif
 
         float recoveryStartSpeed = _currentSpeed;
         while (_hitPhaseTimer < recoveryDuration)
@@ -687,10 +755,16 @@ public class TurdController : MonoBehaviour
         _hitState = HitState.Invincible;
         _hitPhaseDuration = invincibilityDuration;
         _hitPhaseTimer = 0f;
+#if UNITY_EDITOR
+        Debug.Log($"[HIT] → INVINCIBLE for {invincibilityDuration:F1}s");
+#endif
 
         // Golden shimmer during i-frames so player knows they're protected
         if (ScreenEffects.Instance != null)
             ScreenEffects.Instance.SetInvincShimmer(1f);
+
+        // Shield bubble aura - translucent golden sphere during i-frames
+        CreateShieldBubble();
 
         // Poop crew cheers recovery
         if (CheerOverlay.Instance != null)
@@ -714,9 +788,62 @@ public class TurdController : MonoBehaviour
         if (ScreenEffects.Instance != null)
             ScreenEffects.Instance.TriggerInvincibilityFlash();
 
+        // Remove shield bubble
+        DestroyShieldBubble();
+
         _hitState = HitState.Normal;
         _hitPhaseDuration = 0f;
         _hitPhaseTimer = 0f;
+#if UNITY_EDITOR
+        Debug.Log($"[HIT] → NORMAL (fully recovered)");
+#endif
+    }
+
+    // === SHIELD BUBBLE ===
+
+    void CreateShieldBubble()
+    {
+        DestroyShieldBubble();
+        _shieldBubble = GameObject.CreatePrimitive(PrimitiveType.Sphere);
+        _shieldBubble.name = "ShieldBubble";
+        _shieldBubble.transform.SetParent(transform);
+        _shieldBubble.transform.localPosition = Vector3.zero;
+        _shieldBubble.transform.localScale = Vector3.one * 0.6f;
+        Object.Destroy(_shieldBubble.GetComponent<Collider>());
+
+        // Transparent golden shield material
+        Shader shader = Shader.Find("Universal Render Pipeline/Lit");
+        if (shader == null) shader = Shader.Find("Standard");
+        _shieldMat = new Material(shader);
+        _shieldMat.SetColor("_BaseColor", new Color(1f, 0.85f, 0.2f, 0.18f));
+        _shieldMat.SetFloat("_Smoothness", 0.95f);
+        _shieldMat.EnableKeyword("_EMISSION");
+        _shieldMat.SetColor("_EmissionColor", new Color(1f, 0.8f, 0.1f) * 0.5f);
+        // Set transparent rendering
+        _shieldMat.SetFloat("_Surface", 1); // Transparent
+        _shieldMat.SetFloat("_Blend", 0);   // Alpha
+        _shieldMat.SetOverrideTag("RenderType", "Transparent");
+        _shieldMat.SetInt("_SrcBlend", (int)UnityEngine.Rendering.BlendMode.SrcAlpha);
+        _shieldMat.SetInt("_DstBlend", (int)UnityEngine.Rendering.BlendMode.OneMinusSrcAlpha);
+        _shieldMat.SetInt("_ZWrite", 0);
+        _shieldMat.renderQueue = 3000;
+        _shieldBubble.GetComponent<Renderer>().material = _shieldMat;
+
+        // Shield start flash
+        if (ScreenEffects.Instance != null)
+            ScreenEffects.Instance.TriggerPowerUpFlash();
+        if (PipeCamera.Instance != null)
+            PipeCamera.Instance.PunchFOV(3f);
+    }
+
+    void DestroyShieldBubble()
+    {
+        if (_shieldBubble != null)
+        {
+            Destroy(_shieldBubble);
+            _shieldBubble = null;
+            _shieldMat = null;
+        }
     }
 
     // === STOMP SYSTEM ===
@@ -728,6 +855,9 @@ public class TurdController : MonoBehaviour
     {
         _stompCombo++;
         _stompComboTimer = STOMP_COMBO_TIMEOUT;
+#if UNITY_EDITOR
+        Debug.Log($"[STOMP] combo={_stompCombo} dist={DistanceTraveled:F1}");
+#endif
 
         // Score bonus: increases with combo
         int stompScore = 50 * _stompCombo;
@@ -800,14 +930,20 @@ public class TurdController : MonoBehaviour
     public void LaunchJump(float height, float duration)
     {
         if (_isJumping) return;
+#if UNITY_EDITOR
+        Debug.Log($"[JUMP] LaunchJump h={height:F1} dur={duration:F1} dist={DistanceTraveled:F1}");
+#endif
         _stompCombo = 0; // reset stomp combo on fresh jump
         _trickDirection = 0;
         _trickAngle = 0f;
         _tricksCompleted = 0;
         _isJumping = true;
-        _jumpTimer = 0f;
+        _jumpTimer = -0.06f; // brief negative timer = pre-launch squash window
         _jumpDuration = duration > 0 ? Mathf.Max(duration, jumpArcDuration) : jumpArcDuration;
         _jumpHeight = height > 0 ? Mathf.Max(height, jumpArcHeight) : jumpArcHeight;
+
+        // Pre-launch squash (compress before springing up)
+        transform.localScale = new Vector3(1.15f, 0.7f, 1.15f);
 
         if (ProceduralAudio.Instance != null)
             ProceduralAudio.Instance.PlayJumpLaunch();
@@ -857,6 +993,76 @@ public class TurdController : MonoBehaviour
 
     public void ApplySpeedBoost(float multiplier, float duration)
     {
+        // Boost chain: consecutive boosts within timeout build a chain
+        if (_boostChainTimer > 0f)
+        {
+            _boostChainCount++;
+            duration *= 1.5f; // extend boost duration by 50% when chaining
+        }
+        else
+        {
+            _boostChainCount = 1;
+        }
+        _boostChainTimer = BOOST_CHAIN_TIMEOUT;
+
+        // Chain milestone rewards
+        if (_boostChainCount >= 2)
+        {
+            string label;
+            int bonus;
+            float fovPunch;
+            float shake = 0f;
+            bool bigEvent = false;
+
+            switch (_boostChainCount)
+            {
+                case 2:
+                    label = "DOUBLE BOOST!"; bonus = 100; fovPunch = 8f;
+                    break;
+                case 3:
+                    label = "TRIPLE BOOST!"; bonus = 200; fovPunch = 10f; shake = 0.15f;
+                    break;
+                case 4:
+                    label = "BOOST FRENZY!"; bonus = 300; fovPunch = 12f; shake = 0.2f; bigEvent = true;
+                    break;
+                default: // 5+
+                    label = "UNSTOPPABLE!"; bonus = 500; fovPunch = 14f; shake = 0.25f; bigEvent = true;
+                    break;
+            }
+#if UNITY_EDITOR
+            Debug.Log($"[BOOST] Chain x{_boostChainCount}: {label} (+{bonus} pts) duration={duration:F1}s");
+#endif
+            if (GameManager.Instance != null)
+                GameManager.Instance.AddScore(bonus);
+
+            if (ScorePopup.Instance != null)
+                ScorePopup.Instance.ShowMilestone(
+                    transform.position + Vector3.up * 2f, label);
+
+            if (PipeCamera.Instance != null)
+            {
+                PipeCamera.Instance.PunchFOV(fovPunch);
+                if (shake > 0f) PipeCamera.Instance.Shake(shake);
+            }
+
+            if (bigEvent)
+            {
+                if (ScreenEffects.Instance != null)
+                    ScreenEffects.Instance.TriggerMilestoneFlash();
+                if (ParticleManager.Instance != null)
+                    ParticleManager.Instance.PlayCelebration(transform.position);
+                if (CheerOverlay.Instance != null)
+                    CheerOverlay.Instance.ShowCheer(label, new Color(0.1f, 0.9f, 1f), true);
+                HapticManager.HeavyTap();
+            }
+            else
+            {
+                if (CheerOverlay.Instance != null)
+                    CheerOverlay.Instance.ShowCheer(label, new Color(0.1f, 0.9f, 1f), false);
+                HapticManager.MediumTap();
+            }
+        }
+
         StartCoroutine(SpeedBoostCoroutine(multiplier, duration));
     }
 
@@ -957,6 +1163,12 @@ public class TurdController : MonoBehaviour
     public float BoostDuration => _boostDuration;
     public bool IsBoosting => _boostTimeRemaining > 0f;
 
+    // === BOOST CHAIN COMBO ===
+    private int _boostChainCount = 0;
+    private float _boostChainTimer = 0f;
+    private const float BOOST_CHAIN_TIMEOUT = 6f;
+    public int BoostChainCount => _boostChainCount;
+
     // === VERTICAL DROP ===
 
     /// <summary>Enter freefall drop mode. Called by VerticalDrop trigger.</summary>
@@ -964,6 +1176,9 @@ public class TurdController : MonoBehaviour
         float exitBoostMult, float exitBoostDur)
     {
         if (_isDropping || _isJumping) return;
+#if UNITY_EDITOR
+        Debug.Log($"[DROP] EnterDrop dist={DistanceTraveled:F1} duration={duration:F1} speed={speed:F1}");
+#endif
         _isDropping = true;
         _dropTimer = 0f;
         _dropDuration = duration;
@@ -1093,6 +1308,9 @@ public class TurdController : MonoBehaviour
 
     void ExitDrop()
     {
+#if UNITY_EDITOR
+        Debug.Log($"[DROP] ExitDrop dist={DistanceTraveled:F1}");
+#endif
         _isDropping = false;
         _currentAngle = 270f; // snap back to pipe bottom
         _currentSpeed = forwardSpeed; // reset speed before boost

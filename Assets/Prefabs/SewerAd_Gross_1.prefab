@@ -26,7 +26,7 @@ Transform:
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 1475569395483046058}
   serializedVersion: 2
-  m_LocalRotation: {x: 0, y: 0, z: 0.01298919, w: 0.99991566}
+  m_LocalRotation: {x: 0, y: 0, z: 0.044983044, w: 0.9989878}
   m_LocalPosition: {x: 0, y: -0.04, z: 0.006}
   m_LocalScale: {x: 1, y: 1, z: 1}
   m_ConstrainProportionsScale: 0
@@ -58,7 +58,7 @@ MeshRenderer:
   m_RenderingLayerMask: 1
   m_RendererPriority: 0
   m_Materials:
-  - {fileID: 10100, guid: 0000000000000000e000000000000000, type: 0}
+  - {fileID: 0}
   m_StaticBatchInfo:
     firstSubMesh: 0
     subMeshCount: 0
@@ -96,7 +96,7 @@ TextMesh:
 
     you''re stuck"'
   m_OffsetZ: 0
-  m_CharacterSize: 0.009
+  m_CharacterSize: 0.025
   m_LineSpacing: 1
   m_Anchor: 4
   m_Alignment: 1
@@ -104,7 +104,7 @@ TextMesh:
   m_FontSize: 34
   m_FontStyle: 1
   m_RichText: 1
-  m_Font: {fileID: 0}
+  m_Font: {fileID: 10102, guid: 0000000000000000e000000000000000, type: 0}
   m_Color:
     serializedVersion: 2
     rgba: 4294089011
@@ -134,7 +134,7 @@ Transform:
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 1828480853139742355}
   serializedVersion: 2
-  m_LocalRotation: {x: 0, y: 0, z: 0.0015881609, w: 0.99999875}
+  m_LocalRotation: {x: 0, y: 0, z: 0.01903065, w: 0.9998189}
   m_LocalPosition: {x: 0, y: 0.05, z: 0.006}
   m_LocalScale: {x: 1, y: 1, z: 1}
   m_ConstrainProportionsScale: 0
@@ -166,7 +166,7 @@ MeshRenderer:
   m_RenderingLayerMask: 1
   m_RendererPriority: 0
   m_Materials:
-  - {fileID: 10100, guid: 0000000000000000e000000000000000, type: 0}
+  - {fileID: 0}
   m_StaticBatchInfo:
     firstSubMesh: 0
     subMeshCount: 0
@@ -200,7 +200,7 @@ TextMesh:
   m_GameObject: {fileID: 1828480853139742355}
   m_Text: Tourism Board
   m_OffsetZ: 0
-  m_CharacterSize: 0.009
+  m_CharacterSize: 0.025
   m_LineSpacing: 1
   m_Anchor: 4
   m_Alignment: 1
@@ -208,7 +208,7 @@ TextMesh:
   m_FontSize: 38
   m_FontStyle: 0
   m_RichText: 1
-  m_Font: {fileID: 0}
+  m_Font: {fileID: 10102, guid: 0000000000000000e000000000000000, type: 0}
   m_Color:
     serializedVersion: 2
     rgba: 4289121497
@@ -239,8 +239,8 @@ Transform:
   m_GameObject: {fileID: 1973394871968520319}
   serializedVersion: 2
   m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
-  m_LocalPosition: {x: 0.05867697, y: -0.16, z: 0.005}
-  m_LocalScale: {x: 0.0048863403, y: 0.09087812, z: 0.003}
+  m_LocalPosition: {x: 0.023040652, y: -0.16, z: 0.005}
+  m_LocalScale: {x: 0.0057067135, y: 0.049978472, z: 0.003}
   m_ConstrainProportionsScale: 0
   m_Children: []
   m_Father: {fileID: 593096998514240533}
@@ -329,8 +329,8 @@ Transform:
   m_GameObject: {fileID: 2767170670125073882}
   serializedVersion: 2
   m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
-  m_LocalPosition: {x: -0.083142474, y: -0.21, z: 0.005}
-  m_LocalScale: {x: 0.006948585, y: 0.03570628, z: 0.003}
+  m_LocalPosition: {x: -0.04321949, y: -0.21, z: 0.005}
+  m_LocalScale: {x: 0.0060933097, y: 0.06881908, z: 0.003}
   m_ConstrainProportionsScale: 0
   m_Children: []
   m_Father: {fileID: 593096998514240533}
@@ -552,8 +552,8 @@ Transform:
   m_GameObject: {fileID: 3178572557687311808}
   serializedVersion: 2
   m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
-  m_LocalPosition: {x: -0.025599122, y: 0.0369392, z: 0.005}
-  m_LocalScale: {x: 0.016563565, y: 0.016563565, z: 0.002}
+  m_LocalPosition: {x: -0.0042600334, y: 0.08291248, z: 0.005}
+  m_LocalScale: {x: 0.013596913, y: 0.013596913, z: 0.002}
   m_ConstrainProportionsScale: 0
   m_Children: []
   m_Father: {fileID: 593096998514240533}
@@ -642,8 +642,8 @@ Transform:
   m_GameObject: {fileID: 4250424619547340430}
   serializedVersion: 2
   m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
-  m_LocalPosition: {x: -0.06776788, y: -0.117442094, z: 0.005}
-  m_LocalScale: {x: 0.015769914, y: 0.015769914, z: 0.002}
+  m_LocalPosition: {x: 0.106432766, y: 0.07266812, z: 0.005}
+  m_LocalScale: {x: 0.011565067, y: 0.011565067, z: 0.002}
   m_ConstrainProportionsScale: 0
   m_Children: []
   m_Father: {fileID: 593096998514240533}
@@ -732,8 +732,8 @@ Transform:
   m_GameObject: {fileID: 4661853096568136650}
   serializedVersion: 2
   m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
-  m_LocalPosition: {x: -0.055806633, y: -0.185, z: 0.005}
-  m_LocalScale: {x: 0.005569508, y: 0.069954455, z: 0.003}
+  m_LocalPosition: {x: 0.04035383, y: -0.185, z: 0.005}
+  m_LocalScale: {x: 0.0040697795, y: 0.09767192, z: 0.003}
   m_ConstrainProportionsScale: 0
   m_Children: []
   m_Father: {fileID: 593096998514240533}
@@ -822,8 +822,8 @@ Transform:
   m_GameObject: {fileID: 8311978034843851821}
   serializedVersion: 2
   m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
-  m_LocalPosition: {x: 0.12773019, y: -0.235, z: 0.005}
-  m_LocalScale: {x: 0.004910607, y: 0.05559035, z: 0.003}
+  m_LocalPosition: {x: 0.021210715, y: -0.235, z: 0.005}
+  m_LocalScale: {x: 0.006112772, y: 0.07342883, z: 0.003}
   m_ConstrainProportionsScale: 0
   m_Children: []
   m_Father: {fileID: 593096998514240533}
@@ -911,7 +911,7 @@ Transform:
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 8428391761653180881}
   serializedVersion: 2
-  m_LocalRotation: {x: 0, y: 0, z: -0.009061154, w: 0.999959}
+  m_LocalRotation: {x: 0, y: 0, z: 0.03325321, w: 0.999447}
   m_LocalPosition: {x: 0, y: 0.1, z: 0.006}
   m_LocalScale: {x: 1, y: 1, z: 1}
   m_ConstrainProportionsScale: 0
@@ -943,7 +943,7 @@ MeshRenderer:
   m_RenderingLayerMask: 1
   m_RendererPriority: 0
   m_Materials:
-  - {fileID: 10100, guid: 0000000000000000e000000000000000, type: 0}
+  - {fileID: 0}
   m_StaticBatchInfo:
     firstSubMesh: 0
     subMeshCount: 0
@@ -977,7 +977,7 @@ TextMesh:
   m_GameObject: {fileID: 8428391761653180881}
   m_Text: BROWN TOWN
   m_OffsetZ: 0
-  m_CharacterSize: 0.012
+  m_CharacterSize: 0.035
   m_LineSpacing: 1
   m_Anchor: 4
   m_Alignment: 1
@@ -985,7 +985,7 @@ TextMesh:
   m_FontSize: 56
   m_FontStyle: 1
   m_RichText: 1
-  m_Font: {fileID: 0}
+  m_Font: {fileID: 10102, guid: 0000000000000000e000000000000000, type: 0}
   m_Color:
     serializedVersion: 2
     rgba: 4279903974
@@ -1016,8 +1016,8 @@ Transform:
   m_GameObject: {fileID: 8638048231826024983}
   serializedVersion: 2
   m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
-  m_LocalPosition: {x: -0.12918381, y: 0.071225196, z: 0.005}
-  m_LocalScale: {x: 0.01371928, y: 0.01371928, z: 0.002}
+  m_LocalPosition: {x: -0.098027356, y: -0.07193158, z: 0.005}
+  m_LocalScale: {x: 0.017752014, y: 0.017752014, z: 0.002}
   m_ConstrainProportionsScale: 0
   m_Children: []
   m_Father: {fileID: 593096998514240533}
@@ -1105,7 +1105,7 @@ Transform:
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 8915063110243139136}
   serializedVersion: 2
-  m_LocalRotation: {x: 0, y: 0, z: -0.004204112, w: 0.9999912}
+  m_LocalRotation: {x: 0, y: 0, z: 0.04372311, w: 0.9990437}
   m_LocalPosition: {x: 0, y: -0.12, z: 0.006}
   m_LocalScale: {x: 1, y: 1, z: 1}
   m_ConstrainProportionsScale: 0
@@ -1137,7 +1137,7 @@ MeshRenderer:
   m_RenderingLayerMask: 1
   m_RendererPriority: 0
   m_Materials:
-  - {fileID: 10100, guid: 0000000000000000e000000000000000, type: 0}
+  - {fileID: 0}
   m_StaticBatchInfo:
     firstSubMesh: 0
     subMeshCount: 0
@@ -1171,7 +1171,7 @@ TextMesh:
   m_GameObject: {fileID: 8915063110243139136}
   m_Text: Visit Today!
   m_OffsetZ: 0
-  m_CharacterSize: 0.008
+  m_CharacterSize: 0.022
   m_LineSpacing: 1
   m_Anchor: 4
   m_Alignment: 1
@@ -1179,7 +1179,7 @@ TextMesh:
   m_FontSize: 28
   m_FontStyle: 0
   m_RichText: 1
-  m_Font: {fileID: 0}
+  m_Font: {fileID: 10102, guid: 0000000000000000e000000000000000, type: 0}
   m_Color:
     serializedVersion: 2
     rgba: 4280736242

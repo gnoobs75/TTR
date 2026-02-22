@@ -62,6 +62,9 @@ public class BigAirRamp : MonoBehaviour
         if (tc != null)
         {
             _launched = true;
+#if UNITY_EDITOR
+            Debug.Log($"[BIGAIR] Launch h={launchHeight:F1} dur={arcDuration:F1} at dist={tc.DistanceTraveled:F0}");
+#endif
             tc.LaunchJump(launchHeight, arcDuration);
 
             // Extra juice for big air

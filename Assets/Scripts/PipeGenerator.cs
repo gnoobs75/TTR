@@ -47,8 +47,9 @@ public class PipeGenerator : MonoBehaviour
 
     // Pipe forks
     [Header("Fork Settings")]
-    public float firstForkDistance = 300f;   // ~1 min at ~5m/s
-    public float secondForkDistance = 600f;  // ~2 min
+    public float firstForkDistance = 500f;   // ~25% of 2000m race
+    public float secondForkDistance = 1000f; // ~50% of 2000m race
+    public float thirdForkDistance = 1500f;  // ~75% of 2000m race
     private List<PipeFork> _forks = new List<PipeFork>();
     private int _nextForkIdx = 0;
     private float[] _forkDistances;
@@ -117,7 +118,7 @@ public class PipeGenerator : MonoBehaviour
             _tc = player.GetComponent<TurdController>();
 
         // Initialize fork distances
-        _forkDistances = new float[] { firstForkDistance, secondForkDistance };
+        _forkDistances = new float[] { firstForkDistance, secondForkDistance, thirdForkDistance };
 
         for (int i = 0; i < visiblePipes + 2; i++)
             SpawnSegment();
@@ -1022,12 +1023,21 @@ public class PipeGenerator : MonoBehaviour
 
     void SpawnFork(float distance)
     {
+        // CRITICAL: Ensure path nodes extend far enough for the entire fork zone.
+        // Branches can be up to 80m long, so we need path data to distance + 85.
+        // Without this, GetPathFrame clamps to the last node and branch geometry
+        // collapses to a single degenerate point.
+        float requiredDist = distance + 85f;
+        int nodesNeeded = Mathf.CeilToInt(requiredDist / nodeSpacing) + 2;
+        while (_positions.Count < nodesNeeded)
+            AddPathNode();
+
         GameObject forkObj = new GameObject($"PipeFork_{distance:F0}m");
         forkObj.transform.SetParent(transform);
         PipeFork fork = forkObj.AddComponent<PipeFork>();
         fork.Setup(distance, pipeRadius, this);
         _forks.Add(fork);
-        Debug.Log($"TTR: Spawned pipe fork at {distance:F0}m (branches rejoin at {fork.rejoinDistance:F0}m)");
+        Debug.Log($"TTR: Spawned pipe fork at {distance:F0}m (branches rejoin at {fork.rejoinDistance:F0}m, path nodes={_positions.Count})");
     }
 
     /// <summary>

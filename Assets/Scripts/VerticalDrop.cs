@@ -93,6 +93,9 @@ public class VerticalDrop : MonoBehaviour
         if (tc == null) return;
 
         _triggered = true;
+#if UNITY_EDITOR
+        Debug.Log($"[VDROP] VerticalDrop triggered at dist={tc.DistanceTraveled:F0} duration={swimDuration:F1} speed={swimSpeed:F1}");
+#endif
 
         float startDist = tc.DistanceTraveled + 10f;
 

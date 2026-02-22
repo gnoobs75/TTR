@@ -54,6 +54,9 @@ public class Obstacle : MonoBehaviour
 
         TurdController tc = other.GetComponent<TurdController>();
         if (tc == null) return;
+#if UNITY_EDITOR
+        Debug.Log($"[OBSTACLE] Trigger: {gameObject.name} jumping={tc.IsJumping} invincible={tc.IsInvincible} pos={transform.position}");
+#endif
 
         // === STOMP CHECK: If player is jumping, stomp the obstacle! ===
         if (tc.IsJumping)

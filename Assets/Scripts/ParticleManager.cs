@@ -51,6 +51,9 @@ public class ParticleManager : MonoBehaviour
     // Drift/graze sparks (friction against pipe wall during hard steering)
     private ParticleSystem _driftSparks;
 
+    // Finish line confetti shower (sustained multi-burst)
+    private ParticleSystem _finishConfetti;
+
     // Zone-colored ambient motion trail
     private ParticleSystem _zoneTrail;
     private Color _zoneTrailTargetColor = new Color(0.6f, 0.55f, 0.45f, 0.5f);
@@ -108,6 +111,9 @@ public class ParticleManager : MonoBehaviour
         _celebration = CreateBurst("Celebration",
             new Color(1f, 0.9f, 0.2f), new Color(0.9f, 0.3f, 1f),
             50, 8f, 1.5f, 0.15f);
+
+        // Finish line confetti shower - sustained falling confetti
+        _finishConfetti = CreateFinishConfetti();
 
         // Speed lines - radial streaks during boost
         _speedLines = CreateSpeedLines();
@@ -327,6 +333,63 @@ public class ParticleManager : MonoBehaviour
         return ps;
     }
 
+    ParticleSystem CreateFinishConfetti()
+    {
+        var go = new GameObject("FinishConfetti");
+        go.transform.SetParent(transform);
+        var ps = go.AddComponent<ParticleSystem>();
+
+        var main = ps.main;
+        main.maxParticles = 300;
+        main.startLifetime = new ParticleSystem.MinMaxCurve(3f, 5f);
+        main.startSpeed = new ParticleSystem.MinMaxCurve(0.5f, 2f);
+        main.startSize = new ParticleSystem.MinMaxCurve(0.06f, 0.18f);
+        main.loop = true;
+        main.playOnAwake = false;
+        main.simulationSpace = ParticleSystemSimulationSpace.World;
+        main.gravityModifier = 0.3f;
+        main.startRotation = new ParticleSystem.MinMaxCurve(0f, 360f * Mathf.Deg2Rad);
+
+        // Multi-color confetti: gold, green, pink, blue
+        Gradient grad = new Gradient();
+        grad.SetKeys(
+            new[] {
+                new GradientColorKey(new Color(1f, 0.85f, 0.1f), 0f),
+                new GradientColorKey(new Color(0.2f, 0.9f, 0.3f), 0.33f),
+                new GradientColorKey(new Color(0.9f, 0.3f, 0.8f), 0.66f),
+                new GradientColorKey(new Color(0.2f, 0.6f, 1f), 1f)
+            },
+            new[] { new GradientAlphaKey(1f, 0f), new GradientAlphaKey(1f, 1f) });
+        main.startColor = new ParticleSystem.MinMaxGradient(grad);
+
+        var emission = ps.emission;
+        emission.rateOverTime = 60;
+
+        var shape = ps.shape;
+        shape.shapeType = ParticleSystemShapeType.Box;
+        shape.scale = new Vector3(6f, 0.5f, 6f);
+
+        var rotOverLife = ps.rotationOverLifetime;
+        rotOverLife.enabled = true;
+        rotOverLife.z = new ParticleSystem.MinMaxCurve(-180f * Mathf.Deg2Rad, 180f * Mathf.Deg2Rad);
+
+        var noise = ps.noise;
+        noise.enabled = true;
+        noise.strength = 0.8f;
+        noise.frequency = 0.5f;
+
+        var sizeOverLife = ps.sizeOverLifetime;
+        sizeOverLife.enabled = true;
+        sizeOverLife.size = new ParticleSystem.MinMaxCurve(1f,
+            AnimationCurve.EaseInOut(0f, 1f, 1f, 0f));
+
+        var renderer = go.GetComponent<ParticleSystemRenderer>();
+        renderer.material = GetParticleMaterial(new Color(1f, 0.9f, 0.2f));
+
+        go.SetActive(false);
+        return ps;
+    }
+
     ParticleSystem CreateTrail(string name, Color colorA, Color colorB,
         int ratePerSec, float speed, float lifetime, float size)
     {
@@ -477,6 +540,22 @@ public class ParticleManager : MonoBehaviour
     // === NEW FEATURE VFX ===
 
     public void PlayCelebration(Vector3 position) => PlayAt(_celebration, position);
+
+    /// <summary>Start sustained confetti shower above a position (for finish line).</summary>
+    public void PlayFinishConfetti(Vector3 position)
+    {
+        if (_finishConfetti == null) return;
+        _finishConfetti.transform.position = position + Vector3.up * 4f;
+        _finishConfetti.Play();
+    }
+
+    /// <summary>Stop finish confetti shower.</summary>
+    public void StopFinishConfetti()
+    {
+        if (_finishConfetti == null) return;
+        _finishConfetti.Stop();
+    }
+
     public void PlayWaterSplash(Vector3 position) => PlayAt(_waterSplash, position);
     public void PlayDeathExplosion(Vector3 position) => PlayAt(_deathExplosion, position);
     public void PlayLandingDust(Vector3 position) => PlayAt(_landingDust, position);

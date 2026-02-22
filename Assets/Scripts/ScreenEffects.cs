@@ -69,6 +69,11 @@ public class ScreenEffects : MonoBehaviour
     private Color _splatterColor = Color.white;
     private float _splatterDecay = 1.5f; // seconds to fully fade
 
+    // Death desaturation
+    private Image _desatOverlay;
+    private float _desatAlpha;
+    private float _desatDecay = 1.5f;
+
     void Awake()
     {
         if (Instance == null) Instance = this;
@@ -139,6 +144,9 @@ public class ScreenEffects : MonoBehaviour
         // Invincibility shimmer - golden vignette glow during i-frames
         _invincShimmer = CreateOverlay("InvincShimmer", new Color(1f, 0.85f, 0.2f, 0f));
         ApplyInvincShimmerTexture(_invincShimmer);
+
+        // Death desaturation overlay (gray wash)
+        _desatOverlay = CreateOverlay("DesatOverlay", new Color(0.3f, 0.3f, 0.3f, 0f));
     }
 
     void ApplyVignetteTexture(Image img)
@@ -510,15 +518,15 @@ public class ScreenEffects : MonoBehaviour
                     break;
                 case 2: // Toxic: nauseating slow pulse, stronger edges
                     pulse = 1f + Mathf.Sin(t * 0.6f) * 0.25f + Mathf.Sin(t * 1.7f) * 0.1f;
-                    baseAlpha = 0.16f;
+                    baseAlpha = 0.10f;
                     break;
                 case 3: // Rusty: industrial flicker
                     pulse = 1f + (Mathf.PerlinNoise(t * 3f, 7f) - 0.5f) * 0.3f;
-                    baseAlpha = 0.18f;
+                    baseAlpha = 0.11f;
                     break;
                 default: // Hellsewer: aggressive rapid pulse
                     pulse = 1f + Mathf.Sin(t * 3.5f) * 0.2f + Mathf.Sin(t * 7f) * 0.1f;
-                    baseAlpha = 0.22f;
+                    baseAlpha = 0.13f;
                     break;
             }
 
@@ -599,14 +607,49 @@ public class ScreenEffects : MonoBehaviour
             _invincShimmer.color = new Color(1f, 0.85f, 0.2f, 0f);
         }
 
-        // Underwater tint - murky green with caustic ripple
+        // Death desaturation wave
+        if (_desatAlpha > 0.005f && _desatOverlay != null)
+        {
+            _desatAlpha -= Time.unscaledDeltaTime / _desatDecay;
+            if (_desatAlpha < 0f) _desatAlpha = 0f;
+            _desatOverlay.color = new Color(0.3f, 0.3f, 0.3f, _desatAlpha * 0.4f);
+        }
+        else if (_desatOverlay != null)
+        {
+            _desatOverlay.color = new Color(0.3f, 0.3f, 0.3f, 0f);
+        }
+
+        // Underwater tint - zone-aware color and density
         if (_underwaterIntensity > 0.001f)
         {
             float caustic = 1f + Mathf.Sin(Time.time * 2.5f) * 0.08f
                               + Mathf.Sin(Time.time * 4.1f) * 0.05f
-                              + Mathf.Sin(Time.time * 1.3f) * 0.04f; // extra slow ripple
-            float alpha = _underwaterIntensity * 0.28f * caustic;
-            Color uc = new Color(0.03f, 0.15f, 0.07f, alpha);
+                              + Mathf.Sin(Time.time * 1.3f) * 0.04f;
+
+            // Zone-specific underwater tint: [color RGB, alpha multiplier]
+            // Porcelain: clean blue-green, Grimy: murky green, Toxic: thick green fog
+            // Rusty: brown murk, Hellsewer: blood-red reduced visibility
+            Color baseColor = new Color(0.03f, 0.15f, 0.07f);
+            float densityMul = 1f;
+            if (PipeZoneSystem.Instance != null)
+            {
+                int zi = PipeZoneSystem.Instance.CurrentZoneIndex;
+                float zb = PipeZoneSystem.Instance.ZoneBlend;
+                Color[] zoneColors = {
+                    new Color(0.04f, 0.12f, 0.10f),  // Porcelain: clean blue-green
+                    new Color(0.03f, 0.15f, 0.07f),  // Grimy: murky green
+                    new Color(0.02f, 0.18f, 0.04f),  // Toxic: thick toxic green
+                    new Color(0.12f, 0.08f, 0.03f),  // Rusty: brown murk
+                    new Color(0.18f, 0.04f, 0.02f),  // Hellsewer: blood-red
+                };
+                float[] zoneDensity = { 0.7f, 0.8f, 0.9f, 0.85f, 1.0f };
+                int next = Mathf.Min(zi + 1, zoneColors.Length - 1);
+                baseColor = Color.Lerp(zoneColors[zi], zoneColors[next], zb);
+                densityMul = Mathf.Lerp(zoneDensity[zi], zoneDensity[next], zb);
+            }
+
+            float alpha = _underwaterIntensity * 0.28f * densityMul * caustic;
+            Color uc = new Color(baseColor.r, baseColor.g, baseColor.b, alpha);
             if (_underwaterTint != null) _underwaterTint.color = uc;
         }
         else if (_underwaterTint != null)
@@ -741,6 +784,16 @@ public class ScreenEffects : MonoBehaviour
         Invoke(nameof(ResetFlashColor), 0.4f);
     }
 
+    /// <summary>Brief murky blue-green tint when passing through waterfall.</summary>
+    public void TriggerWaterfallTint()
+    {
+        _hitFlashAlpha = 0.25f;
+        _hitFlashColor = new Color(0.05f, 0.25f, 0.15f, 0.35f);
+        // Subtle vignette darkening (wet lens feel)
+        _vignetteIntensity = Mathf.Max(_vignetteIntensity, 0.3f);
+        Invoke(nameof(ResetFlashColor), 0.3f);
+    }
+
     /// <summary>Zone-colored flash for zone transitions.</summary>
     public void TriggerZoneFlash(Color zoneColor)
     {
@@ -760,6 +813,12 @@ public class ScreenEffects : MonoBehaviour
     public void UpdateUnderwaterIntensity(float target)
     {
         _underwaterIntensity = Mathf.Lerp(_underwaterIntensity, target, Time.deltaTime * 3f);
+    }
+
+    /// <summary>Trigger desaturation wave on death (gray wash that fades).</summary>
+    public void TriggerDesaturation(float intensity = 1f)
+    {
+        _desatAlpha = Mathf.Clamp01(intensity);
     }
 
     /// <summary>Trigger impact splatter overlay (heavy/messy hits).</summary>

@@ -96,6 +96,9 @@ public class GrateBehavior : MonoBehaviour
         if (!collision.collider.CompareTag("Player")) return;
 
         _playerHit = true;
+#if UNITY_EDITOR
+        Debug.Log($"[GRATE] Player hit grate at {transform.position}");
+#endif
 
         TurdController tc = collision.collider.GetComponent<TurdController>();
         if (tc != null)

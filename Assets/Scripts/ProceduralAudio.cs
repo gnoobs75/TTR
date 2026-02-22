@@ -82,6 +82,7 @@ public class ProceduralAudio : MonoBehaviour
     private AudioClip _uiClick;
     private AudioClip _victoryFanfare;
     private AudioClip _sadTrombone;
+    private AudioClip _zoneApproachBuild;
 
     // Real audio file clips
     private AudioClip _toiletFlush;
@@ -115,6 +116,17 @@ public class ProceduralAudio : MonoBehaviour
     private float _ambientCrossfade; // 0-1 crossfade progress
     private AudioSource _ambientSource2; // second source for crossfading
     private bool _ambientSwapping; // which source is active
+
+    // Tour mode audio
+    private AudioClip _tourAmbient;
+    private AudioClip _tourEntryChime;
+    private AudioClip _tourExitStinger;
+    private AudioSource _tourSource;
+
+    // Music fade
+    private float _musicFadeMul = 1f;
+    private float _musicFadeTarget = 1f;
+    private float _musicFadeSpeed = 2f;
 
     const int SAMPLE_RATE = 44100;
 
@@ -173,6 +185,13 @@ public class ProceduralAudio : MonoBehaviour
         _ambientSource2.spatialBlend = 0f;
         _ambientSource2.loop = true;
         _ambientSource2.volume = 0f;
+
+        // Tour ambient source
+        _tourSource = gameObject.AddComponent<AudioSource>();
+        _tourSource.playOnAwake = false;
+        _tourSource.spatialBlend = 0f;
+        _tourSource.loop = true;
+        _tourSource.volume = 0f;
 
         GenerateAllClips();
         GenerateWindLoop();
@@ -694,6 +713,64 @@ public class ProceduralAudio : MonoBehaviour
             return signal * loopEnv * 0.3f;
         });
 
+        // Tour entry chime: gentle exploratory bell (discovery feel)
+        _tourEntryChime = GenerateClip("TourEntry", 0.6f, (t, dur) =>
+        {
+            float prog = t / dur;
+            float f1 = 392f; // G4
+            float f2 = 523f; // C5
+            float f3 = 659f; // E5
+            float env = Mathf.Sin(Mathf.PI * prog) * Mathf.Exp(-prog * 2f);
+            float mix = Mathf.Sin(2f * Mathf.PI * f1 * t) * 0.3f
+                      + Mathf.Sin(2f * Mathf.PI * f2 * t) * 0.25f * Mathf.Clamp01((prog - 0.1f) * 5f)
+                      + Mathf.Sin(2f * Mathf.PI * f3 * t) * 0.2f * Mathf.Clamp01((prog - 0.2f) * 3f);
+            return mix * env * 0.5f;
+        });
+
+        // Tour exit stinger: brief descending "done" sound
+        _tourExitStinger = GenerateClip("TourExit", 0.4f, (t, dur) =>
+        {
+            float prog = t / dur;
+            float freq = Mathf.Lerp(659f, 392f, prog); // E5 -> G4
+            float env = (1f - prog) * Mathf.Exp(-prog * 3f);
+            return Mathf.Sin(2f * Mathf.PI * freq * t) * env * 0.4f;
+        });
+
+        // Zone approach build: low foreboding rumble that rises in tension
+        _zoneApproachBuild = GenerateClip("ZoneApproach", 1.5f, (t, dur) =>
+        {
+            float prog = t / dur;
+            // Rising low drone
+            float freq = Mathf.Lerp(40f, 120f, prog * prog);
+            float env = prog * Mathf.Sin(Mathf.PI * prog); // builds then fades
+            float drone = Mathf.Sin(2f * Mathf.PI * freq * t) * 0.3f;
+            float sub = Mathf.Sin(2f * Mathf.PI * (freq * 0.5f) * t) * 0.2f;
+            // Rising noise wash
+            float noise = (Random.value * 2f - 1f) * prog * 0.15f;
+            // Dissonant overtone
+            float dissonance = Mathf.Sin(2f * Mathf.PI * (freq * 1.06f) * t) * 0.1f * prog;
+            return (drone + sub + noise + dissonance) * env * 0.5f;
+        });
+
+        // Tour ambient: calm exploratory loop (warm pads, soft drips)
+        _tourAmbient = GenerateClip("TourAmbient", 4f, (t, dur) =>
+        {
+            float val = 0f;
+            // Gentle pad (warm minor chord)
+            val += Mathf.Sin(2f * Mathf.PI * 196f * t) * 0.06f; // G3
+            val += Mathf.Sin(2f * Mathf.PI * 233f * t) * 0.04f; // Bb3
+            val += Mathf.Sin(2f * Mathf.PI * 294f * t) * 0.03f; // D4
+            // Slow LFO modulation
+            float lfo = Mathf.Sin(t * 0.5f * Mathf.PI * 2f) * 0.5f + 0.5f;
+            val *= 0.7f + lfo * 0.3f;
+            // Occasional drip
+            float drip = Mathf.Sin(t * 1.3f * Mathf.PI * 2f);
+            if (drip > 0.97f) val += 0.15f * Mathf.Sin(2f * Mathf.PI * 1800f * t) * Mathf.Exp(-(t % 0.769f) * 20f);
+            // Soft noise
+            val += (Random.value * 2f - 1f) * 0.006f;
+            return val * 0.5f;
+        });
+
         // Background music: simple bass-driven loop
         GenerateBGM();
     }
@@ -908,13 +985,54 @@ public class ProceduralAudio : MonoBehaviour
     public void PlayVictoryFanfare() => PlaySFX(_victoryFanfare, 0.7f);
     public void PlaySadTrombone() => PlaySFX(_sadTrombone, 0.6f);
 
+    // Zone approach build
+    public void PlayZoneApproachBuild() => PlaySFX(_zoneApproachBuild, 0.6f);
+
+    // Tour audio
+    public void PlayTourEntry() => PlaySFX(_tourEntryChime, 0.7f);
+    public void PlayTourExit() => PlaySFX(_tourExitStinger, 0.7f);
+
+    /// <summary>Start tour ambient loop.</summary>
+    public void StartTourAmbient()
+    {
+        if (_tourSource == null || _tourAmbient == null) return;
+        _tourSource.clip = _tourAmbient;
+        _tourSource.volume = masterVolume * sfxVolume * 0.3f;
+        _tourSource.Play();
+    }
+
+    /// <summary>Stop tour ambient loop.</summary>
+    public void StopTourAmbient()
+    {
+        if (_tourSource != null) _tourSource.Stop();
+    }
+
+    /// <summary>Fade out music over duration seconds.</summary>
+    public void FadeOutMusic(float duration)
+    {
+        _musicFadeTarget = 0f;
+        _musicFadeSpeed = duration > 0.01f ? 1f / duration : 100f;
+    }
+
+    /// <summary>Fade in music over duration seconds.</summary>
+    public void FadeInMusic(float duration)
+    {
+        if (_musicSource != null && !_musicSource.isPlaying && _bgmLoop != null)
+        {
+            _musicSource.clip = _bgmLoop;
+            _musicSource.Play();
+            _musicPlaying = true;
+        }
+        _musicFadeMul = 0f;
+        _musicFadeTarget = 1f;
+        _musicFadeSpeed = duration > 0.01f ? 1f / duration : 100f;
+    }
+
     public void StartMusic()
     {
-        if (_musicSource == null || _bgmLoop == null || _musicPlaying) return;
-        _musicSource.clip = _bgmLoop;
-        _musicSource.volume = masterVolume * musicVolume;
-        _musicSource.Play();
-        _musicPlaying = true;
+        // Procedural BGM disabled — ogg tracks from Resources/music/ used instead
+        // (RaceManager plays race music, GameUI plays splash music)
+        _musicPlaying = true; // flag so other systems don't try to restart
         _finalStretchAnnounced = false;
         _photoFinishAnnounced = false;
         _heartbeatPhase = 0f;
@@ -1269,8 +1387,11 @@ public class ProceduralAudio : MonoBehaviour
             _currentMusicVol = Mathf.Lerp(_currentMusicVol, _targetMusicVol + volMod, Time.deltaTime * 3f);
 
             _musicSource.pitch = _currentPitch;
-            _musicSource.volume = masterVolume * musicVolume * Mathf.Max(0.1f, _currentMusicVol);
+            _musicSource.volume = masterVolume * musicVolume * Mathf.Max(0.1f, _currentMusicVol) * _musicFadeMul;
         }
+
+        // Music fade multiplier (for tour mode transitions)
+        _musicFadeMul = Mathf.MoveTowards(_musicFadeMul, _musicFadeTarget, Time.deltaTime * _musicFadeSpeed);
 
         // Zone ambient crossfade
         if (_ambientSource != null && _ambientSource2 != null && _currentAmbientZone >= 0)

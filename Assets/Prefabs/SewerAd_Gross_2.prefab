@@ -26,7 +26,7 @@ Transform:
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 1792850465586128208}
   serializedVersion: 2
-  m_LocalRotation: {x: 0, y: 0, z: -0.0030968364, w: 0.99999523}
+  m_LocalRotation: {x: 0, y: 0, z: -0.021374218, w: 0.99977154}
   m_LocalPosition: {x: 0, y: -0.04, z: 0.006}
   m_LocalScale: {x: 1, y: 1, z: 1}
   m_ConstrainProportionsScale: 0
@@ -58,7 +58,7 @@ MeshRenderer:
   m_RenderingLayerMask: 1
   m_RendererPriority: 0
   m_Materials:
-  - {fileID: 10100, guid: 0000000000000000e000000000000000, type: 0}
+  - {fileID: 0}
   m_StaticBatchInfo:
     firstSubMesh: 0
     subMeshCount: 0
@@ -94,7 +94,7 @@ TextMesh:
 
     your life!"'
   m_OffsetZ: 0
-  m_CharacterSize: 0.009
+  m_CharacterSize: 0.025
   m_LineSpacing: 1
   m_Anchor: 4
   m_Alignment: 1
@@ -102,7 +102,7 @@ TextMesh:
   m_FontSize: 34
   m_FontStyle: 1
   m_RichText: 1
-  m_Font: {fileID: 0}
+  m_Font: {fileID: 10102, guid: 0000000000000000e000000000000000, type: 0}
   m_Color:
     serializedVersion: 2
     rgba: 4294089011
@@ -133,8 +133,8 @@ Transform:
   m_GameObject: {fileID: 2097628145346369071}
   serializedVersion: 2
   m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
-  m_LocalPosition: {x: 0.048472624, y: -0.21, z: 0.005}
-  m_LocalScale: {x: 0.006838172, y: 0.069120824, z: 0.003}
+  m_LocalPosition: {x: -0.0003540367, y: -0.21, z: 0.005}
+  m_LocalScale: {x: 0.005421768, y: 0.09176111, z: 0.003}
   m_ConstrainProportionsScale: 0
   m_Children: []
   m_Father: {fileID: 8766626481831149239}
@@ -222,7 +222,7 @@ Transform:
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 2815137785273209305}
   serializedVersion: 2
-  m_LocalRotation: {x: 0, y: 0, z: -0.017371034, w: 0.99984914}
+  m_LocalRotation: {x: 0, y: 0, z: -0.0061186203, w: 0.9999813}
   m_LocalPosition: {x: 0, y: 0.1, z: 0.006}
   m_LocalScale: {x: 1, y: 1, z: 1}
   m_ConstrainProportionsScale: 0
@@ -254,7 +254,7 @@ MeshRenderer:
   m_RenderingLayerMask: 1
   m_RendererPriority: 0
   m_Materials:
-  - {fileID: 10100, guid: 0000000000000000e000000000000000, type: 0}
+  - {fileID: 0}
   m_StaticBatchInfo:
     firstSubMesh: 0
     subMeshCount: 0
@@ -288,7 +288,7 @@ TextMesh:
   m_GameObject: {fileID: 2815137785273209305}
   m_Text: UNCLE PLUNGER'S
   m_OffsetZ: 0
-  m_CharacterSize: 0.012
+  m_CharacterSize: 0.035
   m_LineSpacing: 1
   m_Anchor: 4
   m_Alignment: 1
@@ -296,7 +296,7 @@ TextMesh:
   m_FontSize: 56
   m_FontStyle: 1
   m_RichText: 1
-  m_Font: {fileID: 0}
+  m_Font: {fileID: 10102, guid: 0000000000000000e000000000000000, type: 0}
   m_Color:
     serializedVersion: 2
     rgba: 4279903974
@@ -326,7 +326,7 @@ Transform:
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 2830537925395544789}
   serializedVersion: 2
-  m_LocalRotation: {x: 0, y: 0, z: -0.0007425018, w: 0.99999976}
+  m_LocalRotation: {x: 0, y: 0, z: -0.018492712, w: 0.99982905}
   m_LocalPosition: {x: 0, y: -0.12, z: 0.006}
   m_LocalScale: {x: 1, y: 1, z: 1}
   m_ConstrainProportionsScale: 0
@@ -358,7 +358,7 @@ MeshRenderer:
   m_RenderingLayerMask: 1
   m_RendererPriority: 0
   m_Materials:
-  - {fileID: 10100, guid: 0000000000000000e000000000000000, type: 0}
+  - {fileID: 0}
   m_StaticBatchInfo:
     firstSubMesh: 0
     subMeshCount: 0
@@ -392,7 +392,7 @@ TextMesh:
   m_GameObject: {fileID: 2830537925395544789}
   m_Text: Call 1-800-PLU-NGER
   m_OffsetZ: 0
-  m_CharacterSize: 0.008
+  m_CharacterSize: 0.022
   m_LineSpacing: 1
   m_Anchor: 4
   m_Alignment: 1
@@ -400,7 +400,7 @@ TextMesh:
   m_FontSize: 28
   m_FontStyle: 0
   m_RichText: 1
-  m_Font: {fileID: 0}
+  m_Font: {fileID: 10102, guid: 0000000000000000e000000000000000, type: 0}
   m_Color:
     serializedVersion: 2
     rgba: 4280736242
@@ -521,8 +521,8 @@ Transform:
   m_GameObject: {fileID: 3795815441015684677}
   serializedVersion: 2
   m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
-  m_LocalPosition: {x: -0.13680334, y: -0.014499262, z: 0.005}
-  m_LocalScale: {x: 0.00857171, y: 0.00857171, z: 0.002}
+  m_LocalPosition: {x: 0.0063812435, y: 0.07280627, z: 0.005}
+  m_LocalScale: {x: 0.014513684, y: 0.014513684, z: 0.002}
   m_ConstrainProportionsScale: 0
   m_Children: []
   m_Father: {fileID: 8766626481831149239}
@@ -611,8 +611,8 @@ Transform:
   m_GameObject: {fileID: 4020868846026638093}
   serializedVersion: 2
   m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
-  m_LocalPosition: {x: -0.0683839, y: -0.16, z: 0.005}
-  m_LocalScale: {x: 0.0042452132, y: 0.06913812, z: 0.003}
+  m_LocalPosition: {x: -0.124778904, y: -0.16, z: 0.005}
+  m_LocalScale: {x: 0.0041848733, y: 0.047114693, z: 0.003}
   m_ConstrainProportionsScale: 0
   m_Children: []
   m_Father: {fileID: 8766626481831149239}
@@ -743,7 +743,7 @@ Transform:
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 6371105697111132228}
   serializedVersion: 2
-  m_LocalRotation: {x: 0, y: 0, z: 0.0034844626, w: 0.9999939}
+  m_LocalRotation: {x: 0, y: 0, z: 0.011188093, w: 0.9999374}
   m_LocalPosition: {x: 0, y: 0.05, z: 0.006}
   m_LocalScale: {x: 1, y: 1, z: 1}
   m_ConstrainProportionsScale: 0
@@ -775,7 +775,7 @@ MeshRenderer:
   m_RenderingLayerMask: 1
   m_RendererPriority: 0
   m_Materials:
-  - {fileID: 10100, guid: 0000000000000000e000000000000000, type: 0}
+  - {fileID: 0}
   m_StaticBatchInfo:
     firstSubMesh: 0
     subMeshCount: 0
@@ -809,7 +809,7 @@ TextMesh:
   m_GameObject: {fileID: 6371105697111132228}
   m_Text: Plumbing Co.
   m_OffsetZ: 0
-  m_CharacterSize: 0.009
+  m_CharacterSize: 0.025
   m_LineSpacing: 1
   m_Anchor: 4
   m_Alignment: 1
@@ -817,7 +817,7 @@ TextMesh:
   m_FontSize: 38
   m_FontStyle: 0
   m_RichText: 1
-  m_Font: {fileID: 0}
+  m_Font: {fileID: 10102, guid: 0000000000000000e000000000000000, type: 0}
   m_Color:
     serializedVersion: 2
     rgba: 4289121497
@@ -848,8 +848,8 @@ Transform:
   m_GameObject: {fileID: 6996056536128622759}
   serializedVersion: 2
   m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
-  m_LocalPosition: {x: -0.10818367, y: 0.11178664, z: 0.005}
-  m_LocalScale: {x: 0.010705896, y: 0.010705896, z: 0.002}
+  m_LocalPosition: {x: 0.12673625, y: -0.051587842, z: 0.005}
+  m_LocalScale: {x: 0.009010373, y: 0.009010373, z: 0.002}
   m_ConstrainProportionsScale: 0
   m_Children: []
   m_Father: {fileID: 8766626481831149239}
@@ -938,8 +938,8 @@ Transform:
   m_GameObject: {fileID: 8321023698528941135}
   serializedVersion: 2
   m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
-  m_LocalPosition: {x: -0.07905625, y: -0.235, z: 0.005}
-  m_LocalScale: {x: 0.0056516463, y: 0.046832502, z: 0.003}
+  m_LocalPosition: {x: 0.032470766, y: -0.235, z: 0.005}
+  m_LocalScale: {x: 0.0062085763, y: 0.063822, z: 0.003}
   m_ConstrainProportionsScale: 0
   m_Children: []
   m_Father: {fileID: 8766626481831149239}
@@ -1028,8 +1028,8 @@ Transform:
   m_GameObject: {fileID: 8467862562767211369}
   serializedVersion: 2
   m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
-  m_LocalPosition: {x: 0.03072159, y: -0.11741744, z: 0.005}
-  m_LocalScale: {x: 0.011659905, y: 0.011659905, z: 0.002}
+  m_LocalPosition: {x: -0.08901108, y: 0.05940416, z: 0.005}
+  m_LocalScale: {x: 0.013614618, y: 0.013614618, z: 0.002}
   m_ConstrainProportionsScale: 0
   m_Children: []
   m_Father: {fileID: 8766626481831149239}
@@ -1118,8 +1118,8 @@ Transform:
   m_GameObject: {fileID: 8869804588035093898}
   serializedVersion: 2
   m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
-  m_LocalPosition: {x: -0.050144166, y: -0.185, z: 0.005}
-  m_LocalScale: {x: 0.0043029515, y: 0.06269477, z: 0.003}
+  m_LocalPosition: {x: -0.1450648, y: -0.185, z: 0.005}
+  m_LocalScale: {x: 0.006795132, y: 0.056124248, z: 0.003}
   m_ConstrainProportionsScale: 0
   m_Children: []
   m_Father: {fileID: 8766626481831149239}

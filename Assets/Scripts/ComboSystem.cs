@@ -47,6 +47,10 @@ public class ComboSystem : MonoBehaviour
         ComboCount++;
         _lastEventTime = Time.time;
         _eventPunchTime = Time.time; // trigger pop animation
+#if UNITY_EDITOR
+        if (ComboCount == 5 || ComboCount == 10 || ComboCount == 20 || ComboCount == 50 || ComboCount % 25 == 0)
+            Debug.Log($"[COMBO] {type} → combo={ComboCount} multiplier={Multiplier:F1}x");
+#endif
 
         if (GameManager.Instance == null) return;
 
@@ -167,6 +171,9 @@ public class ComboSystem : MonoBehaviour
 
     public void ResetCombo()
     {
+#if UNITY_EDITOR
+        if (ComboCount >= 5) Debug.Log($"[COMBO] RESET (was {ComboCount})");
+#endif
         ComboCount = 0;
         _lastEventTime = 0f;
         if (ScreenEffects.Instance != null)

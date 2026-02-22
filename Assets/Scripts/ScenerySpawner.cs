@@ -162,7 +162,8 @@ public class ScenerySpawner : MonoBehaviour
         Vector3 pos = center + (right * Mathf.Cos(rad) + up * Mathf.Sin(rad)) * spawnRadius;
         Vector3 inward = (center - pos).normalized;
         // Signs face inward so players inside the pipe can read them
-        Quaternion rot = Quaternion.LookRotation(inward, forward);
+        // Use -forward as up so text reads left-to-right consistently on all walls
+        Quaternion rot = Quaternion.LookRotation(-inward, -forward);
 
         GameObject prefab = signPrefabs[Random.Range(0, signPrefabs.Length)];
         GameObject obj = Instantiate(prefab, pos, rot, transform);

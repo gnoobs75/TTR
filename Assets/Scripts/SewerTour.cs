@@ -43,6 +43,10 @@ public class SewerTour : MonoBehaviour
     private List<GameObject> _labels = new List<GameObject>();
     private bool _hasSpawnedShowcase = false;
 
+    // Audio cue tracking
+    private string _lastCueCategory = "";
+    private float _lastCueTime;
+
     // UI
     private Canvas _labelCanvas;
     private Text _headerText;
@@ -102,6 +106,14 @@ public class SewerTour : MonoBehaviour
             player.forwardSpeed = tourSpeed;
             player.maxSpeed = tourSpeed;
             player.acceleration = 0f;
+        }
+
+        // Audio: fade out race music, play entry chime, start ambient
+        if (ProceduralAudio.Instance != null)
+        {
+            ProceduralAudio.Instance.FadeOutMusic(0.5f);
+            ProceduralAudio.Instance.PlayTourEntry();
+            ProceduralAudio.Instance.StartTourAmbient();
         }
 
         // Build tour HUD
@@ -418,7 +430,36 @@ public class SewerTour : MonoBehaviour
         }
 
         if (closestDist < 15f && closestName.Length > 0)
+        {
             _currentObjText.text = closestName;
+
+            // Category-based audio cue when approaching a new item
+            if (closestDist < 8f && Time.time - _lastCueTime > 2f)
+            {
+                string cat = "";
+                int b1 = closestName.IndexOf('[');
+                int b2 = closestName.IndexOf(']');
+                if (b1 >= 0 && b2 > b1)
+                    cat = closestName.Substring(b1 + 1, b2 - b1 - 1);
+
+                if (cat.Length > 0 && cat != _lastCueCategory)
+                {
+                    _lastCueCategory = cat;
+                    _lastCueTime = Time.time;
+                    if (ProceduralAudio.Instance != null)
+                    {
+                        switch (cat)
+                        {
+                            case "Obstacle": ProceduralAudio.Instance.PlayDangerPing(1f); break;
+                            case "Collectible": ProceduralAudio.Instance.PlayBubblePop(); break;
+                            case "PowerUp": ProceduralAudio.Instance.PlayCoinMagnet(); break;
+                            case "Creature": ProceduralAudio.Instance.PlayBubblePop(); break;
+                            default: ProceduralAudio.Instance.PlayUIClick(); break;
+                        }
+                    }
+                }
+            }
+        }
         else
             _currentObjText.text = "";
     }
@@ -543,6 +584,14 @@ public class SewerTour : MonoBehaviour
 
     void ExitTour()
     {
+        // Audio feedback before restart
+        if (ProceduralAudio.Instance != null)
+        {
+            ProceduralAudio.Instance.PlayUIClick();
+            ProceduralAudio.Instance.PlayTourExit();
+            ProceduralAudio.Instance.StopTourAmbient();
+        }
+
         // Reload scene to reset everything
         if (GameManager.Instance != null)
             GameManager.Instance.RestartGame();

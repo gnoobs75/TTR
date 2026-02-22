@@ -40,6 +40,14 @@ public class GameUI : MonoBehaviour
     public Transform shopContent;
     public Button shopCloseButton;
 
+    [Header("Volume")]
+    public Slider musicVolumeSlider;
+    public Slider sfxVolumeSlider;
+
+    // Splash screen music
+    private AudioSource _splashMusic;
+    private AudioClip[] _musicClips;
+
     // Mobile-responsive UI scale factor
     private float _uiScale = 1f;
 
@@ -102,6 +110,37 @@ public class GameUI : MonoBehaviour
             _quipIndex = Random.Range(0, StartQuips.Length);
             _nextQuipTime = Time.time + 3.5f;
         }
+
+        // Load and play splash screen music
+        _musicClips = Resources.LoadAll<AudioClip>("music");
+        if (_musicClips != null && _musicClips.Length > 0)
+        {
+            _splashMusic = gameObject.AddComponent<AudioSource>();
+            _splashMusic.clip = _musicClips[Random.Range(0, _musicClips.Length)];
+            _splashMusic.loop = true;
+            _splashMusic.playOnAwake = false;
+            _splashMusic.spatialBlend = 0f;
+            float savedMusicVol = PlayerPrefs.GetFloat("MusicVolume", 0.4f);
+            _splashMusic.volume = savedMusicVol;
+            _splashMusic.Play();
+#if UNITY_EDITOR
+            Debug.Log($"[TTR Splash] Playing \"{_splashMusic.clip.name}\" ({_musicClips.Length} tracks)");
+#endif
+        }
+
+        // Wire volume sliders
+        if (musicVolumeSlider != null)
+        {
+            musicVolumeSlider.value = PlayerPrefs.GetFloat("MusicVolume", 0.4f);
+            musicVolumeSlider.onValueChanged.AddListener(OnMusicVolumeChanged);
+            ApplyMusicVolume(musicVolumeSlider.value);
+        }
+        if (sfxVolumeSlider != null)
+        {
+            sfxVolumeSlider.value = PlayerPrefs.GetFloat("SFXVolume", 1f);
+            sfxVolumeSlider.onValueChanged.AddListener(OnSFXVolumeChanged);
+            ApplySFXVolume(sfxVolumeSlider.value);
+        }
     }
 
     void OnStartClicked()
@@ -124,8 +163,19 @@ public class GameUI : MonoBehaviour
 
     void OnTourClicked()
     {
+        StopSplashMusic();
         if (GameManager.Instance != null)
             GameManager.Instance.StartSewerTour();
+    }
+
+    void StopSplashMusic()
+    {
+        if (_splashMusic != null)
+        {
+            _splashMusic.Stop();
+            Destroy(_splashMusic);
+            _splashMusic = null;
+        }
     }
 
     void OnShopClicked()
@@ -155,6 +205,32 @@ public class GameUI : MonoBehaviour
         _shopFadingIn = false;
         _shopFadeTimer = 0f;
         UpdateWallet();
+    }
+
+    void OnMusicVolumeChanged(float val)
+    {
+        PlayerPrefs.SetFloat("MusicVolume", val);
+        ApplyMusicVolume(val);
+    }
+
+    void OnSFXVolumeChanged(float val)
+    {
+        PlayerPrefs.SetFloat("SFXVolume", val);
+        ApplySFXVolume(val);
+    }
+
+    void ApplyMusicVolume(float val)
+    {
+        if (ProceduralAudio.Instance != null)
+            ProceduralAudio.Instance.musicVolume = val;
+        if (_splashMusic != null)
+            _splashMusic.volume = val;
+    }
+
+    void ApplySFXVolume(float val)
+    {
+        if (ProceduralAudio.Instance != null)
+            ProceduralAudio.Instance.sfxVolume = val;
     }
 
     public void ShowHUD()
@@ -357,7 +433,7 @@ public class GameUI : MonoBehaviour
 
         _boostLabel = labelObj.AddComponent<Text>();
         _boostLabel.font = font;
-        _boostLabel.fontSize = 12;
+        _boostLabel.fontSize = Mathf.RoundToInt(12 * _uiScale);
         _boostLabel.alignment = TextAnchor.MiddleCenter;
         _boostLabel.color = Color.white;
         _boostLabel.text = "BOOST";
@@ -447,7 +523,7 @@ public class GameUI : MonoBehaviour
         lrt.offsetMax = Vector2.zero;
         _stunLabel = labelObj.AddComponent<Text>();
         _stunLabel.font = font;
-        _stunLabel.fontSize = 10;
+        _stunLabel.fontSize = Mathf.RoundToInt(10 * _uiScale);
         _stunLabel.alignment = TextAnchor.MiddleCenter;
         _stunLabel.color = Color.white;
         _stunLabel.fontStyle = FontStyle.Bold;
@@ -519,12 +595,12 @@ public class GameUI : MonoBehaviour
         Font font = Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
         if (font == null) font = Font.CreateDynamicFontFromOSFont("Arial", 14);
 
-        // Small golden label above the coin count area
+        // Small golden label below wallet on right column
         GameObject obj = new GameObject("MagnetIndicator");
         RectTransform rt = obj.AddComponent<RectTransform>();
         rt.SetParent(canvas.transform, false);
-        rt.anchorMin = new Vector2(0.78f, 0.90f);
-        rt.anchorMax = new Vector2(0.98f, 0.95f);
+        rt.anchorMin = new Vector2(0.70f, 0.55f);
+        rt.anchorMax = new Vector2(0.98f, 0.59f);
         rt.offsetMin = Vector2.zero;
         rt.offsetMax = Vector2.zero;
 
@@ -752,12 +828,12 @@ public class GameUI : MonoBehaviour
         Font font = Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
         if (font == null) font = Font.CreateDynamicFontFromOSFont("Arial", 14);
 
-        // Large position indicator top-left
+        // Large position indicator top-left (above leaderboard)
         GameObject obj = new GameObject("RacePosition");
         RectTransform rt = obj.AddComponent<RectTransform>();
         rt.SetParent(canvas.transform, false);
-        rt.anchorMin = new Vector2(0.02f, 0.85f);
-        rt.anchorMax = new Vector2(0.18f, 0.95f);
+        rt.anchorMin = new Vector2(0.02f, 0.88f);
+        rt.anchorMax = new Vector2(0.22f, 0.97f);
         rt.offsetMin = Vector2.zero;
         rt.offsetMax = Vector2.zero;
 
@@ -777,14 +853,17 @@ public class GameUI : MonoBehaviour
 
     void UpdateRacePosition()
     {
-        if (RaceManager.Instance == null ||
-            (RaceManager.Instance.RaceState != RaceManager.State.Racing &&
-             RaceManager.Instance.RaceState != RaceManager.State.PlayerFinished))
-        {
-            if (_racePositionText != null && _racePositionText.gameObject.activeSelf)
-                _racePositionText.gameObject.SetActive(false);
+        // Hide GameUI's race position — RaceManager's HUD is the canonical one during race
+        if (_racePositionText != null && _racePositionText.gameObject.activeSelf)
+            _racePositionText.gameObject.SetActive(false);
+        if (RaceManager.Instance == null) return;
+        if (RaceManager.Instance.RaceState == RaceManager.State.Racing ||
+            RaceManager.Instance.RaceState == RaceManager.State.PlayerFinished)
+            return; // RaceManager shows its own position HUD
+
+        if (RaceManager.Instance.RaceState != RaceManager.State.Racing &&
+            RaceManager.Instance.RaceState != RaceManager.State.PlayerFinished)
             return;
-        }
 
         if (!_racePositionCreated) CreateRacePosition();
         if (_racePositionText == null) return;
@@ -1037,11 +1116,25 @@ public class GameUI : MonoBehaviour
                 // Slight zoom-in as it fades
                 startPanel.transform.localScale = Vector3.one * (1f + t * 0.15f);
 
+                // Fade out splash music with the UI
+                if (_splashMusic != null && _splashMusic.isPlaying)
+                {
+                    float baseVol = musicVolumeSlider != null ? musicVolumeSlider.value : 0.4f;
+                    _splashMusic.volume = baseVol * (1f - t);
+                }
+
                 if (t >= 1f)
                 {
                     _startScreenFading = false;
                     startPanel.transform.localScale = Vector3.one;
                     if (_startCanvasGroup != null) _startCanvasGroup.alpha = 1f;
+                    // Stop splash music
+                    if (_splashMusic != null)
+                    {
+                        _splashMusic.Stop();
+                        Destroy(_splashMusic);
+                        _splashMusic = null;
+                    }
                     if (GameManager.Instance != null)
                         GameManager.Instance.StartGame();
                 }

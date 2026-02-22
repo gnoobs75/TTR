@@ -16,7 +16,7 @@ public class RaceManager : MonoBehaviour
     public enum State { PreRace, Countdown, Racing, PlayerFinished, Finished }
 
     [Header("Race Settings")]
-    public float raceDistance = 1000f; // meters to the Sewage Treatment Plant
+    public float raceDistance = 2000f; // meters to the Sewage Treatment Plant
     public float countdownDuration = 3f;
 
     [Header("References")]
@@ -51,6 +51,16 @@ public class RaceManager : MonoBehaviour
     private float _autoFinishTimer;
     private const float AUTO_FINISH_TIMEOUT = 15f;
 
+    // === RACE MUSIC ===
+    [Header("Music")]
+    public AudioClip[] raceSongs;
+    private AudioSource _musicSource;
+    private bool _musicFading;
+    private float _musicFadeTimer;
+    private const float MUSIC_FADE_DURATION = 2f;
+    private float MusicVolume => ProceduralAudio.Instance != null
+        ? ProceduralAudio.Instance.musicVolume : 0.4f;
+
     // Position change tracking
     private int _lastPlayerPosition = 0;
 
@@ -80,7 +90,7 @@ public class RaceManager : MonoBehaviour
     // === FINAL STRETCH ===
     private bool _finalStretchTriggered;
     private float _finalStretchStart;
-    private const float FINAL_STRETCH_DISTANCE = 100f; // last 100m
+    private const float FINAL_STRETCH_DISTANCE = 200f; // last 200m for longer 2000m track
 
     // === DISTANCE MILESTONES ===
     private int _lastMilestoneIndex = -1;
@@ -224,12 +234,12 @@ public class RaceManager : MonoBehaviour
         Font font = Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
         if (font == null) font = Font.CreateDynamicFontFromOSFont("Arial", 14);
 
-        // Big position indicator top-right
+        // Big position indicator top-left
         GameObject posObj = new GameObject("RacePositionHUD");
         RectTransform rt = posObj.AddComponent<RectTransform>();
         rt.SetParent(canvas.transform, false);
-        rt.anchorMin = new Vector2(0.78f, 0.82f);
-        rt.anchorMax = new Vector2(0.98f, 0.98f);
+        rt.anchorMin = new Vector2(0.02f, 0.82f);
+        rt.anchorMax = new Vector2(0.20f, 0.93f);
         rt.offsetMin = Vector2.zero;
         rt.offsetMax = Vector2.zero;
 
@@ -271,12 +281,12 @@ public class RaceManager : MonoBehaviour
         Font font = Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
         if (font == null) font = Font.CreateDynamicFontFromOSFont("Arial", 14);
 
-        // Arrow indicator to the LEFT of the position HUD
+        // Arrow indicator to the RIGHT of the position HUD
         GameObject arrowObj = new GameObject("PosChangeArrow");
         RectTransform art = arrowObj.AddComponent<RectTransform>();
         art.SetParent(canvas.transform, false);
-        art.anchorMin = new Vector2(0.68f, 0.85f);
-        art.anchorMax = new Vector2(0.78f, 0.95f);
+        art.anchorMin = new Vector2(0.20f, 0.84f);
+        art.anchorMax = new Vector2(0.26f, 0.92f);
         art.offsetMin = Vector2.zero;
         art.offsetMax = Vector2.zero;
 
@@ -302,19 +312,19 @@ public class RaceManager : MonoBehaviour
         Font font = Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
         if (font == null) font = Font.CreateDynamicFontFromOSFont("Arial", 14);
 
-        // Race timer below position HUD
+        // Race timer below position HUD (left side)
         GameObject timerObj = new GameObject("RaceTimer");
         RectTransform rt = timerObj.AddComponent<RectTransform>();
         rt.SetParent(canvas.transform, false);
-        rt.anchorMin = new Vector2(0.78f, 0.76f);
-        rt.anchorMax = new Vector2(0.98f, 0.83f);
+        rt.anchorMin = new Vector2(0.02f, 0.76f);
+        rt.anchorMax = new Vector2(0.20f, 0.82f);
         rt.offsetMin = Vector2.zero;
         rt.offsetMax = Vector2.zero;
 
         _raceTimerText = timerObj.AddComponent<Text>();
         _raceTimerText.font = font;
         _raceTimerText.fontSize = 22;
-        _raceTimerText.alignment = TextAnchor.MiddleCenter;
+        _raceTimerText.alignment = TextAnchor.MiddleLeft;
         _raceTimerText.color = new Color(0.8f, 0.8f, 0.75f);
         _raceTimerText.text = "";
 
@@ -517,12 +527,28 @@ public class RaceManager : MonoBehaviour
                 UpdateOrbit();
                 break;
         }
+
+        // Music fade-out
+        if (_musicFading && _musicSource != null)
+        {
+            _musicFadeTimer += Time.deltaTime;
+            float t = Mathf.Clamp01(_musicFadeTimer / MUSIC_FADE_DURATION);
+            _musicSource.volume = MusicVolume * (1f - t);
+            if (t >= 1f)
+            {
+                _musicFading = false;
+                _musicSource.Stop();
+            }
+        }
     }
 
     void StartCountdown()
     {
         _state = State.Countdown;
         _countdownTimer = countdownDuration;
+#if UNITY_EDITOR
+        Debug.Log($"[RACE] === COUNTDOWN START === distance={raceDistance:F0} racers={aiRacers?.Length ?? 0}");
+#endif
 
         if (aiRacers != null)
         {
@@ -596,6 +622,9 @@ public class RaceManager : MonoBehaviour
         {
             _state = State.Racing;
             _raceStartTime = Time.time;
+#if UNITY_EDITOR
+            Debug.Log("[RACE] === GO! Racing started ===");
+#endif
 
             // Show "GO!" briefly then hide
             StartCoroutine(HideCountdownAfterDelay(0.6f));
@@ -625,6 +654,9 @@ public class RaceManager : MonoBehaviour
                 ScreenEffects.Instance.FlashSpeedStreaks(1.2f);
                 ScreenEffects.Instance.TriggerPowerUpFlash();
             }
+
+            // Start race music
+            StartRaceMusic();
 
             // "RACE TO BROWN TOWN!" motivational popup
             StartCoroutine(ShowRaceStartPopup());
@@ -733,6 +765,9 @@ public class RaceManager : MonoBehaviour
                 {
                     bool improved = e.position < _lastPlayerPosition;
                     string posStr = e.position + GetOrdinal(e.position);
+#if UNITY_EDITOR
+                    Debug.Log($"[RACE] Position change: {_lastPlayerPosition} → {e.position} ({(improved ? "UP" : "DOWN")}) dist={e.distance:F0}");
+#endif
                     if (improved)
                     {
                         // Player moved UP in position
@@ -876,6 +911,10 @@ public class RaceManager : MonoBehaviour
         if (_posChangeArrow != null)
             _posChangeArrow.gameObject.SetActive(false);
 
+        // Fade out race music
+        _musicFading = true;
+        _musicFadeTimer = 0f;
+
         // Start camera orbit around player
         StartCameraOrbit();
 
@@ -937,6 +976,32 @@ public class RaceManager : MonoBehaviour
 
         if (finishLine != null)
             finishLine.ShowPodium(_entries);
+    }
+
+    // === RACE MUSIC ===
+
+    void StartRaceMusic()
+    {
+        // Load all songs from Resources/music/ if not already assigned
+        if (raceSongs == null || raceSongs.Length == 0)
+            raceSongs = Resources.LoadAll<AudioClip>("music");
+
+        if (raceSongs == null || raceSongs.Length == 0) return;
+
+        if (_musicSource == null)
+        {
+            _musicSource = gameObject.AddComponent<AudioSource>();
+            _musicSource.playOnAwake = false;
+            _musicSource.loop = true;
+            _musicSource.spatialBlend = 0f; // 2D
+        }
+
+        AudioClip song = raceSongs[Random.Range(0, raceSongs.Length)];
+        _musicSource.clip = song;
+        _musicSource.volume = MusicVolume;
+        _musicSource.Play();
+        _musicFading = false;
+        Debug.Log($"TTR Race: Playing \"{song.name}\" ({raceSongs.Length} songs available)");
     }
 
     // === 3D FINISH LINE GATE ===

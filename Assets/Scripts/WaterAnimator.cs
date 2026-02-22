@@ -98,6 +98,9 @@ public class WaterAnimator : MonoBehaviour
         public float lateralOffset; // -1 to 1 across water width
         public float spawnTime;
         public int type; // 0=TP, 1=lump, 2=foam, 3=duck
+        public float pushVelX;     // lateral push from player proximity
+        public float pushVelY;     // vertical push (bob up)
+        public bool playerHit;     // already reacted to player this pass
     }
     private List<DebrisObj> _debris = new List<DebrisObj>();
 
@@ -369,15 +372,47 @@ public class WaterAnimator : MonoBehaviour
             wave += Mathf.Sin(worldPos.z * secondaryWaveFreq + _time * waveSpeed * 3.5f) * secondaryWaveAmp;
             pos.y += wave + 0.03f; // float slightly above water surface
 
+            // Apply push velocity from player interaction
+            d.lateralOffset += d.pushVelX * Time.deltaTime;
+            d.lateralOffset = Mathf.Clamp(d.lateralOffset, -0.95f, 0.95f);
+            pos.y += d.pushVelY;
+            d.pushVelX = Mathf.Lerp(d.pushVelX, 0f, Time.deltaTime * 3f);
+            d.pushVelY = Mathf.Lerp(d.pushVelY, 0f, Time.deltaTime * 5f);
+
             d.obj.transform.position = pos;
 
-            // Gentle rotation drift
-            float rotSpeed = 15f + d.lateralOffset * 10f;
+            // Gentle rotation drift (faster when pushed)
+            float rotSpeed = 15f + d.lateralOffset * 10f + Mathf.Abs(d.pushVelX) * 200f;
             d.obj.transform.Rotate(Vector3.up * rotSpeed * Time.deltaTime);
             // Tilt with wave
             float tilt = Mathf.Sin(_time * 2f + d.lateralOffset * 5f) * 5f;
             d.obj.transform.rotation = Quaternion.LookRotation(forward, Vector3.up)
                 * Quaternion.Euler(tilt, d.obj.transform.eulerAngles.y, tilt * 0.5f);
+
+            // Player proximity: push debris away when player passes close
+            if (_tc != null && !d.playerHit)
+            {
+                float distToPlayer = Mathf.Abs(d.pathDist - playerDist);
+                if (distToPlayer < 1.5f)
+                {
+                    Vector3 toDebris = d.obj.transform.position - _tc.transform.position;
+                    float lateralSign = Mathf.Sign(Vector3.Dot(toDebris, right));
+                    d.pushVelX = lateralSign * 2f;
+                    d.pushVelY = 0.15f; // bob up from wake
+                    d.playerHit = true;
+
+                    // Rubber duck squeak
+                    if (d.type == 3 && ProceduralAudio.Instance != null)
+                        ProceduralAudio.Instance.PlayBubblePop();
+
+                    // Splash for all debris
+                    if (ParticleManager.Instance != null)
+                        ParticleManager.Instance.PlayWaterSplash(d.obj.transform.position);
+                }
+            }
+            // Reset hit flag once player passes
+            if (d.playerHit && d.pathDist < playerDist - 3f)
+                d.playerHit = false;
 
             _debris[i] = d;
 

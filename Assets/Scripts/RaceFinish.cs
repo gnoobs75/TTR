@@ -566,8 +566,9 @@ public class RaceFinish : MonoBehaviour
             if (ParticleManager.Instance != null)
             {
                 ParticleManager.Instance.PlayCelebration(playerPos);
-                // Double burst for 1st
                 ParticleManager.Instance.PlayCelebration(playerPos + Vector3.up * 2f);
+                // Early confetti shower for immediate celebration
+                ParticleManager.Instance.PlayFinishConfetti(playerPos);
             }
             if (CheerOverlay.Instance != null)
                 CheerOverlay.Instance.ShowCheer("1ST PLACE!", GoldColor, true);
@@ -583,7 +584,11 @@ public class RaceFinish : MonoBehaviour
             if (PipeCamera.Instance != null)
                 PipeCamera.Instance.Shake(0.2f);
             if (ParticleManager.Instance != null)
+            {
                 ParticleManager.Instance.PlayCelebration(playerPos);
+                // Confetti for all podium finishes
+                ParticleManager.Instance.PlayFinishConfetti(playerPos);
+            }
             string[] podiumCheers = { "", "", "PODIUM!", "BRONZE!" };
             if (CheerOverlay.Instance != null)
                 CheerOverlay.Instance.ShowCheer(podiumCheers[place], placeColor, false);
@@ -904,6 +909,10 @@ public class RaceFinish : MonoBehaviour
         if (pipeCam != null)
             pipeCam.enabled = false;
 
+        // Audio sync: celebratory fanfare at orbit start
+        if (ProceduralAudio.Instance != null)
+            ProceduralAudio.Instance.PlayVictoryFanfare();
+
         Vector3 podiumCenter = _podium3D.transform.position + Vector3.up * 2f;
         float camDist = 8f;
         float elapsed = 0f;
@@ -924,8 +933,22 @@ public class RaceFinish : MonoBehaviour
             cam.transform.position = Vector3.Lerp(cam.transform.position, camPos, Time.deltaTime * 2f);
             cam.transform.LookAt(podiumCenter);
 
+            // Audio sync: celebration burst at halfway point of orbit
+            if (elapsed > duration * 0.5f && elapsed - Time.deltaTime <= duration * 0.5f)
+            {
+                if (ProceduralAudio.Instance != null)
+                    ProceduralAudio.Instance.PlayCelebration();
+                if (PipeCamera.Instance != null)
+                    PipeCamera.Instance.PunchFOV(5f);
+                HapticManager.MediumTap();
+            }
+
             yield return null;
         }
+
+        // Stop finish confetti when podium orbit ends
+        if (ParticleManager.Instance != null)
+            ParticleManager.Instance.StopFinishConfetti();
     }
 
     IEnumerator SlotPunchAnimation(RectTransform rect)

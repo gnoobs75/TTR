@@ -47,10 +47,10 @@ public class GameManager : MonoBehaviour
 
     // Distance milestones
     private int _nextMilestoneIdx = 0;
-    private static readonly float[] MilestoneDistances = { 100f, 250f, 500f, 750f, 1000f, 1500f, 2000f };
+    private static readonly float[] MilestoneDistances = { 100f, 250f, 500f, 750f, 1000f, 1500f, 2000f, 2500f };
     private static readonly string[] MilestoneNames = {
         "SEPTIC TANK!", "MAIN LINE!", "PUMP STATION!", "DEEP SEWERS!",
-        "BROWN TOWN!", "THE ABYSS!", "LEGEND!" };
+        "BROWN TOWN!", "THE ABYSS!", "LEGEND!", "ABSOLUTE UNIT!" };
 
     // Freeze frame
     private float _freezeTimer = 0f;
@@ -134,6 +134,9 @@ public class GameManager : MonoBehaviour
 
     void ActuallyStartGame()
     {
+#if UNITY_EDITOR
+        Debug.Log("[GAME] === GAME STARTED ===");
+#endif
         isPlaying = true;
         _isGameOver = false;
         score = 0;
@@ -226,6 +229,9 @@ public class GameManager : MonoBehaviour
             string name = MilestoneNames[_nextMilestoneIdx];
             int milestoneBonus = 500 * (_nextMilestoneIdx + 1);
             AddScore(milestoneBonus);
+#if UNITY_EDITOR
+            Debug.Log($"[MILESTONE] {name} at {distanceTraveled:F0}m (+{milestoneBonus} pts) score={score} mult={_multiplier:F1}x");
+#endif
 
             if (ScorePopup.Instance != null && player != null)
                 ScorePopup.Instance.ShowMilestone(player.transform.position + Vector3.up * 2f, name);
@@ -245,7 +251,7 @@ public class GameManager : MonoBehaviour
             _nextMilestoneIdx++;
         }
 
-        // Fork approach warning (50m ahead)
+        // Fork approach warning (50m ahead) with branch preview hints
         foreach (var fork in PipeFork.ActiveForks)
         {
             if (fork == null) continue;
@@ -259,6 +265,21 @@ public class GameManager : MonoBehaviour
                 if (ProceduralAudio.Instance != null)
                     ProceduralAudio.Instance.PlayForkWarning();
                 HapticManager.LightTap();
+
+                // Poop crew branch preview hint
+                if (CheerOverlay.Instance != null)
+                {
+                    string[] hints = {
+                        "LEFT IS CHILL!",
+                        "RIGHT IS SPICY!",
+                        "LEFT = EASY PEASY!",
+                        "DARE YA GO RIGHT!",
+                        "LEFT FOR WIMPS!",
+                        "RIGHT FOR GLORY!"
+                    };
+                    string hint = hints[Random.Range(0, hints.Length)];
+                    CheerOverlay.Instance.ShowCheer(hint, new Color(1f, 0.85f, 0.3f), false);
+                }
                 break;
             }
         }
@@ -337,9 +358,13 @@ public class GameManager : MonoBehaviour
 
     public void OnPlayerHit()
     {
+        float oldMult = _multiplier;
         _multiplier = Mathf.Max(1f, _multiplier * multiplierDecayOnHit);
         _multiplierTimer = 0f;
         _nearMissStreak = 0; // reset dodge streak on hit
+#if UNITY_EDITOR
+        Debug.Log($"[GAME] OnPlayerHit multiplier {oldMult:F2}x → {_multiplier:F2}x");
+#endif
     }
 
     public void TriggerFreezeFrame(float duration = 0.08f)
@@ -399,6 +424,9 @@ public class GameManager : MonoBehaviour
     public void GameOver()
     {
         if (isTourMode) return; // Tour mode: no game over
+#if UNITY_EDITOR
+        Debug.Log($"[GAME] === GAME OVER === score={score} dist={distanceTraveled:F0} coins={_runCoins} nearMisses={_runNearMisses} bestCombo={_runBestCombo} multiplier={_multiplier:F1}x");
+#endif
         isPlaying = false;
         _isGameOver = true;
         _gameOverTime = Time.time;
@@ -420,6 +448,7 @@ public class GameManager : MonoBehaviour
             {
                 ScreenEffects.Instance.TriggerHitFlash(new Color(0.6f, 0.3f, 0.05f));
                 ScreenEffects.Instance.TriggerSplatter(new Color(0.4f, 0.25f, 0.1f));
+                ScreenEffects.Instance.TriggerDesaturation(0.8f); // gray wash on death
             }
             if (ParticleManager.Instance != null)
                 ParticleManager.Instance.PlayDeathExplosion(deathPos);
@@ -494,6 +523,15 @@ public class GameManager : MonoBehaviour
         if (player != null)
         {
             player.enabled = false;
+
+            // Slow-motion death: brief time dilation for dramatic effect
+            Time.timeScale = 0.3f;
+            Time.fixedDeltaTime = 0.02f * Time.timeScale;
+
+            // Camera: zoom out for death overview
+            if (PipeCamera.Instance != null)
+                PipeCamera.Instance.DeathZoomOut(3f, 0.8f);
+
             // Start death tumble animation on the model
             StartCoroutine(DeathTumble(player.transform));
         }
@@ -501,8 +539,13 @@ public class GameManager : MonoBehaviour
 
     IEnumerator DelayedGameOver(int finalScore, int coins, float distance, int nearMisses, int bestCombo)
     {
-        // Brief pause so camera shake and death effects play out
+        // Brief pause so camera shake and death effects play out (realtime, unaffected by slow-mo)
         yield return new WaitForSecondsRealtime(0.35f);
+
+        // Restore normal time
+        Time.timeScale = 1f;
+        Time.fixedDeltaTime = 0.02f;
+
         if (gameUI != null)
             gameUI.ShowGameOver(finalScore, PlayerData.HighScore, coins, distance, nearMisses, bestCombo);
     }

@@ -513,7 +513,7 @@ public class SceneBootstrapper
 
         PipeCamera pipeCam = camObj.AddComponent<PipeCamera>();
         pipeCam.target = player;
-        pipeCam.followDistance = 1.5f;       // behind the turd on the pipe path (closer)
+        pipeCam.followDistance = 3.5f;       // behind the turd on the pipe path
         pipeCam.lookAhead = 6f;              // look ahead of the turd
         pipeCam.pipeRadius = 3.5f;
         pipeCam.centerPull = 0.45f;          // 45% from player toward pipe center (above/behind)
@@ -3155,7 +3155,8 @@ public class SceneBootstrapper
         rm.playerController = playerController;
         rm.aiRacers = aiRacers;
         rm.pipeGen = pipeGen;
-        rm.raceDistance = 1000f;
+        rm.raceDistance = 2000f;
+        // Race music loaded at runtime from Resources/music/ (all .ogg files)
 
         // ---- Race Leaderboard (on the game canvas) ----
         Canvas canvas = null;
@@ -3170,8 +3171,8 @@ public class SceneBootstrapper
             GameObject lbPanel = new GameObject("RaceLeaderboardPanel");
             RectTransform lbRect = lbPanel.AddComponent<RectTransform>();
             lbRect.SetParent(canvas.transform, false);
-            lbRect.anchorMin = new Vector2(0.01f, 0.45f);
-            lbRect.anchorMax = new Vector2(0.22f, 0.75f);
+            lbRect.anchorMin = new Vector2(0.02f, 0.42f);
+            lbRect.anchorMax = new Vector2(0.20f, 0.76f);
             lbRect.offsetMin = Vector2.zero;
             lbRect.offsetMax = Vector2.zero;
 
@@ -3470,10 +3471,10 @@ public class SceneBootstrapper
         }
         if (!hasBounds) return;
 
-        // Corn kernel material - bright yellow with slight emission for visibility
+        // Corn kernel material - bright yellow with strong emission for visibility against brown body
         Material kernelMat = MakeURPMat("CornKernel_Proc", cornYellow, 0.05f, 0.45f);
         kernelMat.EnableKeyword("_EMISSION");
-        kernelMat.SetColor("_EmissionColor", cornYellow * 0.12f);
+        kernelMat.SetColor("_EmissionColor", cornYellow * 0.35f);
         EditorUtility.SetDirty(kernelMat);
 
         // Darker underside material for depth
@@ -3498,10 +3499,9 @@ public class SceneBootstrapper
             float phi = Random.Range(0.25f, 0.75f); // avoid top/bottom poles
             float heightT = Random.Range(-0.3f, 0.3f); // along body length
 
-            // Place kernels AT the body surface — 0.28x extents so they're half-embedded
-            // (0.48x was too far out, causing them to float away from the body)
-            float radiusX = extents.x * 0.28f;
-            float radiusZ = extents.z * 0.28f;
+            // Place kernels poking OUT of the body — 0.38x so they're clearly visible
+            float radiusX = extents.x * 0.38f;
+            float radiusZ = extents.z * 0.38f;
 
             Vector3 localPos = center + new Vector3(
                 Mathf.Cos(theta) * radiusX * Mathf.Sin(phi * Mathf.PI),
@@ -3509,8 +3509,8 @@ public class SceneBootstrapper
                 Mathf.Sin(theta) * radiusZ * Mathf.Sin(phi * Mathf.PI)
             );
 
-            // Kernel size — each corn nugget pokes out visibly
-            float baseSize = Random.Range(0.15f, 0.28f);
+            // Kernel size — each corn nugget pokes out clearly above the brown body
+            float baseSize = Random.Range(0.20f, 0.35f);
             Vector3 kernelScale = new Vector3(
                 baseSize * Random.Range(0.8f, 1.2f),
                 baseSize * Random.Range(0.7f, 1.1f),
@@ -3572,9 +3572,9 @@ public class SceneBootstrapper
             Vector3.one * 0.45f, pupilMat);
 
         // === IRISES (colored ring between white eye and black pupil) ===
-        Material irisMat = MakeURPMat("MrCorny_Iris", new Color(0.55f, 0.35f, 0.12f), 0f, 0.6f);
+        Material irisMat = MakeURPMat("MrCorny_Iris", new Color(0.05f, 0.05f, 0.05f), 0f, 0.6f);
         irisMat.EnableKeyword("_EMISSION");
-        irisMat.SetColor("_EmissionColor", new Color(0.55f, 0.35f, 0.12f) * 0.3f);
+        irisMat.SetColor("_EmissionColor", new Color(0.05f, 0.05f, 0.05f) * 0.3f);
         EditorUtility.SetDirty(irisMat);
 
         GameObject leftIrisObj = AddPrimChild(leftEye, "LeftIris", PrimitiveType.Sphere,
@@ -3609,7 +3609,7 @@ public class SceneBootstrapper
             new Vector3(eyeSize * 1.05f, eyeSize * 0.35f, eyeSize * 0.6f), eyelidMat);
 
         // === EYEBROWS (expressive capsules above eyelids) ===
-        Material browMat = MakeURPMat("MrCorny_Brow", new Color(0.3f, 0.18f, 0.08f), 0f, 0.3f);
+        Material browMat = MakeURPMat("MrCorny_Brow", new Color(0.05f, 0.05f, 0.05f), 0f, 0.3f);
         GameObject leftBrow = AddPrimChild(model, "LeftBrow", PrimitiveType.Capsule,
             eyeBase - fb.sideV * fb.eyeGap + fb.upV * (eyeSize * 0.55f),
             Quaternion.Euler(0, 0, 8),
@@ -6321,15 +6321,15 @@ public class SceneBootstrapper
         // HUD elements parent to SafeArea to avoid notch/dynamic island overlap
         Transform hudParent = safeAreaObj.transform;
 
-        // "SCORE" label
+        // "SCORE" label — right column
         Text scoreLabelText = MakeStretchText(hudParent, "ScoreLabel", "SCORE",
             26, TextAnchor.LowerRight, new Color(1f, 0.85f, 0.4f, 0.8f),
-            new Vector2(0.72f, 0.84f), new Vector2(0.88f, 0.87f), true);
+            new Vector2(0.80f, 0.88f), new Vector2(0.98f, 0.93f), true);
 
-        // Score number - big puffy golden text
+        // Score number - big puffy golden text — right column
         Text scoreText = MakeStretchText(hudParent, "ScoreText", "0",
-            64, TextAnchor.UpperRight, new Color(1f, 0.92f, 0.2f),
-            new Vector2(0.55f, 0.78f), new Vector2(0.88f, 0.845f), true);
+            52, TextAnchor.UpperRight, new Color(1f, 0.92f, 0.2f),
+            new Vector2(0.72f, 0.81f), new Vector2(0.98f, 0.885f), true);
         {
             Outline o2 = scoreText.gameObject.AddComponent<Outline>();
             o2.effectColor = new Color(0.55f, 0.25f, 0f, 0.95f);
@@ -6342,10 +6342,10 @@ public class SceneBootstrapper
             sh.effectDistance = new Vector2(3, -4);
         }
 
-        // Distance - right side below score
+        // Distance — right column below score
         Text distanceText = MakeStretchText(hudParent, "DistanceText", "0m",
-            36, TextAnchor.UpperRight, new Color(0.6f, 1f, 0.5f),
-            new Vector2(0.68f, 0.73f), new Vector2(0.88f, 0.78f), true);
+            32, TextAnchor.UpperRight, new Color(0.6f, 1f, 0.5f),
+            new Vector2(0.80f, 0.76f), new Vector2(0.98f, 0.81f), true);
         {
             Outline dOut = distanceText.gameObject.AddComponent<Outline>();
             dOut.effectColor = new Color(0f, 0.2f, 0f, 0.8f);
@@ -6504,6 +6504,12 @@ public class SceneBootstrapper
             18, TextAnchor.MiddleCenter, new Color(0.7f, 0.7f, 0.65f, 0.5f),
             new Vector2(0.25f, 0.02f), new Vector2(0.75f, 0.06f), false);
 
+        // === VOLUME SLIDERS (bottom of splash screen) ===
+        Slider musicSlider = MakeVolumeSlider(startPanel.transform, "MusicSlider", "MUSIC",
+            new Vector2(0.08f, 0.10f), new Vector2(0.48f, 0.24f), 0.4f);
+        Slider sfxSlider = MakeVolumeSlider(startPanel.transform, "SFXSlider", "SOUND",
+            new Vector2(0.52f, 0.10f), new Vector2(0.92f, 0.24f), 1.0f);
+
         // Shop Panel (hidden by default)
         GameObject shopPanel = MakePanel(canvasObj.transform, "ShopPanel",
             new Color(0.04f, 0.06f, 0.03f, 0.95f),
@@ -6555,21 +6561,21 @@ public class SceneBootstrapper
         scrollRect.horizontal = false;
         scrollRect.vertical = true;
 
-        // Multiplier text (left side, below tracker)
+        // Multiplier text — right column below speed
         Text multiplierText = MakeStretchText(hudParent, "MultiplierText", "x1.0",
-            42, TextAnchor.MiddleLeft, new Color(1f, 1f, 0.7f),
-            new Vector2(0.02f, 0.78f), new Vector2(0.18f, 0.84f), true);
+            38, TextAnchor.MiddleRight, new Color(1f, 1f, 0.7f),
+            new Vector2(0.80f, 0.54f), new Vector2(0.98f, 0.60f), true);
         multiplierText.gameObject.SetActive(false);
 
-        // "FARTCOINS" label
+        // "FARTCOINS" label — right column below distance
         Text coinLabel = MakeStretchText(hudParent, "CoinLabel", "FARTCOINS",
-            20, TextAnchor.LowerRight, new Color(0.85f, 0.6f, 0.15f, 0.85f),
-            new Vector2(0.68f, 0.675f), new Vector2(0.88f, 0.71f), true);
+            18, TextAnchor.LowerRight, new Color(0.85f, 0.6f, 0.15f, 0.85f),
+            new Vector2(0.80f, 0.72f), new Vector2(0.98f, 0.76f), true);
 
-        // HUD coin counter - puffy copper style, right side below distance
+        // HUD coin counter — right column below fartcoin label
         Text coinCountText = MakeStretchText(hudParent, "CoinCountText", "0",
-            46, TextAnchor.UpperRight, new Color(1f, 0.75f, 0.25f),
-            new Vector2(0.62f, 0.61f), new Vector2(0.88f, 0.68f), true);
+            40, TextAnchor.UpperRight, new Color(1f, 0.75f, 0.25f),
+            new Vector2(0.80f, 0.66f), new Vector2(0.98f, 0.72f), true);
         {
             Outline cOut2 = coinCountText.gameObject.AddComponent<Outline>();
             cOut2.effectColor = new Color(0.45f, 0.2f, 0f, 0.9f);
@@ -6582,15 +6588,15 @@ public class SceneBootstrapper
             cSh.effectDistance = new Vector2(2, -3);
         }
 
-        // HUD speed indicator - bottom-left, sewer-mph style
+        // HUD speed indicator — right column below coins
         Text speedText = MakeStretchText(hudParent, "SpeedText", "0 SMPH",
-            22, TextAnchor.LowerLeft, new Color(0.3f, 1f, 0.4f, 0.85f),
-            new Vector2(0.02f, 0.015f), new Vector2(0.22f, 0.05f), true);
+            22, TextAnchor.MiddleRight, new Color(0.3f, 1f, 0.4f, 0.85f),
+            new Vector2(0.80f, 0.60f), new Vector2(0.98f, 0.66f), true);
 
-        // HUD wallet text (left side, below tracker)
+        // HUD wallet text — right column below multiplier
         Text walletText = MakeStretchText(hudParent, "WalletText", "0",
-            28, TextAnchor.UpperLeft, new Color(1f, 0.85f, 0.2f),
-            new Vector2(0.02f, 0.84f), new Vector2(0.18f, 0.875f), true);
+            26, TextAnchor.MiddleRight, new Color(1f, 0.85f, 0.2f),
+            new Vector2(0.80f, 0.48f), new Vector2(0.98f, 0.54f), true);
 
         // Game Over Panel
         GameObject gameOverPanel = MakePanel(canvasObj.transform, "GameOverPanel",
@@ -6648,6 +6654,8 @@ public class SceneBootstrapper
         ui.multiplierText = multiplierText;
         ui.coinCountText = coinCountText;
         ui.speedText = speedText;
+        ui.musicVolumeSlider = musicSlider;
+        ui.sfxVolumeSlider = sfxSlider;
 
         // Screen Effects overlay (hit flash, speed vignette)
         GameObject sfxOverlay = new GameObject("ScreenEffects");
@@ -6831,5 +6839,95 @@ public class SceneBootstrapper
         go.AddComponent<ButtonPressEffect>();
 
         return btn;
+    }
+
+    static Slider MakeVolumeSlider(Transform parent, string name, string label,
+        Vector2 anchorMin, Vector2 anchorMax, float defaultValue)
+    {
+        // Container
+        GameObject container = new GameObject(name);
+        container.transform.SetParent(parent, false);
+        RectTransform crt = container.AddComponent<RectTransform>();
+        crt.anchorMin = anchorMin;
+        crt.anchorMax = anchorMax;
+        crt.offsetMin = Vector2.zero;
+        crt.offsetMax = Vector2.zero;
+
+        // Label (top 40%)
+        MakeStretchText(container.transform, "Label", label, 14,
+            TextAnchor.MiddleCenter, new Color(0.8f, 0.75f, 0.65f, 0.8f),
+            new Vector2(0f, 0.55f), new Vector2(1f, 1f), true);
+
+        // Slider (bottom 50%)
+        GameObject sliderObj = new GameObject("Slider");
+        sliderObj.transform.SetParent(container.transform, false);
+        RectTransform srt = sliderObj.AddComponent<RectTransform>();
+        srt.anchorMin = new Vector2(0.08f, 0.05f);
+        srt.anchorMax = new Vector2(0.92f, 0.50f);
+        srt.offsetMin = Vector2.zero;
+        srt.offsetMax = Vector2.zero;
+
+        // Background track
+        GameObject bgObj = new GameObject("Background");
+        bgObj.transform.SetParent(sliderObj.transform, false);
+        RectTransform bgRt = bgObj.AddComponent<RectTransform>();
+        bgRt.anchorMin = new Vector2(0f, 0.25f);
+        bgRt.anchorMax = new Vector2(1f, 0.75f);
+        bgRt.offsetMin = Vector2.zero;
+        bgRt.offsetMax = Vector2.zero;
+        Image bgImg = bgObj.AddComponent<Image>();
+        bgImg.color = new Color(0.15f, 0.13f, 0.10f, 0.7f);
+
+        // Fill area
+        GameObject fillArea = new GameObject("Fill Area");
+        fillArea.transform.SetParent(sliderObj.transform, false);
+        RectTransform fillAreaRt = fillArea.AddComponent<RectTransform>();
+        fillAreaRt.anchorMin = new Vector2(0f, 0.25f);
+        fillAreaRt.anchorMax = new Vector2(1f, 0.75f);
+        fillAreaRt.offsetMin = Vector2.zero;
+        fillAreaRt.offsetMax = Vector2.zero;
+
+        // Fill
+        GameObject fill = new GameObject("Fill");
+        fill.transform.SetParent(fillArea.transform, false);
+        RectTransform fillRt = fill.AddComponent<RectTransform>();
+        fillRt.anchorMin = Vector2.zero;
+        fillRt.anchorMax = Vector2.one;
+        fillRt.offsetMin = Vector2.zero;
+        fillRt.offsetMax = Vector2.zero;
+        Image fillImg = fill.AddComponent<Image>();
+        fillImg.color = new Color(0.65f, 0.50f, 0.12f, 0.9f);
+
+        // Handle slide area
+        GameObject handleArea = new GameObject("Handle Slide Area");
+        handleArea.transform.SetParent(sliderObj.transform, false);
+        RectTransform handleAreaRt = handleArea.AddComponent<RectTransform>();
+        handleAreaRt.anchorMin = Vector2.zero;
+        handleAreaRt.anchorMax = Vector2.one;
+        handleAreaRt.offsetMin = new Vector2(10f, 0f);
+        handleAreaRt.offsetMax = new Vector2(-10f, 0f);
+
+        // Handle
+        GameObject handle = new GameObject("Handle");
+        handle.transform.SetParent(handleArea.transform, false);
+        RectTransform handleRt = handle.AddComponent<RectTransform>();
+        handleRt.sizeDelta = new Vector2(20f, 0f);
+        handleRt.anchorMin = new Vector2(0f, 0f);
+        handleRt.anchorMax = new Vector2(0f, 1f);
+        Image handleImg = handle.AddComponent<Image>();
+        handleImg.color = new Color(0.9f, 0.85f, 0.7f);
+
+        // Slider component
+        Slider slider = sliderObj.AddComponent<Slider>();
+        slider.fillRect = fillRt;
+        slider.handleRect = handleRt;
+        slider.targetGraphic = handleImg;
+        slider.direction = Slider.Direction.LeftToRight;
+        slider.minValue = 0f;
+        slider.maxValue = 1f;
+        slider.value = PlayerPrefs.GetFloat(
+            name.Contains("Music") ? "MusicVolume" : "SFXVolume", defaultValue);
+
+        return slider;
     }
 }

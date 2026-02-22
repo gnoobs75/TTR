@@ -1,4 +1,5 @@
 using UnityEngine;
+using UnityEngine.UI;
 
 /// <summary>
 /// Pipe-center rail camera. Rides the center of the pipe like a rail,
@@ -42,12 +43,11 @@ public class PipeCamera : MonoBehaviour
     // Juice
     private float _shakeIntensity;
     private float _fovPunch;
-    private float _smoothCamBlend; // smoothed fork blend for camera (avoids jerky transitions)
-    private float _steerTilt;      // smoothed camera roll tilt from steering
     private float _breathePhase;   // subtle organic camera breathing
     private float _recoilAmount;   // backward kick on collision
-    private float _lastSpeed;      // for acceleration lean
     private float _tensionBlend;   // 0-1 tension when stunned (tighter camera)
+    private Image _fadeOverlay;    // black overlay for fade-in from black
+    private float _fadeAlpha = 1f; // starts fully black
 
     void Awake()
     {
@@ -62,10 +62,52 @@ public class PipeCamera : MonoBehaviour
             _tc = target.GetComponent<TurdController>();
         if (_cam != null)
             _cam.fieldOfView = baseFOV;
+
+        // Create fade-from-black overlay
+        CreateFadeOverlay();
+    }
+
+    void CreateFadeOverlay()
+    {
+        Canvas canvas = null;
+        foreach (var c in Object.FindObjectsByType<Canvas>(FindObjectsSortMode.None))
+        {
+            if (c.renderMode == RenderMode.ScreenSpaceOverlay && c.sortingOrder >= 100)
+            { canvas = c; break; }
+        }
+        if (canvas == null) return;
+
+        GameObject fadeObj = new GameObject("CameraFade");
+        fadeObj.transform.SetParent(canvas.transform, false);
+        RectTransform rt = fadeObj.AddComponent<RectTransform>();
+        rt.anchorMin = Vector2.zero;
+        rt.anchorMax = Vector2.one;
+        rt.offsetMin = Vector2.zero;
+        rt.offsetMax = Vector2.zero;
+        _fadeOverlay = fadeObj.AddComponent<Image>();
+        _fadeOverlay.color = new Color(0, 0, 0, 1f);
+        _fadeOverlay.raycastTarget = false;
+        _fadeAlpha = 1f;
     }
 
     void LateUpdate()
     {
+        // Fade-in from black on game start
+        if (_fadeAlpha > 0f && _fadeOverlay != null)
+        {
+            _fadeAlpha -= Time.deltaTime * 1.5f; // ~0.7s fade
+            if (_fadeAlpha <= 0f)
+            {
+                _fadeAlpha = 0f;
+                Destroy(_fadeOverlay.gameObject);
+                _fadeOverlay = null;
+            }
+            else
+            {
+                _fadeOverlay.color = new Color(0, 0, 0, _fadeAlpha);
+            }
+        }
+
         if (target == null || _tc == null) return;
 
         if (_pipeGen != null)
@@ -88,42 +130,49 @@ public class PipeCamera : MonoBehaviour
             Vector3 camCenter, camFwd, camRight, camUp;
             Vector3 playerCenter, playerFwd, playerRight, playerUp;
 
-            // Branch-aware path following: use the same fork/branch as the player
+            // === FORK-AWARE PATH FOLLOWING ===
+            // Branch paths are just laterally offset from the main pipe — they follow
+            // the same general direction. We use branch POSITIONS for camera placement
+            // but MAIN PATH forward/up for orientation. Branch forward vectors are
+            // unreliable (up to 90° off) because pipe curvature rotates the lateral
+            // offset between samples, corrupting the position-delta tangent.
             PipeFork fork = _tc.CurrentFork;
             int branch = _tc.ForkBranch;
+            bool inFork = fork != null && branch >= 0;
 
-            if (fork != null && branch >= 0)
+            // Always get main path frames — these have reliable forward vectors
+            _pipeGen.GetPathFrame(camDist, out camCenter, out camFwd, out camRight, out camUp);
+            _pipeGen.GetPathFrame(playerDist, out playerCenter, out playerFwd, out playerRight, out playerUp);
+
+            if (inFork)
             {
-                // Get main path frame first
-                _pipeGen.GetPathFrame(camDist, out camCenter, out camFwd, out camRight, out camUp);
-                Vector3 bCamC, bCamF, bCamR, bCamU;
-                if (fork.GetBranchFrame(branch, camDist, out bCamC, out bCamF, out bCamR, out bCamU))
+                // Use the SAME blend as TurdController so camera and player agree
+                // on where "pipe center" is. Without this, playerOffset is wrong
+                // because the player is at a blended position but camera would
+                // subtract the full branch center.
+                Vector3 bC, bF, bR, bU;
+                if (fork.GetBranchFrame(branch, camDist, out bC, out bF, out bR, out bU))
                 {
-                    float targetBlend = fork.GetBranchBlend(camDist);
-                    _smoothCamBlend = Mathf.Lerp(_smoothCamBlend, targetBlend, Time.deltaTime * 4f);
-                    // Blend position into the branch
-                    camCenter = Vector3.Lerp(camCenter, bCamC, _smoothCamBlend);
-                    // Smoothly blend FORWARD direction toward branch so camera looks
-                    // where the player is actually going (not back along main path)
-                    camFwd = Vector3.Slerp(camFwd, bCamF, _smoothCamBlend).normalized;
+                    float camBlend = fork.GetBranchBlend(camDist);
+                    camCenter = Vector3.Lerp(camCenter, bC, camBlend);
                 }
 
-                // Player position: blend center and forward for look target
-                _pipeGen.GetPathFrame(playerDist, out playerCenter, out playerFwd, out playerRight, out playerUp);
                 Vector3 bPC, bPF, bPR, bPU;
                 if (fork.GetBranchFrame(branch, playerDist, out bPC, out bPF, out bPR, out bPU))
                 {
                     float pBlend = fork.GetBranchBlend(playerDist);
                     playerCenter = Vector3.Lerp(playerCenter, bPC, pBlend);
-                    playerFwd = Vector3.Slerp(playerFwd, bPF, pBlend).normalized;
                 }
             }
-            else
+
+#if UNITY_EDITOR
+            if (inFork)
             {
-                _smoothCamBlend = 0f; // reset when not in fork
-                _pipeGen.GetPathFrame(camDist, out camCenter, out camFwd, out camRight, out camUp);
-                _pipeGen.GetPathFrame(playerDist, out playerCenter, out playerFwd, out playerRight, out playerUp);
+                float dbgBlend = fork.GetBranchBlend(playerDist);
+                Vector3 td = (playerCenter - camCenter).normalized;
+                Debug.Log($"[CAM] pDist={playerDist:F1} blend={dbgBlend:F2} tunnel=({td.x:F2},{td.y:F2},{td.z:F2}) mainFwd=({playerFwd.x:F2},{playerFwd.y:F2},{playerFwd.z:F2})");
             }
+#endif
 
             // Player's offset from pipe center (their position on the pipe wall)
             Vector3 playerOffset = target.position - playerCenter;
@@ -132,10 +181,18 @@ public class PipeCamera : MonoBehaviour
             // but pulled toward pipe center by centerPull (0.45 = slightly above/behind)
             Vector3 desiredPos = camCenter + playerOffset * (1f - effectivePull);
 
-            // === LOOK TARGET: Ahead of the turd, at the turd's level ===
-            // Dynamic look-ahead: further ahead at higher speeds
+            // === LOOK TARGET: Ahead of the turd along the ACTUAL tunnel direction ===
+            // Use the vector between camera center and player center as the tunnel
+            // direction. This naturally follows the branch curve because both centers
+            // are blended into the branch. Main path forward points straight through
+            // the Y-junction center — wrong when the player is on a branch.
             float dynLookAhead = lookAhead + Mathf.InverseLerp(6f, 14f, _tc.CurrentSpeed) * 4f;
-            Vector3 lookTarget = target.position + camFwd * dynLookAhead;
+            Vector3 tunnelDir = (playerCenter - camCenter);
+            if (tunnelDir.sqrMagnitude > 0.01f)
+                tunnelDir.Normalize();
+            else
+                tunnelDir = playerFwd; // fallback if centers overlap
+            Vector3 lookTarget = target.position + tunnelDir * dynLookAhead;
 
             // === WORLD UP ===
             Vector3 upDir = Vector3.up;
@@ -165,25 +222,6 @@ public class PipeCamera : MonoBehaviour
                 Quaternion targetRot = Quaternion.LookRotation(lookDir.normalized, upDir);
                 transform.rotation = Quaternion.Slerp(
                     transform.rotation, targetRot, Time.deltaTime * rotationSmooth);
-            }
-
-            // Steer tilt: bank camera when player turns for dynamic feel
-            if (_tc != null)
-            {
-                float targetTilt = -_tc.AngularVelocity * 0.06f;
-                targetTilt = Mathf.Clamp(targetTilt, -12f, 12f);
-                _steerTilt = Mathf.Lerp(_steerTilt, targetTilt, Time.deltaTime * 6f);
-                if (Mathf.Abs(_steerTilt) > 0.1f)
-                    transform.rotation *= Quaternion.Euler(0, 0, _steerTilt);
-            }
-
-            // Acceleration lean: dip forward when speeding up, lean back when slowing
-            if (_tc != null)
-            {
-                float accel = (_tc.CurrentSpeed - _lastSpeed) / Mathf.Max(Time.deltaTime, 0.001f);
-                _lastSpeed = _tc.CurrentSpeed;
-                float leanAngle = Mathf.Clamp(accel * 0.15f, -3f, 3f);
-                transform.rotation *= Quaternion.Euler(leanAngle, 0, 0);
             }
 
             // Hit recoil: pushes camera backward briefly
@@ -281,5 +319,27 @@ public class PipeCamera : MonoBehaviour
     public void Recoil(float amount = 0.3f)
     {
         _recoilAmount = Mathf.Max(_recoilAmount, amount);
+    }
+
+    /// <summary>Gradually zoom out for death cam. Adds to followDistance over time.</summary>
+    public void DeathZoomOut(float extraDistance = 3f, float duration = 0.8f)
+    {
+        StartCoroutine(DeathZoomCoroutine(extraDistance, duration));
+    }
+
+    System.Collections.IEnumerator DeathZoomCoroutine(float extraDist, float dur)
+    {
+        float startFollow = followDistance;
+        float elapsed = 0f;
+        while (elapsed < dur)
+        {
+            elapsed += Time.unscaledDeltaTime;
+            float t = elapsed / dur;
+            // Ease-out curve for smooth deceleration feel
+            float eased = 1f - (1f - t) * (1f - t);
+            followDistance = startFollow + extraDist * eased;
+            yield return null;
+        }
+        followDistance = startFollow + extraDist;
     }
 }
