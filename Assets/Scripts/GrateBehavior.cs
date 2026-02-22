@@ -20,6 +20,8 @@ public class GrateBehavior : MonoBehaviour
     private Vector3 _originalPos;
     private Renderer[] _renderers;
     private MaterialPropertyBlock _mpb;
+    private float _lastRattleSoundTime = -10f;
+    private bool _rattleSoundPlayed;
 
     void Start()
     {
@@ -71,6 +73,20 @@ public class GrateBehavior : MonoBehaviour
                 _mpb.SetColor("_EmissionColor", warnColor);
                 r.SetPropertyBlock(_mpb);
             }
+
+            // Metallic rattle sound when player gets close (one-shot per approach)
+            if (intensity > 0.5f && !_rattleSoundPlayed && Time.time - _lastRattleSoundTime > 4f)
+            {
+                _rattleSoundPlayed = true;
+                _lastRattleSoundTime = Time.time;
+                if (ProceduralAudio.Instance != null)
+                    ProceduralAudio.Instance.PlayBarrelBeep(); // metallic clang warning
+                HapticManager.LightTap();
+            }
+        }
+        else
+        {
+            _rattleSoundPlayed = false; // reset when player moves away
         }
     }
 

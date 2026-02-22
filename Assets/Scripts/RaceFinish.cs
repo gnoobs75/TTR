@@ -591,14 +591,27 @@ public class RaceFinish : MonoBehaviour
         }
         else
         {
-            // Back of the pack - sad trombone
+            // Back of the pack - sad trombone + sympathetic poop crew
             if (ProceduralAudio.Instance != null)
                 ProceduralAudio.Instance.PlaySadTrombone();
             if (ScreenEffects.Instance != null)
-                ScreenEffects.Instance.TriggerHitFlash();
+            {
+                ScreenEffects.Instance.TriggerHitFlash(new Color(0.3f, 0.3f, 0.4f)); // desaturated gray flash
+                ScreenEffects.Instance.UpdateZoneVignette(new Color(0.15f, 0.1f, 0.08f), 0.3f); // somber vignette
+            }
             if (PipeCamera.Instance != null)
+            {
                 PipeCamera.Instance.Shake(0.1f);
-            HapticManager.LightTap();
+                PipeCamera.Instance.PunchFOV(-4f); // deflated FOV dip
+            }
+            if (CheerOverlay.Instance != null)
+            {
+                string[] sadWords = { "OOPS", "YIKES", "OH NO", "DANG" };
+                CheerOverlay.Instance.ShowCheer(
+                    sadWords[Random.Range(0, sadWords.Length)],
+                    new Color(0.5f, 0.5f, 0.6f), false);
+            }
+            HapticManager.MediumTap();
         }
     }
 

@@ -113,10 +113,16 @@ public class BonusCoin : MonoBehaviour
             }
 
             if (PipeCamera.Instance != null)
+            {
                 PipeCamera.Instance.PunchFOV(5f);
+                PipeCamera.Instance.Shake(0.2f);
+            }
 
             if (ScreenEffects.Instance != null)
                 ScreenEffects.Instance.TriggerPowerUpFlash();
+
+            if (CheerOverlay.Instance != null)
+                CheerOverlay.Instance.ShowCheer("JACKPOT!", new Color(1f, 0.85f, 0.1f), false);
 
             HapticManager.HeavyTap();
 
