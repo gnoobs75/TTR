@@ -419,6 +419,16 @@ public class GameManager : MonoBehaviour
             }
             if (ParticleManager.Instance != null)
                 ParticleManager.Instance.PlayDeathExplosion(deathPos);
+
+            // Poop crew reacts in horror
+            if (CheerOverlay.Instance != null)
+            {
+                string[] deathWords = { "R.I.P.", "WIPEOUT!", "GAME OVER!", "NOOO!" };
+                CheerOverlay.Instance.ShowCheer(
+                    deathWords[Random.Range(0, deathWords.Length)],
+                    new Color(0.6f, 0.2f, 0.1f), true);
+            }
+
             HapticManager.HeavyTap();
         }
 

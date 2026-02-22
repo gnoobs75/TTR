@@ -668,6 +668,11 @@ public class TurdController : MonoBehaviour
         if (ScreenEffects.Instance != null)
             ScreenEffects.Instance.SetInvincShimmer(1f);
 
+        // Poop crew cheers recovery
+        if (CheerOverlay.Instance != null)
+            CheerOverlay.Instance.ShowCheer("GET UP!", new Color(1f, 0.9f, 0.3f), false);
+        HapticManager.LightTap();
+
         while (_hitPhaseTimer < invincibilityDuration)
         {
             _hitPhaseTimer += Time.deltaTime;

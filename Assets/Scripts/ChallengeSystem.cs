@@ -139,6 +139,27 @@ public class ChallengeSystem : MonoBehaviour
             // Award bonus coins
             PlayerData.AddCoins(TodaysChallenge.reward);
 
+            // BIG celebration for daily challenge completion!
+            if (CheerOverlay.Instance != null)
+                CheerOverlay.Instance.ShowCheer("CHALLENGE DONE!", new Color(1f, 0.85f, 0.2f), true);
+
+            if (ScreenEffects.Instance != null)
+                ScreenEffects.Instance.TriggerMilestoneFlash();
+
+            if (PipeCamera.Instance != null)
+            {
+                PipeCamera.Instance.Shake(0.35f);
+                PipeCamera.Instance.PunchFOV(6f);
+            }
+
+            if (ProceduralAudio.Instance != null)
+                ProceduralAudio.Instance.PlayCelebration();
+
+            if (ParticleManager.Instance != null && GameManager.Instance != null && GameManager.Instance.player != null)
+                ParticleManager.Instance.PlayCelebration(GameManager.Instance.player.transform.position);
+
+            HapticManager.HeavyTap();
+
             Debug.Log($"TTR: Daily challenge completed! +{TodaysChallenge.reward} coins");
         }
 
