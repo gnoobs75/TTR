@@ -37,6 +37,12 @@ public abstract class ObstacleBehavior : MonoBehaviour
     protected float _reactTime = -1f;
     protected bool _hasReacted;
 
+    // Blink animation
+    private float _nextBlinkTime;
+    private float _blinkTimer;
+    private bool _isBlinking;
+    private static readonly float BLINK_DURATION = 0.1f;
+
     protected virtual void Start()
     {
         // Find player
@@ -49,6 +55,9 @@ public abstract class ObstacleBehavior : MonoBehaviour
 
         // Stagger frame skip so not all creatures update same frame
         _frameSkip = Random.Range(0, 3);
+
+        // Random first blink time
+        _nextBlinkTime = Time.time + Random.Range(1f, 4f);
     }
 
     protected virtual void Update()
@@ -109,6 +118,51 @@ public abstract class ObstacleBehavior : MonoBehaviour
         {
             Transform eye = (i < _eyes.Count) ? _eyes[i] : _pupils[i].parent;
             CreatureAnimUtils.TrackEyeTarget(_pupils[i], eye, target, 0.08f);
+        }
+
+        // Periodic blink: briefly squash eyes on Y axis
+        UpdateBlink();
+    }
+
+    private void UpdateBlink()
+    {
+        if (_eyes.Count == 0) return;
+
+        if (_isBlinking)
+        {
+            _blinkTimer += Time.deltaTime;
+            // Close eyes (squash Y to near-zero, then reopen)
+            float blinkT = _blinkTimer / BLINK_DURATION;
+            float eyeScaleY;
+            if (blinkT < 0.5f)
+                eyeScaleY = Mathf.Lerp(1f, 0.05f, blinkT * 2f); // closing
+            else
+                eyeScaleY = Mathf.Lerp(0.05f, 1f, (blinkT - 0.5f) * 2f); // opening
+
+            foreach (var eye in _eyes)
+            {
+                if (eye == null) continue;
+                Vector3 s = eye.localScale;
+                eye.localScale = new Vector3(s.x, eyeScaleY * Mathf.Abs(s.x), s.z);
+            }
+
+            if (_blinkTimer >= BLINK_DURATION)
+            {
+                _isBlinking = false;
+                // Restore normal eye scale
+                foreach (var eye in _eyes)
+                {
+                    if (eye == null) continue;
+                    Vector3 s = eye.localScale;
+                    eye.localScale = new Vector3(s.x, Mathf.Abs(s.x), s.z);
+                }
+                _nextBlinkTime = Time.time + Random.Range(2f, 5f);
+            }
+        }
+        else if (Time.time >= _nextBlinkTime)
+        {
+            _isBlinking = true;
+            _blinkTimer = 0f;
         }
     }
 

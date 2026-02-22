@@ -129,8 +129,19 @@ public class ComboSystem : MonoBehaviour
 
     void EndCombo()
     {
-        if (ComboCount >= 3 && ProceduralAudio.Instance != null)
+        int lostCount = ComboCount;
+        if (lostCount >= 3 && ProceduralAudio.Instance != null)
             ProceduralAudio.Instance.PlayComboBreak();
+
+        // Sad feedback proportional to how big the lost combo was
+        if (lostCount >= 5)
+        {
+            if (PipeCamera.Instance != null)
+                PipeCamera.Instance.PunchFOV(-2f - Mathf.Min(lostCount, 20) * 0.15f);
+            if (ScreenEffects.Instance != null)
+                ScreenEffects.Instance.TriggerHitFlash(new Color(0.3f, 0.3f, 0.4f)); // brief gray desaturation
+        }
+
         ComboCount = 0;
         if (ScreenEffects.Instance != null)
             ScreenEffects.Instance.SetComboGlow(0f);

@@ -102,14 +102,29 @@ public class SpeedBoost : MonoBehaviour
             tc.ApplySpeedBoost(speedMultiplier, duration);
             _used = true;
 
+            // Score popup
+            if (ScorePopup.Instance != null)
+                ScorePopup.Instance.ShowMilestone(transform.position + Vector3.up * 1.5f, "SPEED BOOST!");
+
             // Screen flash for boost pickup
             if (ScreenEffects.Instance != null)
                 ScreenEffects.Instance.TriggerPowerUpFlash();
 
+            // Camera punch
+            if (PipeCamera.Instance != null)
+            {
+                PipeCamera.Instance.PunchFOV(6f);
+                PipeCamera.Instance.Shake(0.1f);
+            }
+
+            // Particle burst at pickup
+            if (ParticleManager.Instance != null)
+                ParticleManager.Instance.PlayCoinCollect(transform.position);
+
             if (ProceduralAudio.Instance != null)
                 ProceduralAudio.Instance.PlaySpeedBoost();
 
-            HapticManager.MediumTap();
+            HapticManager.HeavyTap();
 
             // Flash bright then fade out
             foreach (Renderer r in _renderers)
