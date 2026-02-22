@@ -293,7 +293,7 @@ public class GameManager : MonoBehaviour
                         int speedBonus = 25 * (i + 1);
                         AddScore(speedBonus);
                         if (ScorePopup.Instance != null)
-                            ScorePopup.Instance.Show(player.transform.position + Vector3.up * 1.5f, speedBonus);
+                            ScorePopup.Instance.Show($"+{speedBonus}", player.transform.position + Vector3.up * 1.5f, ScorePopup.PopupType.Coin);
                     }
 
                     // Escalating haptics + effects for higher tiers
@@ -379,7 +379,7 @@ public class GameManager : MonoBehaviour
                 if (CheerOverlay.Instance != null)
                     CheerOverlay.Instance.ShowCheer(DodgeNames[i], DodgeColors[i], i >= 2);
                 if (ScorePopup.Instance != null && player != null)
-                    ScorePopup.Instance.Show(player.transform.position + Vector3.up * 1.5f, bonus);
+                    ScorePopup.Instance.Show($"+{bonus}", player.transform.position + Vector3.up * 1.5f, ScorePopup.PopupType.Coin);
                 if (PipeCamera.Instance != null)
                     PipeCamera.Instance.PunchFOV(2f + i * 1.5f);
                 if (i >= 1 && ProceduralAudio.Instance != null)
