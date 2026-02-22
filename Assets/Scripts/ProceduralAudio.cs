@@ -91,6 +91,14 @@ public class ProceduralAudio : MonoBehaviour
     private float _rivalProximityPulse; // bass pulse when rival is close
     private float _zoneTransitionSweep; // pitch wobble on zone change
 
+    // Zone ambient audio (environmental layers per zone)
+    private AudioSource _ambientSource;
+    private AudioClip[] _zoneAmbientClips; // one loop per zone
+    private int _currentAmbientZone = -1;
+    private float _ambientCrossfade; // 0-1 crossfade progress
+    private AudioSource _ambientSource2; // second source for crossfading
+    private bool _ambientSwapping; // which source is active
+
     const int SAMPLE_RATE = 44100;
 
     void Awake()
@@ -117,7 +125,21 @@ public class ProceduralAudio : MonoBehaviour
         _musicSource.spatialBlend = 0f;
         _musicSource.loop = true;
 
+        // Ambient audio sources (two for crossfading between zones)
+        _ambientSource = gameObject.AddComponent<AudioSource>();
+        _ambientSource.playOnAwake = false;
+        _ambientSource.spatialBlend = 0f;
+        _ambientSource.loop = true;
+        _ambientSource.volume = 0f;
+
+        _ambientSource2 = gameObject.AddComponent<AudioSource>();
+        _ambientSource2.playOnAwake = false;
+        _ambientSource2.spatialBlend = 0f;
+        _ambientSource2.loop = true;
+        _ambientSource2.volume = 0f;
+
         GenerateAllClips();
+        GenerateZoneAmbientClips();
         LoadAudioFiles();
     }
 
@@ -811,6 +833,16 @@ public class ProceduralAudio : MonoBehaviour
         _musicSource.volume = masterVolume * musicVolume;
         _musicSource.Play();
         _musicPlaying = true;
+
+        // Start zone ambient (defaults to zone 0 / Porcelain)
+        if (_zoneAmbientClips != null && _zoneAmbientClips.Length > 0)
+        {
+            _ambientSource.clip = _zoneAmbientClips[0];
+            _ambientSource.volume = masterVolume * sfxVolume * 0.35f;
+            _ambientSource.Play();
+            _currentAmbientZone = 0;
+            _ambientCrossfade = 1f;
+        }
     }
 
     public void StopMusic()
@@ -837,6 +869,125 @@ public class ProceduralAudio : MonoBehaviour
 
     /// <summary>Brief pitch wobble on zone transition.</summary>
     public void TriggerZoneSweep() { _zoneTransitionSweep = 0.5f; }
+
+    void GenerateZoneAmbientClips()
+    {
+        _zoneAmbientClips = new AudioClip[5];
+        float loopDur = 4f; // 4 second loops
+
+        // Zone 0: Porcelain - clean drips, gentle echo
+        _zoneAmbientClips[0] = GenerateClip("Amb_Porcelain", loopDur, (t, dur) =>
+        {
+            float val = 0f;
+            // Slow drip pattern (irregular timing)
+            float drip1 = Mathf.Sin(t * 1.7f * Mathf.PI * 2f);
+            float drip2 = Mathf.Sin(t * 2.3f * Mathf.PI * 2f);
+            if (drip1 > 0.97f) val += (1f - Mathf.Abs(drip1 - 0.985f) / 0.015f) * 0.3f *
+                Mathf.Sin(2f * Mathf.PI * 2200f * t) * Mathf.Exp(-(t % 0.588f) * 25f);
+            if (drip2 > 0.96f) val += 0.2f * Mathf.Sin(2f * Mathf.PI * 1800f * t) * Mathf.Exp(-(t % 0.435f) * 20f);
+            // Low reverberant hum
+            val += Mathf.Sin(2f * Mathf.PI * 60f * t) * 0.02f;
+            // Very faint white noise (echo feel)
+            val += (Random.value * 2f - 1f) * 0.008f;
+            return val * 0.4f;
+        });
+
+        // Zone 1: Grimy - thicker drips, pipe groans, distant rumble
+        _zoneAmbientClips[1] = GenerateClip("Amb_Grimy", loopDur, (t, dur) =>
+        {
+            float val = 0f;
+            // Heavier drips
+            float drip = Mathf.Sin(t * 3.1f * Mathf.PI * 2f);
+            if (drip > 0.95f) val += 0.25f * Mathf.Sin(2f * Mathf.PI * 1400f * t) * Mathf.Exp(-(t % 0.322f) * 15f);
+            // Pipe groan (low frequency sweep)
+            float groan = Mathf.Sin(t * 0.4f * Mathf.PI * 2f);
+            if (groan > 0.8f) val += groan * 0.06f * Mathf.Sin(2f * Mathf.PI * (45f + groan * 15f) * t);
+            // Distant rumble
+            val += Mathf.Sin(2f * Mathf.PI * 35f * t + Mathf.Sin(t * 0.7f) * 2f) * 0.03f;
+            val += (Random.value * 2f - 1f) * 0.015f;
+            return val * 0.4f;
+        });
+
+        // Zone 2: Toxic - bubbling, chemical hiss, acidic fizz
+        _zoneAmbientClips[2] = GenerateClip("Amb_Toxic", loopDur, (t, dur) =>
+        {
+            float val = 0f;
+            // Bubbling (random bursts at varying rates)
+            float bubble1 = Mathf.Sin(t * 5.7f * Mathf.PI * 2f);
+            float bubble2 = Mathf.Sin(t * 7.3f * Mathf.PI * 2f);
+            if (bubble1 > 0.92f) val += 0.15f * Mathf.Sin(2f * Mathf.PI * (600f + bubble1 * 400f) * t) * (1f - bubble1);
+            if (bubble2 > 0.94f) val += 0.12f * Mathf.Sin(2f * Mathf.PI * (800f + bubble2 * 300f) * t) * (1f - bubble2);
+            // Chemical hiss (filtered noise)
+            float hissEnv = Mathf.Sin(t * 0.8f * Mathf.PI * 2f) * 0.5f + 0.5f;
+            val += (Random.value * 2f - 1f) * 0.025f * hissEnv;
+            // Low toxic hum
+            val += Mathf.Sin(2f * Mathf.PI * 80f * t + Mathf.Sin(t * 1.3f) * 3f) * 0.04f;
+            return val * 0.4f;
+        });
+
+        // Zone 3: Rusty - metallic clanks, industrial hum, stress groans
+        _zoneAmbientClips[3] = GenerateClip("Amb_Rusty", loopDur, (t, dur) =>
+        {
+            float val = 0f;
+            // Metallic clanks (sharp transients)
+            float clank1 = Mathf.Sin(t * 1.9f * Mathf.PI * 2f);
+            if (clank1 > 0.98f)
+            {
+                float clankT = t % 0.526f;
+                val += 0.3f * Mathf.Sin(2f * Mathf.PI * 3200f * clankT) * Mathf.Exp(-clankT * 40f);
+                val += 0.15f * Mathf.Sin(2f * Mathf.PI * 4800f * clankT) * Mathf.Exp(-clankT * 50f);
+            }
+            // Industrial hum (power transformer)
+            val += Mathf.Sin(2f * Mathf.PI * 120f * t) * 0.04f;
+            val += Mathf.Sin(2f * Mathf.PI * 180f * t) * 0.02f; // harmonics
+            // Stress groan (slow metallic bend)
+            float groanCycle = Mathf.Sin(t * 0.3f * Mathf.PI * 2f);
+            if (groanCycle > 0.7f) val += groanCycle * 0.05f * Mathf.Sin(2f * Mathf.PI * (50f + groanCycle * 30f) * t);
+            val += (Random.value * 2f - 1f) * 0.012f;
+            return val * 0.4f;
+        });
+
+        // Zone 4: Hellsewer - ominous drones, deep rumble, distant screech
+        _zoneAmbientClips[4] = GenerateClip("Amb_Hellsewer", loopDur, (t, dur) =>
+        {
+            float val = 0f;
+            // Deep ominous drone (multiple detuned oscillators)
+            val += Mathf.Sin(2f * Mathf.PI * 40f * t) * 0.05f;
+            val += Mathf.Sin(2f * Mathf.PI * 41.5f * t) * 0.04f; // slight detune = beating
+            val += Mathf.Sin(2f * Mathf.PI * 80f * t + Mathf.Sin(t * 0.5f) * 4f) * 0.03f;
+            // Rumbling (modulated low noise)
+            float rumbleMod = Mathf.Sin(t * 0.6f * Mathf.PI * 2f) * 0.5f + 0.5f;
+            val += (Random.value * 2f - 1f) * 0.035f * rumbleMod;
+            // Distant screech/wail (rare, high-pitched)
+            float screech = Mathf.Sin(t * 0.15f * Mathf.PI * 2f);
+            if (screech > 0.95f)
+            {
+                float screechFreq = 2000f + screech * 1500f;
+                val += 0.08f * Mathf.Sin(2f * Mathf.PI * screechFreq * t) * (screech - 0.95f) * 20f;
+            }
+            // Heartbeat-like pulse
+            float hb = Mathf.Sin(t * 1.2f * Mathf.PI * 2f);
+            if (hb > 0.9f) val += 0.06f * Mathf.Sin(2f * Mathf.PI * 30f * t) * (hb - 0.9f) * 10f;
+            return val * 0.45f;
+        });
+    }
+
+    /// <summary>Update zone ambient audio. Call when zone changes or blends.</summary>
+    public void UpdateZoneAmbient(int zoneIndex)
+    {
+        if (_zoneAmbientClips == null || zoneIndex < 0 || zoneIndex >= _zoneAmbientClips.Length) return;
+        if (zoneIndex == _currentAmbientZone) return;
+
+        _currentAmbientZone = zoneIndex;
+        _ambientCrossfade = 0f;
+
+        // Crossfade: new zone on source2, old continues on source1 (then swap)
+        AudioSource incoming = _ambientSwapping ? _ambientSource : _ambientSource2;
+        incoming.clip = _zoneAmbientClips[zoneIndex];
+        incoming.volume = 0f;
+        incoming.Play();
+        _ambientSwapping = !_ambientSwapping;
+    }
 
     void Update()
     {
@@ -906,6 +1057,33 @@ public class ProceduralAudio : MonoBehaviour
 
             _musicSource.pitch = _currentPitch;
             _musicSource.volume = masterVolume * musicVolume * Mathf.Max(0.1f, _currentMusicVol);
+        }
+
+        // Zone ambient crossfade
+        if (_ambientSource != null && _ambientSource2 != null && _currentAmbientZone >= 0)
+        {
+            _ambientCrossfade = Mathf.MoveTowards(_ambientCrossfade, 1f, Time.deltaTime * 0.8f); // ~1.2s crossfade
+            float ambVol = masterVolume * sfxVolume * 0.35f;
+            // _ambientSwapping toggles which source is "incoming"
+            // After swap: source is outgoing, source2 is incoming (or vice versa)
+            if (_ambientSwapping)
+            {
+                _ambientSource.volume = ambVol * _ambientCrossfade;
+                _ambientSource2.volume = ambVol * (1f - _ambientCrossfade);
+                if (_ambientCrossfade >= 1f && _ambientSource2.isPlaying)
+                    _ambientSource2.Stop();
+            }
+            else
+            {
+                _ambientSource2.volume = ambVol * _ambientCrossfade;
+                _ambientSource.volume = ambVol * (1f - _ambientCrossfade);
+                if (_ambientCrossfade >= 1f && _ambientSource.isPlaying && _ambientSource.clip != _ambientSource2.clip)
+                    _ambientSource.Stop();
+            }
+
+            // Poll zone changes automatically
+            if (PipeZoneSystem.Instance != null)
+                UpdateZoneAmbient(PipeZoneSystem.Instance.CurrentZoneIndex);
         }
     }
 }

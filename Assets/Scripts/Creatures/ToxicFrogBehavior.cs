@@ -8,6 +8,7 @@ using UnityEngine;
 public class ToxicFrogBehavior : ObstacleBehavior
 {
     public override Color HitFlashColor => new Color(0.1f, 0.8f, 0.2f); // slimy green
+    public override bool SplatterOnHit => true; // frog slime splat
     [Header("Frog")]
     public float hopInterval = 2.5f;
     public float hopHeight = 0.4f;

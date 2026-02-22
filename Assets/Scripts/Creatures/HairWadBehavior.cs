@@ -7,6 +7,7 @@ using System.Collections.Generic;
 public class HairWadBehavior : ObstacleBehavior
 {
     public override Color HitFlashColor => new Color(0.7f, 0.6f, 0.3f); // gross blonde
+    public override bool SplatterOnHit => true; // gross hair goo
     private List<Transform> _strands = new List<Transform>();
     private Transform _mouth;
     private Vector3 _originalScale;

@@ -19,6 +19,9 @@ public abstract class ObstacleBehavior : MonoBehaviour
     /// <summary>Color used for screen flash when this obstacle hits the player.</summary>
     public virtual Color HitFlashColor => new Color(1f, 0.15f, 0.05f); // default red
 
+    /// <summary>Whether this creature triggers a screen splatter on hit (messy/explosive types).</summary>
+    public virtual bool SplatterOnHit => false;
+
     protected Transform _player;
     protected bool _playerNearby;
     protected bool _playerApproaching;

@@ -84,14 +84,26 @@ public class GameUI : MonoBehaviour
 
         UpdateWallet();
         BuildShopItems();
+
+        // Setup start screen fade-out group
+        if (startPanel != null)
+        {
+            _startCanvasGroup = startPanel.GetComponent<CanvasGroup>();
+            if (_startCanvasGroup == null)
+                _startCanvasGroup = startPanel.AddComponent<CanvasGroup>();
+            _quipIndex = Random.Range(0, StartQuips.Length);
+            _nextQuipTime = Time.time + 3.5f;
+        }
     }
 
     void OnStartClicked()
     {
+        if (_startScreenFading) return; // prevent double-tap
         HapticManager.MediumTap();
         if (ProceduralAudio.Instance != null) ProceduralAudio.Instance.PlayUIClick();
-        if (GameManager.Instance != null)
-            GameManager.Instance.StartGame();
+        // Start smooth fade-out then launch game
+        _startScreenFading = true;
+        _startFadeTimer = 0f;
     }
 
     void OnGalleryClicked()
@@ -152,8 +164,27 @@ public class GameUI : MonoBehaviour
     private bool _isNewHighScore;
     private float _newHighScorePhase;
 
-    // Start screen pulse
+    // Start screen animations
     private float _startPulsePhase;
+    private float _startScreenTimer; // time on start screen (for staggered anims)
+    private bool _startScreenFading; // smooth exit transition
+    private float _startFadeTimer;
+    private CanvasGroup _startCanvasGroup;
+    private int _quipIndex;
+    private float _nextQuipTime;
+
+    private static readonly string[] StartQuips = {
+        "\"Abandon hope, all ye who flush\"",
+        "\"It's a dirty job, but someone's gotta race it\"",
+        "\"May the flush be with you\"",
+        "\"Sewer speed record: still unclaimed\"",
+        "\"Warning: Contains actual gameplay\"",
+        "\"Rated P for Poop\"",
+        "\"No turds were harmed in the making\"",
+        "\"Your toilet called. It wants its turd back.\"",
+        "\"Built different. Flushed the same.\"",
+        "\"The #2 racing game of all time\"",
+    };
 
     public void UpdateCoinCount(int coins)
     {
@@ -311,12 +342,135 @@ public class GameUI : MonoBehaviour
             highScoreText.transform.localScale = Vector3.one * breathe;
         }
 
-        // Start button pulsing glow
-        if (startButton != null && startPanel != null && startPanel.activeSelf)
+        // === START SCREEN ANIMATIONS ===
+        if (startPanel != null && startPanel.activeSelf)
         {
             _startPulsePhase += Time.deltaTime;
-            float pulse = 1f + Mathf.Sin(_startPulsePhase * 3f) * 0.06f;
-            startButton.transform.localScale = Vector3.one * pulse;
+            _startScreenTimer += Time.deltaTime;
+
+            // Start button breathing pulse
+            if (startButton != null)
+            {
+                float pulse = 1f + Mathf.Sin(_startPulsePhase * 3f) * 0.06f;
+                startButton.transform.localScale = Vector3.one * pulse;
+            }
+
+            // Metal plate gentle float (subtle bobbing)
+            Transform metalPlate = startPanel.transform.Find("MetalPlate");
+            if (metalPlate != null)
+            {
+                float bob = Mathf.Sin(_startPulsePhase * 1.2f) * 3f;
+                float sway = Mathf.Sin(_startPulsePhase * 0.8f + 1.5f) * 1f;
+                metalPlate.localPosition = new Vector3(sway, bob, 0f);
+            }
+
+            // Race tagline wobble + color pulse
+            Transform tagline = startPanel.transform.Find("RaceTagline");
+            if (tagline != null)
+            {
+                float wobble = Mathf.Sin(_startPulsePhase * 2.5f) * 1.5f;
+                tagline.localRotation = Quaternion.Euler(0f, 0f, wobble);
+                Text tagText = tagline.GetComponent<Text>();
+                if (tagText != null)
+                {
+                    // Warm color pulse between orange and gold
+                    float hue = 0.08f + Mathf.Sin(_startPulsePhase * 1.8f) * 0.03f;
+                    tagText.color = Color.HSVToRGB(hue, 0.85f, 1f);
+                }
+            }
+
+            // Sticker buttons gentle wobble (SHOP / GALLERY)
+            Transform shopBtn = startPanel.transform.Find("ShopButton");
+            Transform galleryBtn = startPanel.transform.Find("GalleryButton");
+            if (shopBtn != null)
+            {
+                float wobShop = -3f + Mathf.Sin(_startPulsePhase * 1.1f) * 2f;
+                shopBtn.localRotation = Quaternion.Euler(0f, 0f, wobShop);
+            }
+            if (galleryBtn != null)
+            {
+                float wobGal = 2f + Mathf.Sin(_startPulsePhase * 0.9f + 2f) * 2f;
+                galleryBtn.localRotation = Quaternion.Euler(0f, 0f, wobGal);
+            }
+
+            // Rotating quip in the challenge text slot
+            if (challengeText != null && Time.time >= _nextQuipTime)
+            {
+                _quipIndex = (_quipIndex + 1) % StartQuips.Length;
+                challengeText.text = StartQuips[_quipIndex];
+                _nextQuipTime = Time.time + 4f;
+            }
+            // Quip text fade in/out cycle
+            if (challengeText != null)
+            {
+                float quipAge = _nextQuipTime - Time.time;
+                float fadeIn = Mathf.Clamp01((4f - quipAge) / 0.5f);  // fade in over 0.5s
+                float fadeOut = Mathf.Clamp01(quipAge / 0.5f);         // fade out last 0.5s
+                float alpha = Mathf.Min(fadeIn, fadeOut) * 0.7f;
+                challengeText.color = new Color(1f, 0.85f, 0.3f, alpha);
+            }
+
+            // Smooth fade-out transition when starting game
+            if (_startScreenFading)
+            {
+                _startFadeTimer += Time.deltaTime;
+                float fadeDur = 0.4f;
+                float t = Mathf.Clamp01(_startFadeTimer / fadeDur);
+
+                if (_startCanvasGroup != null)
+                    _startCanvasGroup.alpha = 1f - t;
+
+                // Slight zoom-in as it fades
+                startPanel.transform.localScale = Vector3.one * (1f + t * 0.15f);
+
+                if (t >= 1f)
+                {
+                    _startScreenFading = false;
+                    startPanel.transform.localScale = Vector3.one;
+                    if (_startCanvasGroup != null) _startCanvasGroup.alpha = 1f;
+                    if (GameManager.Instance != null)
+                        GameManager.Instance.StartGame();
+                }
+            }
+
+            // Entrance animation: staggered elements slide in from off-screen
+            if (_startScreenTimer < 1.5f)
+            {
+                float et = _startScreenTimer;
+
+                // Metal plate slides up from below (0.2s delay, 0.5s duration)
+                if (metalPlate != null)
+                {
+                    float plateT = Mathf.Clamp01((et - 0.2f) / 0.5f);
+                    // Elastic ease
+                    float elastic = plateT >= 1f ? 1f :
+                        Mathf.Pow(2f, -10f * plateT) * Mathf.Sin((plateT - 0.075f) * Mathf.PI * 2f / 0.3f) + 1f;
+                    float slideOffset = (1f - Mathf.Clamp01(elastic)) * -200f;
+                    metalPlate.localPosition += new Vector3(0f, slideOffset, 0f);
+                }
+
+                // Tagline fades in (0.6s delay)
+                if (tagline != null)
+                {
+                    float tagAlpha = Mathf.Clamp01((et - 0.6f) / 0.4f);
+                    Text tagText = tagline.GetComponent<Text>();
+                    if (tagText != null)
+                    {
+                        Color c = tagText.color;
+                        c.a *= tagAlpha;
+                        tagText.color = c;
+                    }
+                }
+
+                // Stickers pop in (0.8s delay)
+                float stickerScale = Mathf.Clamp01((et - 0.8f) / 0.3f);
+                float stickerElastic = stickerScale >= 1f ? 1f :
+                    Mathf.Pow(2f, -8f * stickerScale) * Mathf.Sin((stickerScale - 0.1f) * Mathf.PI * 2f / 0.35f) + 1f;
+                if (shopBtn != null)
+                    shopBtn.localScale = Vector3.one * Mathf.Clamp01(stickerElastic);
+                if (galleryBtn != null)
+                    galleryBtn.localScale = Vector3.one * Mathf.Clamp01(stickerElastic);
+            }
         }
     }
 

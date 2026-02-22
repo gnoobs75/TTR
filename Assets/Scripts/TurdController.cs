@@ -531,7 +531,12 @@ public class TurdController : MonoBehaviour
         if (ScreenEffects.Instance != null)
         {
             if (obstacle != null)
+            {
                 ScreenEffects.Instance.TriggerHitFlash(obstacle.HitFlashColor);
+                // Messy creatures splatter the screen
+                if (obstacle.SplatterOnHit)
+                    ScreenEffects.Instance.TriggerSplatter(obstacle.HitFlashColor);
+            }
             else
                 ScreenEffects.Instance.TriggerHitFlash();
         }
