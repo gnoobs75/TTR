@@ -115,8 +115,9 @@ public class ScreenEffects : MonoBehaviour
         // Underwater tint - murky green for drop sections
         _underwaterTint = CreateOverlay("UnderwaterTint", new Color(0.02f, 0.12f, 0.06f, 0));
 
-        // Zone vignette - atmospheric colored tint per zone
+        // Zone vignette - atmospheric colored tint per zone (edge-only with vignette texture)
         _zoneVignette = CreateOverlay("ZoneVignette", new Color(0, 0, 0, 0));
+        ApplyVignetteTexture(_zoneVignette);
 
         // Speed streaks - radial lines from center when going fast
         _speedStreaks = CreateOverlay("SpeedStreaks", new Color(1, 1, 1, 0));
@@ -490,11 +491,40 @@ public class ScreenEffects : MonoBehaviour
         }
 
         // Zone vignette - atmospheric colored tint at screen edges
+        // Stronger in deeper zones with unique pulse personality per zone
         if (_zoneVignetteAlpha > 0.001f && _zoneVignette != null)
         {
-            float pulse = 1f + Mathf.Sin(Time.time * 0.7f) * 0.15f; // slow atmospheric pulse
+            float t = Time.time;
+            float pulse = 1f;
+            float baseAlpha = 0.08f;
+            int zi = PipeZoneSystem.Instance != null ? PipeZoneSystem.Instance.CurrentZoneIndex : 0;
+
+            switch (zi)
+            {
+                case 0: // Porcelain: barely visible, calm
+                    pulse = 1f + Mathf.Sin(t * 0.7f) * 0.1f;
+                    baseAlpha = 0.06f;
+                    break;
+                case 1: // Grimy: slightly murky, slow throb
+                    pulse = 1f + Mathf.Sin(t * 1.0f) * 0.15f;
+                    baseAlpha = 0.10f;
+                    break;
+                case 2: // Toxic: nauseating slow pulse, stronger edges
+                    pulse = 1f + Mathf.Sin(t * 0.6f) * 0.25f + Mathf.Sin(t * 1.7f) * 0.1f;
+                    baseAlpha = 0.16f;
+                    break;
+                case 3: // Rusty: industrial flicker
+                    pulse = 1f + (Mathf.PerlinNoise(t * 3f, 7f) - 0.5f) * 0.3f;
+                    baseAlpha = 0.18f;
+                    break;
+                default: // Hellsewer: aggressive rapid pulse
+                    pulse = 1f + Mathf.Sin(t * 3.5f) * 0.2f + Mathf.Sin(t * 7f) * 0.1f;
+                    baseAlpha = 0.22f;
+                    break;
+            }
+
             Color zc = _zoneVignetteColor;
-            zc.a = _zoneVignetteAlpha * 0.08f * pulse; // very subtle
+            zc.a = _zoneVignetteAlpha * baseAlpha * Mathf.Max(0.5f, pulse);
             _zoneVignette.color = zc;
         }
         else if (_zoneVignette != null)

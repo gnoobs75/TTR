@@ -1112,6 +1112,67 @@ public class GameUI : MonoBehaviour
             HapticManager.HeavyTap();
         }
 
+        // Stat-based celebration effects (even without high score)
+        if (!_isNewHighScore)
+        {
+            Vector3 celebPos = GameManager.Instance?.player != null
+                ? GameManager.Instance.player.transform.position : Vector3.zero;
+
+            // Distance milestone celebrations
+            if (distance >= 800f)
+            {
+                if (CheerOverlay.Instance != null)
+                    CheerOverlay.Instance.ShowCheer("DEEP DIVE!", new Color(0.8f, 0.2f, 0.1f), true);
+                if (ParticleManager.Instance != null)
+                    ParticleManager.Instance.PlayCelebration(celebPos);
+                HapticManager.MediumTap();
+            }
+            else if (distance >= 500f)
+            {
+                if (CheerOverlay.Instance != null)
+                    CheerOverlay.Instance.ShowCheer("SEWER SURVIVOR!", new Color(0.9f, 0.5f, 0.2f), false);
+                HapticManager.LightTap();
+            }
+
+            // Near-miss master
+            if (nearMisses >= 15)
+            {
+                if (CheerOverlay.Instance != null)
+                    CheerOverlay.Instance.ShowCheer("DODGE MASTER!", new Color(0.3f, 0.9f, 1f), nearMisses >= 30);
+                HapticManager.LightTap();
+            }
+
+            // Combo king
+            if (bestCombo >= 10)
+            {
+                if (ScreenEffects.Instance != null)
+                    ScreenEffects.Instance.TriggerMilestoneFlash();
+                HapticManager.LightTap();
+            }
+
+            // Race podium (1st-3rd)
+            if (RaceManager.Instance != null)
+            {
+                int place = RaceManager.Instance.GetPlayerFinishPlace();
+                if (place == 1)
+                {
+                    if (ParticleManager.Instance != null)
+                        ParticleManager.Instance.PlayCelebration(celebPos);
+                    if (ProceduralAudio.Instance != null)
+                        ProceduralAudio.Instance.PlayCelebration();
+                    if (PipeCamera.Instance != null)
+                        PipeCamera.Instance.PunchFOV(6f);
+                    HapticManager.HeavyTap();
+                }
+                else if (place <= 3 && place > 0)
+                {
+                    if (ParticleManager.Instance != null)
+                        ParticleManager.Instance.PlayCelebration(celebPos);
+                    HapticManager.MediumTap();
+                }
+            }
+        }
+
         if (runStatsText != null)
         {
             // Formatted stats with line breaks for mobile readability

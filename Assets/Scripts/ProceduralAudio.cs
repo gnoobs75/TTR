@@ -90,6 +90,9 @@ public class ProceduralAudio : MonoBehaviour
     private float _stunDipTimer;       // drops pitch/vol briefly on stun
     private float _rivalProximityPulse; // bass pulse when rival is close
     private float _zoneTransitionSweep; // pitch wobble on zone change
+    private bool _finalStretchAnnounced; // one-shot "FINAL STRETCH!" at 200m
+    private bool _photoFinishAnnounced;  // one-shot at 50m
+    private float _heartbeatPhase;       // pulsing bass in final stretch
 
     // Zone ambient audio (environmental layers per zone)
     private AudioSource _ambientSource;
@@ -833,6 +836,9 @@ public class ProceduralAudio : MonoBehaviour
         _musicSource.volume = masterVolume * musicVolume;
         _musicSource.Play();
         _musicPlaying = true;
+        _finalStretchAnnounced = false;
+        _photoFinishAnnounced = false;
+        _heartbeatPhase = 0f;
 
         // Start zone ambient (defaults to zone 0 / Porcelain)
         if (_zoneAmbientClips != null && _zoneAmbientClips.Length > 0)
@@ -1003,13 +1009,55 @@ public class ProceduralAudio : MonoBehaviour
 
                 SetSpeedIntensity(playerSpeed);
 
-                // Final stretch tension: pitch up in last 200m of race
+                // Final stretch tension: builds over last 300m with escalating intensity
                 float distToFinish = raceDist - playerDist;
-                if (distToFinish < 200f && distToFinish > 0f)
+                if (distToFinish < 300f && distToFinish > 0f)
                 {
-                    float finaleT = 1f - (distToFinish / 200f); // 0 at 200m out, 1 at finish
-                    _targetPitch += finaleT * 0.08f; // up to +8% extra pitch at the line
-                    _targetMusicVol += finaleT * 0.1f; // slightly louder too
+                    float finaleT = 1f - (distToFinish / 300f); // 0 at 300m, 1 at finish
+
+                    // Exponential ramp: gentle early, aggressive in final 100m
+                    float ramp = finaleT * finaleT; // quadratic curve
+                    _targetPitch += ramp * 0.15f;   // up to +15% pitch at finish
+                    _targetMusicVol += ramp * 0.15f; // up to +15% volume
+
+                    // Heartbeat bass pulse in final 150m (gets faster as you approach)
+                    if (distToFinish < 150f)
+                    {
+                        float heartT = 1f - (distToFinish / 150f);
+                        float heartRate = Mathf.Lerp(1.5f, 4f, heartT); // 1.5 to 4 Hz
+                        _heartbeatPhase += Time.deltaTime * heartRate * Mathf.PI * 2f;
+                        float pulse = Mathf.Pow(Mathf.Max(0f, Mathf.Sin(_heartbeatPhase)), 4f);
+                        _targetMusicVol += pulse * heartT * 0.12f;
+                    }
+
+                    // "FINAL STRETCH!" announcement at 200m
+                    if (!_finalStretchAnnounced && distToFinish < 200f)
+                    {
+                        _finalStretchAnnounced = true;
+                        if (CheerOverlay.Instance != null)
+                            CheerOverlay.Instance.ShowCheer("FINAL STRETCH!", new Color(1f, 0.6f, 0.1f), true);
+                        if (PipeCamera.Instance != null)
+                            PipeCamera.Instance.PunchFOV(4f);
+                        HapticManager.MediumTap();
+                    }
+
+                    // "PHOTO FINISH!" at 50m if position is close
+                    if (!_photoFinishAnnounced && distToFinish < 50f)
+                    {
+                        _photoFinishAnnounced = true;
+                        int pos = RaceManager.Instance.GetPlayerPosition();
+                        if (pos <= 3) // only if player is competitive
+                        {
+                            if (CheerOverlay.Instance != null)
+                                CheerOverlay.Instance.ShowCheer("PHOTO FINISH!", new Color(1f, 0.2f, 0.2f), true);
+                            if (PipeCamera.Instance != null)
+                            {
+                                PipeCamera.Instance.Shake(0.15f);
+                                PipeCamera.Instance.PunchFOV(6f);
+                            }
+                            HapticManager.HeavyTap();
+                        }
+                    }
                 }
             }
 
