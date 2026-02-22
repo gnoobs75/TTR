@@ -605,6 +605,13 @@ public class ScreenEffects : MonoBehaviour
         Invoke(nameof(ResetFlashColor), 0.3f);
     }
 
+    /// <summary>Brief red edge flash as proximity warning for fast-approaching obstacles.</summary>
+    public void TriggerProximityWarning()
+    {
+        _dangerAlpha = Mathf.Max(_dangerAlpha, 0.7f);
+        _chromaticIntensity = Mathf.Max(_chromaticIntensity, 0.4f);
+    }
+
     void ResetFlashColor()
     {
         _hitFlashColor = new Color(1f, 0.15f, 0.05f, 0.6f);

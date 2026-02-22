@@ -22,6 +22,11 @@ public class ObstacleRadar : MonoBehaviour
     private TurdController _tc;
     private PipeGenerator _pipeGen;
 
+    // Proximity warning
+    private float _dangerWarningCooldown;
+    private const float DANGER_DIST = 6f;      // meters: triggers warning
+    private const float DANGER_SPEED = 12f;     // m/s: must be going fast
+
     void Awake()
     {
         Instance = this;
@@ -138,6 +143,9 @@ public class ObstacleRadar : MonoBehaviour
         var obstacles = Object.FindObjectsByType<Obstacle>(FindObjectsSortMode.None);
 
         int blipIdx = 0;
+        float closestAhead = float.MaxValue;
+        float speed = _tc.CurrentSpeed;
+
         foreach (var obs in obstacles)
         {
             if (blipIdx >= MAX_BLIPS) break;
@@ -145,6 +153,10 @@ public class ObstacleRadar : MonoBehaviour
 
             Vector3 toObs = obs.transform.position - playerPos;
             float fwdDist = Vector3.Dot(toObs, playerFwd);
+
+            // Track closest obstacle for proximity warning
+            if (fwdDist > 0.5f && fwdDist < closestAhead)
+                closestAhead = fwdDist;
 
             // Only show obstacles ahead (within scan range)
             if (fwdDist < 1f || fwdDist > SCAN_RANGE) continue;
@@ -187,5 +199,15 @@ public class ObstacleRadar : MonoBehaviour
         // Hide unused blips
         for (int i = blipIdx; i < MAX_BLIPS; i++)
             _blips[i].color = new Color(1f, 0.3f, 0.15f, 0f);
+
+        // Proximity warning: red edge flash when obstacle is dangerously close at speed
+        _dangerWarningCooldown -= 0.15f; // scan interval
+        if (closestAhead < DANGER_DIST && speed >= DANGER_SPEED && _dangerWarningCooldown <= 0f)
+        {
+            _dangerWarningCooldown = 0.8f; // don't spam warnings
+            if (ScreenEffects.Instance != null)
+                ScreenEffects.Instance.TriggerProximityWarning();
+            HapticManager.LightTap();
+        }
     }
 }

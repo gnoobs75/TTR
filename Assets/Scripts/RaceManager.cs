@@ -98,6 +98,13 @@ public class RaceManager : MonoBehaviour
         "INCOMING!", "GOT SPLASHED!", "OVERTAKEN!"
     };
 
+    // === RACE COMMENTARY ===
+    private float _commentaryTimer;
+    private int _lastCommentaryHash; // prevent same commentary twice in a row
+    private bool _neckAndNeckShown;
+    private bool _breakingAwayShown;
+    private bool _halfwayShown;
+
     public State RaceState => _state;
     public float LeaderDistance => _leaderDistance;
     public float RaceTime => _state >= State.Racing ? Time.time - _raceStartTime : 0f;
@@ -832,6 +839,9 @@ public class RaceManager : MonoBehaviour
         // === FINAL STRETCH CHECK ===
         CheckFinalStretch();
 
+        // === RACE COMMENTARY ===
+        CheckRaceCommentary();
+
         // Check if all racers finished
         bool allFinished = true;
         foreach (var e in _entries)
@@ -1234,6 +1244,89 @@ public class RaceManager : MonoBehaviour
                     new Color(1f, 0.3f, 0.1f),   // urgent red-gold
                     urgency);
                 ScreenEffects.Instance.UpdateZoneVignette(stretchColor, 0.3f + urgency * 0.5f);
+            }
+        }
+    }
+
+    void CheckRaceCommentary()
+    {
+        _commentaryTimer -= Time.deltaTime;
+        if (_commentaryTimer > 0f) return;
+        if (playerController == null || _state != State.Racing) return;
+
+        float playerDist = playerController.DistanceTraveled;
+        int playerPos = 0;
+        float gapToSecond = 0f;
+
+        foreach (var e in _entries)
+        {
+            if (e.isPlayer)
+            {
+                playerPos = e.position;
+                gapToSecond = e.gapToLeader;
+                break;
+            }
+        }
+
+        // Find gap between player and next racer
+        float closestGap = float.MaxValue;
+        foreach (var e in _entries)
+        {
+            if (!e.isPlayer && !e.isFinished && Mathf.Abs(e.distance - playerDist) < closestGap)
+                closestGap = Mathf.Abs(e.distance - playerDist);
+        }
+
+        string commentary = null;
+        Color commentColor = Color.white;
+
+        // Halfway point
+        if (!_halfwayShown && playerDist >= raceDistance * 0.5f)
+        {
+            _halfwayShown = true;
+            commentary = "HALFWAY TO BROWN TOWN!";
+            commentColor = new Color(1f, 0.85f, 0.3f);
+        }
+        // Neck and neck (within 5m of rival)
+        else if (!_neckAndNeckShown && closestGap < 5f && playerPos <= 2)
+        {
+            _neckAndNeckShown = true;
+            commentary = "NECK AND NECK!";
+            commentColor = new Color(1f, 0.6f, 0.2f);
+        }
+        // Breaking away (player in 1st, leading by 20m+)
+        else if (!_breakingAwayShown && playerPos == 1 && _entries.Count > 1)
+        {
+            float secondDist = 0f;
+            foreach (var e in _entries)
+                if (!e.isPlayer && e.distance > secondDist) secondDist = e.distance;
+            if (playerDist - secondDist > 20f)
+            {
+                _breakingAwayShown = true;
+                commentary = "BREAKING AWAY!";
+                commentColor = new Color(0.3f, 1f, 0.4f);
+            }
+        }
+        // Falling behind (player in last place after 200m)
+        else if (playerPos == 5 && playerDist > 200f && Random.value < 0.01f)
+        {
+            string[] lastPlaceQuips = {
+                "DIG DEEP, MR. CORNY!", "THIS PIPE AIN'T GONNA RACE ITSELF!",
+                "LAST PLACE? MORE LIKE... LAST PLACE!", "LESS STINKING, MORE THINKING!"
+            };
+            commentary = lastPlaceQuips[Random.Range(0, lastPlaceQuips.Length)];
+            commentColor = new Color(1f, 0.4f, 0.3f);
+        }
+
+        if (commentary != null)
+        {
+            int hash = commentary.GetHashCode();
+            if (hash != _lastCommentaryHash)
+            {
+                _lastCommentaryHash = hash;
+                _commentaryTimer = 8f; // don't spam commentary
+
+                if (CheerOverlay.Instance != null)
+                    CheerOverlay.Instance.ShowCheer(commentary, commentColor, false);
             }
         }
     }

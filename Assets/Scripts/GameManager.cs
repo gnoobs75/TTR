@@ -61,12 +61,17 @@ public class GameManager : MonoBehaviour
 
     // Speed milestones (one-shot announcements when hitting speed thresholds)
     private int _speedMilestoneReached = -1;
-    private static readonly float[] SpeedThresholds = { 9f, 11f, 13f };
-    private static readonly string[] SpeedNames = { "PICKING UP SPEED!", "TURBO MODE!", "LUDICROUS SPEED!" };
+    private static readonly float[] SpeedThresholds = { 8f, 10f, 13f, 16f, 20f };
+    private static readonly string[] SpeedNames = {
+        "WARMING UP!", "TURBO TURD!", "LUDICROUS SPEED!",
+        "GONE PLAID!", "WARP FLUSH!"
+    };
     private static readonly Color[] SpeedColors = {
         new Color(0.3f, 0.9f, 1f),   // cyan
         new Color(1f, 0.6f, 0f),     // orange
-        new Color(1f, 0.2f, 0.8f)    // hot pink
+        new Color(1f, 0.2f, 0.8f),   // hot pink
+        new Color(0.9f, 0.1f, 0.1f), // red
+        new Color(1f, 1f, 0.2f)      // golden
     };
 
     public int RunCoins => _runCoins;
@@ -273,11 +278,19 @@ public class GameManager : MonoBehaviour
                 {
                     _speedMilestoneReached = i;
                     if (CheerOverlay.Instance != null)
-                        CheerOverlay.Instance.ShowCheer(SpeedNames[i], SpeedColors[i], i >= 2);
+                        CheerOverlay.Instance.ShowCheer(SpeedNames[i], SpeedColors[i], i >= 3);
                     if (PipeCamera.Instance != null)
                         PipeCamera.Instance.PunchFOV(3f + i * 2f);
                     if (ScreenEffects.Instance != null)
                         ScreenEffects.Instance.FlashSpeedStreaks(0.6f + i * 0.2f);
+                    // Bonus score for reaching high speed tiers
+                    if (i >= 2)
+                    {
+                        int speedBonus = 25 * (i + 1);
+                        AddScore(speedBonus);
+                        if (ScorePopup.Instance != null)
+                            ScorePopup.Instance.Show(player.transform.position + Vector3.up * 1.5f, speedBonus);
+                    }
                     HapticManager.LightTap();
                     break;
                 }
