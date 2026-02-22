@@ -223,6 +223,7 @@ public class PoopBuddyChain : MonoBehaviour
     /// </summary>
     public void ScatterAll()
     {
+        int lostCount = _chain.Count;
         foreach (var buddy in _chain)
         {
             if (buddy.obj == null) continue;
@@ -240,6 +241,32 @@ public class PoopBuddyChain : MonoBehaviour
             Destroy(buddy.obj, 2f);
         }
         _chain.Clear();
+
+        // Devastating loss feedback
+        if (lostCount > 0)
+        {
+            if (ProceduralAudio.Instance != null)
+                ProceduralAudio.Instance.PlayComboBreak();
+
+            if (PipeCamera.Instance != null)
+            {
+                PipeCamera.Instance.Shake(0.15f + lostCount * 0.05f);
+                PipeCamera.Instance.PunchFOV(-3f);
+            }
+
+            if (ScreenEffects.Instance != null)
+                ScreenEffects.Instance.TriggerHitFlash(new Color(0.4f, 0.3f, 0.2f));
+
+            if (CheerOverlay.Instance != null)
+            {
+                string[] sadWords = { "MY FRIENDS!", "NOOOO!", "BUDDIES!" };
+                CheerOverlay.Instance.ShowCheer(
+                    sadWords[lostCount % sadWords.Length],
+                    new Color(0.5f, 0.4f, 0.3f), false);
+            }
+
+            HapticManager.MediumTap();
+        }
     }
 
     GameObject CreateSkiingBuddy()

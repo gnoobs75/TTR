@@ -265,6 +265,27 @@ public class PipeFork : MonoBehaviour
                 Camera.main != null ? Camera.main.transform.position + Camera.main.transform.forward * 5f : Vector3.zero,
                 msg);
         }
+
+        // Poop crew reacts to the choice
+        if (_playerBranch == 1) // Risky
+        {
+            if (CheerOverlay.Instance != null)
+                CheerOverlay.Instance.ShowCheer("RISKY!", new Color(1f, 0.3f, 0.2f), false);
+            if (ScreenEffects.Instance != null)
+                ScreenEffects.Instance.TriggerProximityWarning();
+            if (PipeCamera.Instance != null)
+                PipeCamera.Instance.Shake(0.12f);
+            HapticManager.MediumTap();
+        }
+        else // Safe
+        {
+            if (CheerOverlay.Instance != null)
+                CheerOverlay.Instance.ShowCheer("SAFE!", new Color(0.3f, 0.9f, 0.4f), false);
+            HapticManager.LightTap();
+        }
+
+        if (ProceduralAudio.Instance != null)
+            ProceduralAudio.Instance.PlayForkWarning();
     }
 
     public int GetAIBranch(float aggression)

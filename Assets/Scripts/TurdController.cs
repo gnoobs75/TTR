@@ -728,6 +728,32 @@ public class TurdController : MonoBehaviour
             ProceduralAudio.Instance.PlayStomp();
         if (ParticleManager.Instance != null)
             ParticleManager.Instance.PlayStompSquash(transform.position);
+
+        // Poop crew celebrates stomps (escalates with combo)
+        if (CheerOverlay.Instance != null)
+        {
+            string cheerWord = _stompCombo switch
+            {
+                1 => "SQUISH!",
+                2 => "DOUBLE STOMP!",
+                3 => "TRIPLE STOMP!",
+                _ => "STOMP GOD!"
+            };
+            Color cheerCol = _stompCombo >= 3
+                ? new Color(1f, 0.2f, 0.3f)  // red for big combos
+                : new Color(0.8f, 0.6f, 0.2f); // brown for single
+            CheerOverlay.Instance.ShowCheer(cheerWord, cheerCol, _stompCombo >= 3);
+        }
+
+        // Screen flash escalates with combo
+        if (ScreenEffects.Instance != null)
+        {
+            if (_stompCombo >= 3)
+                ScreenEffects.Instance.TriggerMilestoneFlash();
+            else if (_stompCombo >= 2)
+                ScreenEffects.Instance.TriggerPowerUpFlash();
+        }
+
         HapticManager.MediumTap();
     }
 
