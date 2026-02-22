@@ -185,14 +185,15 @@ public class RaceLeaderboard : MonoBehaviour
             }
             row.root.localScale = new Vector3(scale, scale, 1f);
 
-            // Flash position number on change
-            if (_animTimers[i] > 0.2f)
-                row.positionText.color = Color.Lerp(PositionColors[posIdx], Color.white, (_animTimers[i] - 0.2f) / 0.2f);
-
             // Position number with color
             int posIdx = Mathf.Clamp(entry.position - 1, 0, PositionColors.Length - 1);
             row.positionText.text = entry.position.ToString();
-            row.positionText.color = PositionColors[posIdx];
+
+            // Flash position number on change (white flash that decays to position color)
+            if (_animTimers[i] > 0.2f)
+                row.positionText.color = Color.Lerp(PositionColors[posIdx], Color.white, (_animTimers[i] - 0.2f) / 0.2f);
+            else
+                row.positionText.color = PositionColors[posIdx];
 
             // Color swatch
             row.colorSwatch.color = entry.color;

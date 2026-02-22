@@ -25,6 +25,12 @@ public class ScreenEffects : MonoBehaviour
     private Image _speedStreaks;
     private float _speedStreakIntensity;
 
+    // Film grain (noisy overlay at high speed for intensity feel)
+    private Image _filmGrain;
+    private Texture2D _grainTex;
+    private float _grainIntensity;
+    private float _grainTimer;
+
     // State
     private float _hitFlashAlpha;
     private float _vignetteIntensity;
@@ -46,6 +52,9 @@ public class ScreenEffects : MonoBehaviour
     private Image _chromaticLeft;
     private Image _chromaticRight;
     private float _chromaticIntensity;
+
+    // Speed chromatic (sustained at high speed, separate from hit)
+    private float _speedChromaticTarget;
 
     void Awake()
     {
@@ -98,6 +107,16 @@ public class ScreenEffects : MonoBehaviour
         // Speed streaks - radial lines from center when going fast
         _speedStreaks = CreateOverlay("SpeedStreaks", new Color(1, 1, 1, 0));
         ApplySpeedStreakTexture(_speedStreaks);
+
+        // Film grain - noisy overlay for intensity at speed
+        _filmGrain = CreateOverlay("FilmGrain", new Color(1, 1, 1, 0));
+        _grainTex = CreateGrainTexture(128);
+        if (_filmGrain != null)
+        {
+            Sprite spr = Sprite.Create(_grainTex, new Rect(0, 0, 128, 128), new Vector2(0.5f, 0.5f));
+            _filmGrain.sprite = spr;
+            _filmGrain.type = Image.Type.Tiled;
+        }
     }
 
     void ApplyVignetteTexture(Image img)
@@ -162,6 +181,41 @@ public class ScreenEffects : MonoBehaviour
         img.sprite = spr;
         img.type = Image.Type.Simple;
         img.preserveAspect = false;
+    }
+
+    Texture2D CreateGrainTexture(int size)
+    {
+        Texture2D tex = new Texture2D(size, size, TextureFormat.RGBA32, false);
+        tex.filterMode = FilterMode.Point; // crispy grain
+        tex.wrapMode = TextureWrapMode.Repeat;
+        for (int y = 0; y < size; y++)
+        {
+            for (int x = 0; x < size; x++)
+            {
+                float noise = Random.value;
+                // Bias toward midtones so grain doesn't blow out
+                float v = Mathf.Lerp(0.35f, 0.65f, noise);
+                tex.SetPixel(x, y, new Color(v, v, v, 1f));
+            }
+        }
+        tex.Apply();
+        return tex;
+    }
+
+    void RefreshGrainTexture()
+    {
+        if (_grainTex == null) return;
+        int size = _grainTex.width;
+        for (int y = 0; y < size; y++)
+        {
+            for (int x = 0; x < size; x++)
+            {
+                float noise = Random.value;
+                float v = Mathf.Lerp(0.35f, 0.65f, noise);
+                _grainTex.SetPixel(x, y, new Color(v, v, v, 1f));
+            }
+        }
+        _grainTex.Apply();
     }
 
     Image CreateOverlay(string name, Color color)
@@ -231,12 +285,27 @@ public class ScreenEffects : MonoBehaviour
             _vignetteOverlay.color = new Color(1f, 1f, 1f, 0f);
         }
 
-        // Chromatic aberration - red/cyan fringe on hit
-        if (_chromaticIntensity > 0.005f)
+        // Chromatic aberration - red/cyan fringe on hit + sustained at speed
+        float chromaTotal = Mathf.Max(_chromaticIntensity, _speedChromaticTarget);
+        if (chromaTotal > 0.005f)
         {
-            float a = _chromaticIntensity * 0.12f;
-            if (_chromaticLeft != null) _chromaticLeft.color = new Color(1f, 0f, 0f, a);
-            if (_chromaticRight != null) _chromaticRight.color = new Color(0f, 0.8f, 1f, a);
+            float a = chromaTotal * 0.12f;
+            // At high speed, widen the fringe offset for more dramatic effect
+            float offset = 4f + _speedChromaticTarget * 3f;
+            if (_chromaticLeft != null)
+            {
+                _chromaticLeft.color = new Color(1f, 0f, 0f, a);
+                RectTransform rt = _chromaticLeft.GetComponent<RectTransform>();
+                rt.offsetMin = new Vector2(-offset, 0);
+                rt.offsetMax = new Vector2(-offset, 0);
+            }
+            if (_chromaticRight != null)
+            {
+                _chromaticRight.color = new Color(0f, 0.8f, 1f, a);
+                RectTransform rt = _chromaticRight.GetComponent<RectTransform>();
+                rt.offsetMin = new Vector2(offset, 0);
+                rt.offsetMax = new Vector2(offset, 0);
+            }
             _chromaticIntensity = Mathf.Lerp(_chromaticIntensity, 0f, dt * 8f);
         }
         else
@@ -244,6 +313,27 @@ public class ScreenEffects : MonoBehaviour
             _chromaticIntensity = 0f;
             if (_chromaticLeft != null) _chromaticLeft.color = new Color(1f, 0f, 0f, 0f);
             if (_chromaticRight != null) _chromaticRight.color = new Color(0f, 0.8f, 1f, 0f);
+        }
+
+        // Film grain - intensifies at high speed, refreshes periodically
+        if (_grainIntensity > 0.005f)
+        {
+            _grainTimer += dt;
+            // Refresh grain pattern every 0.08s for that flickering film look
+            if (_grainTimer >= 0.08f)
+            {
+                _grainTimer = 0f;
+                RefreshGrainTexture();
+            }
+            // Grain alpha scales with speed intensity, subtle but present
+            float grainAlpha = _grainIntensity * 0.06f;
+            // Slight flicker for organic feel
+            grainAlpha *= 0.85f + Mathf.Sin(Time.time * 23f) * 0.15f;
+            if (_filmGrain != null) _filmGrain.color = new Color(0.5f, 0.5f, 0.5f, grainAlpha);
+        }
+        else if (_filmGrain != null)
+        {
+            _filmGrain.color = new Color(0.5f, 0.5f, 0.5f, 0f);
         }
 
         // Zone vignette - atmospheric colored tint at screen edges
@@ -318,11 +408,16 @@ public class ScreenEffects : MonoBehaviour
     {
         float t = Mathf.Clamp01((currentSpeed - _speedThreshold) / 8f);
         _speedIntensity = Mathf.Lerp(_speedIntensity, t, Time.deltaTime * 3f);
-        // Speed vignette: tunnel vision at high speed
+        // Speed vignette: tunnel vision at high speed, tints toward sewer-green at extreme
         float vigTarget = t * 0.35f;
         _vignetteIntensity = Mathf.Max(_vignetteIntensity, vigTarget);
         // Speed streaks: radial lines at high speed
         _speedStreakIntensity = Mathf.Lerp(_speedStreakIntensity, t, Time.deltaTime * 4f);
+        // Film grain: starts at moderate speed, intensifies
+        float grainTarget = Mathf.Clamp01((currentSpeed - 9f) / 8f); // kicks in earlier than other effects
+        _grainIntensity = Mathf.Lerp(_grainIntensity, grainTarget, Time.deltaTime * 3f);
+        // Speed chromatic: subtle sustained aberration at very high speed
+        _speedChromaticTarget = Mathf.Lerp(_speedChromaticTarget, t * 0.4f, Time.deltaTime * 3f);
     }
 
     /// <summary>Flash speed streaks briefly (e.g. race start, boost pickup).</summary>
@@ -331,11 +426,12 @@ public class ScreenEffects : MonoBehaviour
         _speedStreakIntensity = Mathf.Max(_speedStreakIntensity, intensity);
     }
 
-    /// <summary>Green flash for power-up pickup.</summary>
+    /// <summary>Green flash for power-up pickup with chromatic burst.</summary>
     public void TriggerPowerUpFlash()
     {
         _hitFlashAlpha = 0.3f;
         _hitFlashColor = new Color(0.1f, 1f, 0.3f, 0.4f);
+        _chromaticIntensity = Mathf.Max(_chromaticIntensity, 0.6f); // chromatic burst on boost
         Invoke(nameof(ResetFlashColor), 0.3f);
     }
 

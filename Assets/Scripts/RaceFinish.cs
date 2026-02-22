@@ -28,6 +28,12 @@ public class RaceFinish : MonoBehaviour
     private GameObject _podium3D;
     private ParticleSystem _confetti;
 
+    // Animation state
+    private float _bannerShowTime;
+    private Color _placeBaseColor;
+    private Text _poodiumTitle;
+    private float _podiumTitlePhase;
+
     struct PodiumSlot
     {
         public RectTransform root;
@@ -191,6 +197,7 @@ public class RaceFinish : MonoBehaviour
         titleText.alignment = TextAnchor.MiddleCenter;
         titleText.color = GoldColor;
         titleText.text = "WINNERS POODIUM";
+        _poodiumTitle = titleText;
         Outline titleOutline = titleObj.AddComponent<Outline>();
         titleOutline.effectColor = new Color(0, 0, 0, 0.95f);
         titleOutline.effectDistance = new Vector2(2, -2);
@@ -310,6 +317,7 @@ public class RaceFinish : MonoBehaviour
         if (!_initialized) return;
 
         _bannerGroup.alpha = 1f;
+        _bannerShowTime = Time.unscaledTime;
 
         string ordinal = GetOrdinal(place);
         Color placeColor = place == 1 ? GoldColor :
@@ -318,47 +326,80 @@ public class RaceFinish : MonoBehaviour
 
         _placeText.text = $"YOU FINISHED {place}{ordinal}!";
         _placeText.color = placeColor;
+        _placeBaseColor = placeColor;
         _timeText.text = $"Time: {time:F1}s";
 
-        // Celebratory scale punch
+        // Celebratory scale punch (elastic)
         StartCoroutine(BannerPunchAnimation());
 
-        if (ProceduralAudio.Instance != null)
+        Vector3 playerPos = RaceManager.Instance != null && RaceManager.Instance.PlayerController != null
+            ? RaceManager.Instance.PlayerController.transform.position
+            : transform.position;
+
+        if (place == 1)
         {
-            if (place <= 3)
+            // 1ST PLACE - maximum celebration
+            if (ProceduralAudio.Instance != null)
                 ProceduralAudio.Instance.PlayCelebration();
-        }
-
-        // Screen effects: golden/silver flash based on placement
-        if (ScreenEffects.Instance != null)
-        {
-            if (place == 1)
+            if (ScreenEffects.Instance != null)
+            {
                 ScreenEffects.Instance.TriggerMilestoneFlash();
-            else if (place <= 3)
-                ScreenEffects.Instance.TriggerPowerUpFlash();
-            else
-                ScreenEffects.Instance.TriggerHitFlash(); // shame flash for last place
+                ScreenEffects.Instance.FlashSpeedStreaks(1.5f);
+            }
+            if (PipeCamera.Instance != null)
+            {
+                PipeCamera.Instance.Shake(0.4f);
+                PipeCamera.Instance.PunchFOV(10f);
+            }
+            if (ParticleManager.Instance != null)
+            {
+                ParticleManager.Instance.PlayCelebration(playerPos);
+                // Double burst for 1st
+                ParticleManager.Instance.PlayCelebration(playerPos + Vector3.up * 2f);
+            }
+            if (CheerOverlay.Instance != null)
+                CheerOverlay.Instance.ShowCheer("1ST PLACE!", GoldColor, true);
+            HapticManager.HeavyTap();
         }
-
-        // Finish line particles
-        if (ParticleManager.Instance != null)
-            ParticleManager.Instance.PlayCelebration(
-                RaceManager.Instance != null && RaceManager.Instance.PlayerController != null
-                    ? RaceManager.Instance.PlayerController.transform.position
-                    : transform.position);
-
-        HapticManager.MediumTap();
+        else if (place <= 3)
+        {
+            // Podium finish - solid celebration
+            if (ProceduralAudio.Instance != null)
+                ProceduralAudio.Instance.PlayCelebration();
+            if (ScreenEffects.Instance != null)
+                ScreenEffects.Instance.TriggerPowerUpFlash();
+            if (PipeCamera.Instance != null)
+                PipeCamera.Instance.Shake(0.2f);
+            if (ParticleManager.Instance != null)
+                ParticleManager.Instance.PlayCelebration(playerPos);
+            string[] podiumCheers = { "", "", "PODIUM!", "BRONZE!" };
+            if (CheerOverlay.Instance != null)
+                CheerOverlay.Instance.ShowCheer(podiumCheers[place], placeColor, false);
+            HapticManager.MediumTap();
+        }
+        else
+        {
+            // Back of the pack - sad trombone
+            if (ScreenEffects.Instance != null)
+                ScreenEffects.Instance.TriggerHitFlash();
+            if (PipeCamera.Instance != null)
+                PipeCamera.Instance.Shake(0.1f);
+            HapticManager.LightTap();
+        }
     }
 
     IEnumerator BannerPunchAnimation()
     {
-        float duration = 0.5f;
+        // Elastic ease-out: starts big (1.6x), bounces down to 1.0x with overshoot
+        float duration = 0.7f;
         float elapsed = 0f;
+        bannerRoot.localScale = Vector3.one * 1.8f;
         while (elapsed < duration)
         {
             elapsed += Time.deltaTime;
             float t = elapsed / duration;
-            float scale = 1f + Mathf.Sin(t * Mathf.PI) * 0.15f;
+            float elastic = Mathf.Pow(2f, -10f * t) * Mathf.Sin((t - 0.075f) * (2f * Mathf.PI) / 0.3f) + 1f;
+            float scale = Mathf.Lerp(1.8f, 1f, elastic);
             bannerRoot.localScale = new Vector3(scale, scale, 1f);
             yield return null;
         }
@@ -398,9 +439,12 @@ public class RaceFinish : MonoBehaviour
         }
         _podiumGroup.alpha = 1f;
 
-        // Reveal each place with a delay
-        for (int i = 0; i < 3 && i < sorted.Count; i++)
+        // Reveal in reverse order: 3rd, 2nd, 1st (builds suspense)
+        int[] revealOrder = { 2, 1, 0 };
+        for (int r = 0; r < 3 && r < sorted.Count; r++)
         {
+            int i = revealOrder[r];
+            if (i >= sorted.Count) continue;
             var entry = sorted[i];
             var slot = _podiumSlots[i];
 
@@ -422,17 +466,42 @@ public class RaceFinish : MonoBehaviour
             // Punch animation per slot
             StartCoroutine(SlotPunchAnimation(slot.root));
 
-            if (ProceduralAudio.Instance != null)
-                ProceduralAudio.Instance.PlayCoinCollect();
+            // Escalating effects: bigger for higher placement
+            if (i == 0)
+            {
+                // 1st place reveal: extra fanfare
+                if (ProceduralAudio.Instance != null)
+                    ProceduralAudio.Instance.PlayCelebration();
+                if (PipeCamera.Instance != null)
+                    PipeCamera.Instance.Shake(0.2f);
+                if (ScreenEffects.Instance != null)
+                    ScreenEffects.Instance.TriggerMilestoneFlash();
+                HapticManager.HeavyTap();
+            }
+            else if (i == 1)
+            {
+                if (ProceduralAudio.Instance != null)
+                    ProceduralAudio.Instance.PlayCoinCollect();
+                HapticManager.MediumTap();
+            }
+            else
+            {
+                if (ProceduralAudio.Instance != null)
+                    ProceduralAudio.Instance.PlayCoinCollect();
+                HapticManager.LightTap();
+            }
 
-            HapticManager.LightTap();
-
-            yield return new WaitForSeconds(0.6f);
+            // Longer pause before 1st place reveal for suspense
+            yield return new WaitForSeconds(r == 1 ? 1.0f : 0.7f);
         }
 
         // Start confetti after all revealed
         if (_confetti != null)
             _confetti.Play();
+
+        // Poop crew goes wild
+        if (CheerOverlay.Instance != null)
+            CheerOverlay.Instance.ShowCheer("POODIUM!", GoldColor, true);
 
         // Pan camera to podium
         StartCoroutine(PodiumCameraSequence());
@@ -504,38 +573,64 @@ public class RaceFinish : MonoBehaviour
 
         _confetti = confettiObj.AddComponent<ParticleSystem>();
         var main = _confetti.main;
-        main.startLifetime = 3f;
-        main.startSpeed = 2f;
-        main.startSize = 0.15f;
-        main.maxParticles = 200;
+        main.startLifetime = new ParticleSystem.MinMaxCurve(2.5f, 4f);
+        main.startSpeed = new ParticleSystem.MinMaxCurve(1.5f, 3f);
+        main.startSize = new ParticleSystem.MinMaxCurve(0.08f, 0.2f);
+        main.maxParticles = 300;
         main.loop = true;
         main.startColor = new ParticleSystem.MinMaxGradient(GoldColor, new Color(0.2f, 0.8f, 0.3f));
-        main.gravityModifier = 0.3f;
+        main.gravityModifier = 0.4f;
         main.simulationSpace = ParticleSystemSimulationSpace.World;
+        main.startRotation = new ParticleSystem.MinMaxCurve(0f, 360f * Mathf.Deg2Rad);
 
         var emission = _confetti.emission;
-        emission.rateOverTime = 50f;
+        emission.rateOverTime = 70f;
 
         var shape = _confetti.shape;
         shape.shapeType = ParticleSystemShapeType.Box;
-        shape.scale = new Vector3(8f, 0.1f, 4f);
+        shape.scale = new Vector3(10f, 0.1f, 5f);
+
+        // Rotation over lifetime for tumbling confetti
+        var rotation = _confetti.rotationOverLifetime;
+        rotation.enabled = true;
+        rotation.z = new ParticleSystem.MinMaxCurve(-180f * Mathf.Deg2Rad, 180f * Mathf.Deg2Rad);
+
+        // Velocity noise for fluttering
+        var noise = _confetti.noise;
+        noise.enabled = true;
+        noise.strength = 0.5f;
+        noise.frequency = 2f;
+        noise.scrollSpeed = 0.5f;
 
         var colorOverLife = _confetti.colorOverLifetime;
         colorOverLife.enabled = true;
-        Gradient grad = new Gradient();
-        grad.SetKeys(
+        Gradient grad1 = new Gradient();
+        grad1.SetKeys(
             new GradientColorKey[] {
                 new GradientColorKey(Color.white, 0f),
-                new GradientColorKey(GoldColor, 0.5f),
+                new GradientColorKey(GoldColor, 0.4f),
                 new GradientColorKey(new Color(0.8f, 0.2f, 0.2f), 1f)
             },
             new GradientAlphaKey[] {
                 new GradientAlphaKey(1f, 0f),
-                new GradientAlphaKey(1f, 0.7f),
+                new GradientAlphaKey(1f, 0.6f),
                 new GradientAlphaKey(0f, 1f)
             }
         );
-        colorOverLife.color = new ParticleSystem.MinMaxGradient(grad);
+        Gradient grad2 = new Gradient();
+        grad2.SetKeys(
+            new GradientColorKey[] {
+                new GradientColorKey(Color.white, 0f),
+                new GradientColorKey(new Color(0.3f, 1f, 0.4f), 0.4f),
+                new GradientColorKey(new Color(0.2f, 0.4f, 1f), 1f)
+            },
+            new GradientAlphaKey[] {
+                new GradientAlphaKey(1f, 0f),
+                new GradientAlphaKey(1f, 0.6f),
+                new GradientAlphaKey(0f, 1f)
+            }
+        );
+        colorOverLife.color = new ParticleSystem.MinMaxGradient(grad1, grad2);
 
         // Use default particle material
         ParticleSystemRenderer psr = confettiObj.GetComponent<ParticleSystemRenderer>();
@@ -587,17 +682,47 @@ public class RaceFinish : MonoBehaviour
 
     IEnumerator SlotPunchAnimation(RectTransform rect)
     {
-        float duration = 0.4f;
+        // Elastic ease-out: starts at 1.5x, settles to 1.0 with spring bounce
+        float duration = 0.6f;
         float elapsed = 0f;
+        rect.localScale = Vector3.one * 1.5f;
         while (elapsed < duration)
         {
             elapsed += Time.deltaTime;
             float t = elapsed / duration;
-            float scale = 1f + Mathf.Sin(t * Mathf.PI) * 0.2f;
+            float elastic = Mathf.Pow(2f, -8f * t) * Mathf.Sin((t - 0.1f) * Mathf.PI * 2f / 0.35f);
+            float scale = 1f + elastic * 0.3f;
             rect.localScale = new Vector3(scale, scale, 1f);
             yield return null;
         }
         rect.localScale = Vector3.one;
+    }
+
+    void Update()
+    {
+        // Animate banner place text with color shimmer after showing
+        if (_bannerGroup != null && _bannerGroup.alpha > 0.5f && _placeText != null)
+        {
+            float sinceShow = Time.unscaledTime - _bannerShowTime;
+            if (sinceShow > 0.8f && sinceShow < 6f)
+            {
+                // Gentle shimmer on the place text (uses stored base color)
+                float shimmer = Mathf.Sin(sinceShow * 3f) * 0.15f;
+                _placeText.color = new Color(
+                    Mathf.Clamp01(_placeBaseColor.r + shimmer),
+                    Mathf.Clamp01(_placeBaseColor.g + shimmer * 0.5f),
+                    Mathf.Clamp01(_placeBaseColor.b),
+                    1f);
+            }
+        }
+
+        // Podium title gold pulse
+        if (_poodiumTitle != null && _podiumGroup != null && _podiumGroup.alpha > 0.5f)
+        {
+            _podiumTitlePhase += Time.deltaTime;
+            float pulse = 0.8f + Mathf.Sin(_podiumTitlePhase * 2.5f) * 0.2f;
+            _poodiumTitle.color = new Color(GoldColor.r * pulse, GoldColor.g * pulse, GoldColor.b * 0.1f);
+        }
     }
 
     /// <summary>Hide all finish UI (for race restart).</summary>
