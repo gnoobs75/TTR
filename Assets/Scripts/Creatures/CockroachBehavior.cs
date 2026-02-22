@@ -7,6 +7,7 @@ using System.Collections.Generic;
 /// </summary>
 public class CockroachBehavior : ObstacleBehavior
 {
+    public override Color HitFlashColor => new Color(0.4f, 0.2f, 0f); // roach guts brown
     private List<Transform> _antennae = new List<Transform>();
     private List<Transform> _legs = new List<Transform>();
     private List<Transform> _mandibles = new List<Transform>();

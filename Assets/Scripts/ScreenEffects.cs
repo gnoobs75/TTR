@@ -389,6 +389,17 @@ public class ScreenEffects : MonoBehaviour
         _vignetteIntensity = Mathf.Max(_vignetteIntensity, 0.6f); // darken edges on hit
     }
 
+    /// <summary>Obstacle-type-specific colored hit flash.</summary>
+    public void TriggerHitFlash(Color obstacleColor)
+    {
+        _hitFlashAlpha = 0.5f;
+        _hitFlashColor = new Color(obstacleColor.r, obstacleColor.g, obstacleColor.b, 0.5f);
+        _dangerAlpha = 1f;
+        _chromaticIntensity = 1f;
+        _vignetteIntensity = Mathf.Max(_vignetteIntensity, 0.6f);
+        Invoke(nameof(ResetFlashColor), 0.4f);
+    }
+
     /// <summary>Brief yellow flash for invincibility end.</summary>
     public void TriggerInvincibilityFlash()
     {
@@ -408,8 +419,8 @@ public class ScreenEffects : MonoBehaviour
     {
         float t = Mathf.Clamp01((currentSpeed - _speedThreshold) / 8f);
         _speedIntensity = Mathf.Lerp(_speedIntensity, t, Time.deltaTime * 3f);
-        // Speed vignette: tunnel vision at high speed, tints toward sewer-green at extreme
-        float vigTarget = t * 0.35f;
+        // Speed vignette: progressive tunnel vision (stronger curve at extreme speed)
+        float vigTarget = t * t * 0.45f; // quadratic ramp for more dramatic extreme-speed feel
         _vignetteIntensity = Mathf.Max(_vignetteIntensity, vigTarget);
         // Speed streaks: radial lines at high speed
         _speedStreakIntensity = Mathf.Lerp(_speedStreakIntensity, t, Time.deltaTime * 4f);

@@ -1226,35 +1226,63 @@ public class RaceManager : MonoBehaviour
         }
         if (_lastHudPosition < 0) _lastHudPosition = playerPos;
 
-        // Animate punch
+        // Elastic bounce on position change (0.6s, overshoot and settle)
         float since = Time.time - _positionHudPunchTime;
-        if (since < 0.3f)
+        if (since < 0.6f)
         {
-            float punch = 1f + (1f - since / 0.3f) * 0.4f;
-            _positionHudText.transform.localScale = Vector3.one * punch;
+            float t = since / 0.6f;
+            float elastic = Mathf.Pow(2f, -8f * t) * Mathf.Sin((t - 0.1f) * Mathf.PI * 2f / 0.35f);
+            float scale = 1f + elastic * 0.5f;
+            _positionHudText.transform.localScale = Vector3.one * scale;
         }
         else
         {
             _positionHudText.transform.localScale = Vector3.one;
         }
 
-        // Animate position change arrow (slide + fade over 1.2 seconds)
+        // 1st place golden shimmer
+        if (playerPos == 1)
+        {
+            float shimmer = 0.85f + Mathf.Sin(Time.time * 4f) * 0.15f;
+            _positionHudText.color = new Color(1f, shimmer, 0.1f);
+        }
+
+        // Pressure pulse: flash text when racer behind is closing in fast
+        if (gapBehind > 0f && gapBehind < 1.5f && playerPos <= 3)
+        {
+            float pulse = Mathf.Abs(Mathf.Sin(Time.time * 6f));
+            Color flash = Color.Lerp(posColor, Color.white, pulse * 0.4f);
+            _positionHudText.color = flash;
+        }
+
+        // Animate position change arrow (elastic bounce + slide + fade over 1.5s)
         if (_posChangeArrow != null)
         {
             float arrowElapsed = Time.time - _posChangeShowTime;
-            if (arrowElapsed < 1.2f)
+            if (arrowElapsed < 1.5f)
             {
-                float t = arrowElapsed / 1.2f;
-                // Slide up (for gain) or down (for loss) while fading
-                float slide = _posChangeUp ? -t * 20f : t * 20f;
+                float t = arrowElapsed / 1.5f;
+
+                // Elastic entry then smooth slide
+                float slideDir = _posChangeUp ? -1f : 1f;
+                float elasticPhase = Mathf.Min(t * 3f, 1f); // first 1/3 is elastic
+                float elasticBounce = Mathf.Pow(2f, -6f * elasticPhase) * Mathf.Sin(elasticPhase * Mathf.PI * 3f);
+                float slide = slideDir * (t * 25f + elasticBounce * 8f);
                 _posChangeArrow.transform.localPosition = new Vector3(0f, slide, 0f);
 
-                // Fade out over last 40%
-                float alpha = t < 0.6f ? 1f : 1f - (t - 0.6f) / 0.4f;
-                // Pulse scale at the start
-                float arrowScale = t < 0.15f ? 1f + (1f - t / 0.15f) * 0.6f : 1f;
+                // Elastic scale pop at start
+                float arrowScale;
+                if (t < 0.2f)
+                {
+                    float st = t / 0.2f;
+                    float se = Mathf.Pow(2f, -8f * st) * Mathf.Sin((st - 0.075f) * Mathf.PI * 2f / 0.3f);
+                    arrowScale = 1f + se * 0.8f;
+                }
+                else arrowScale = 1f;
                 _posChangeArrow.transform.localScale = Vector3.one * arrowScale;
 
+                // Fade out over last 35%
+                float alpha = t < 0.65f ? 1f : 1f - (t - 0.65f) / 0.35f;
                 Color c = _posChangeArrow.color;
                 c.a = alpha;
                 _posChangeArrow.color = c;

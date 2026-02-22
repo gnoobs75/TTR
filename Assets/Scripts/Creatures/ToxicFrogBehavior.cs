@@ -7,6 +7,7 @@ using UnityEngine;
 /// </summary>
 public class ToxicFrogBehavior : ObstacleBehavior
 {
+    public override Color HitFlashColor => new Color(0.1f, 0.8f, 0.2f); // slimy green
     [Header("Frog")]
     public float hopInterval = 2.5f;
     public float hopHeight = 0.4f;

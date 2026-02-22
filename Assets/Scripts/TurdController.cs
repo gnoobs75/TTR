@@ -524,9 +524,14 @@ public class TurdController : MonoBehaviour
             ProceduralAudio.Instance.PlayObstacleHit();
         HapticManager.HeavyTap();
 
-        // Screen flash overlay
+        // Screen flash overlay (obstacle-type-specific color)
         if (ScreenEffects.Instance != null)
-            ScreenEffects.Instance.TriggerHitFlash();
+        {
+            if (obstacle != null)
+                ScreenEffects.Instance.TriggerHitFlash(obstacle.HitFlashColor);
+            else
+                ScreenEffects.Instance.TriggerHitFlash();
+        }
 
         // Camera recoil (backward kick on impact)
         if (PipeCamera.Instance != null)

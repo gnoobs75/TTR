@@ -16,6 +16,9 @@ public abstract class ObstacleBehavior : MonoBehaviour
     [Tooltip("Rotate to face the player when nearby")]
     public bool facePlayer = true;
 
+    /// <summary>Color used for screen flash when this obstacle hits the player.</summary>
+    public virtual Color HitFlashColor => new Color(1f, 0.15f, 0.05f); // default red
+
     protected Transform _player;
     protected bool _playerNearby;
     protected bool _playerApproaching;

@@ -9,6 +9,7 @@ using System.Collections.Generic;
 /// </summary>
 public class SewerMineBehavior : ObstacleBehavior
 {
+    public override Color HitFlashColor => new Color(1f, 0.5f, 0f); // explosive orange
     private Transform _fuseSparkLight;
     private Renderer _sparkRenderer;
     private MaterialPropertyBlock _mpb;

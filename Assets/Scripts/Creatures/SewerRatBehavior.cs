@@ -7,6 +7,7 @@ using UnityEngine;
 /// </summary>
 public class SewerRatBehavior : ObstacleBehavior
 {
+    public override Color HitFlashColor => new Color(0.6f, 0.4f, 0.3f); // dirty fur
     [Header("Orbit Settings")]
     public float orbitSpeed = 100f; // degrees per second around the pipe
     public float spawnDistToCenter = 2.1f; // set by spawner (actual distance to pipe center)

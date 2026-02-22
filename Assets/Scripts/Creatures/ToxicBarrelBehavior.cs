@@ -5,6 +5,7 @@ using UnityEngine;
 /// </summary>
 public class ToxicBarrelBehavior : ObstacleBehavior
 {
+    public override Color HitFlashColor => new Color(0.2f, 0.9f, 0.1f); // toxic green splash
     private Transform _skull;
     private Transform _slime;
     private Renderer[] _renderers;

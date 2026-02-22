@@ -7,6 +7,7 @@ using UnityEngine;
 /// </summary>
 public class SewerSpiderBehavior : ObstacleBehavior
 {
+    public override Color HitFlashColor => new Color(0.5f, 0.1f, 0.6f); // creepy purple
     [Header("Spider")]
     public float scuttleSpeed = 2f;
     public float dropSpeed = 4f;

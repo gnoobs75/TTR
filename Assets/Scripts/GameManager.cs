@@ -55,6 +55,16 @@ public class GameManager : MonoBehaviour
     // Fork approach warning
     private PipeFork _warnedFork;
 
+    // Speed milestones (one-shot announcements when hitting speed thresholds)
+    private int _speedMilestoneReached = -1;
+    private static readonly float[] SpeedThresholds = { 9f, 11f, 13f };
+    private static readonly string[] SpeedNames = { "PICKING UP SPEED!", "TURBO MODE!", "LUDICROUS SPEED!" };
+    private static readonly Color[] SpeedColors = {
+        new Color(0.3f, 0.9f, 1f),   // cyan
+        new Color(1f, 0.6f, 0f),     // orange
+        new Color(1f, 0.2f, 0.8f)    // hot pink
+    };
+
     public int RunCoins => _runCoins;
     public float Multiplier => _multiplier;
 
@@ -122,6 +132,7 @@ public class GameManager : MonoBehaviour
         _multiplier = 1f;
         _multiplierTimer = 0f;
         _nextMilestoneIdx = 0;
+        _speedMilestoneReached = -1;
         if (ComboSystem.Instance != null)
             ComboSystem.Instance.ResetCombo();
         if (ProceduralAudio.Instance != null)
@@ -246,6 +257,27 @@ public class GameManager : MonoBehaviour
             ParticleManager.Instance.UpdateSewerBubbles(
                 player.transform.position + Vector3.down * 2.5f);
             ParticleManager.Instance.UpdateStinkIntensity(player.CurrentSpeed);
+        }
+
+        // Speed milestones (one-shot announcement per threshold)
+        if (player != null)
+        {
+            float speed = player.CurrentSpeed;
+            for (int i = SpeedThresholds.Length - 1; i >= 0; i--)
+            {
+                if (speed >= SpeedThresholds[i] && i > _speedMilestoneReached)
+                {
+                    _speedMilestoneReached = i;
+                    if (CheerOverlay.Instance != null)
+                        CheerOverlay.Instance.ShowCheer(SpeedNames[i], SpeedColors[i], i >= 2);
+                    if (PipeCamera.Instance != null)
+                        PipeCamera.Instance.PunchFOV(3f + i * 2f);
+                    if (ScreenEffects.Instance != null)
+                        ScreenEffects.Instance.FlashSpeedStreaks(0.6f + i * 0.2f);
+                    HapticManager.LightTap();
+                    break;
+                }
+            }
         }
 
         if (gameUI != null)

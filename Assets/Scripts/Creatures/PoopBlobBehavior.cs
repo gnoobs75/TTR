@@ -6,6 +6,7 @@ using System.Collections.Generic;
 /// </summary>
 public class PoopBlobBehavior : ObstacleBehavior
 {
+    public override Color HitFlashColor => new Color(0.5f, 0.3f, 0.1f); // brown squish
     private Vector3 _originalScale;
     private List<Transform> _tears = new List<Transform>();
     private List<Transform> _flies = new List<Transform>();

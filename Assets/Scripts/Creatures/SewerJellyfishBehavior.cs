@@ -7,6 +7,7 @@ using UnityEngine;
 /// </summary>
 public class SewerJellyfishBehavior : ObstacleBehavior
 {
+    public override Color HitFlashColor => new Color(0.3f, 0.6f, 1f); // electric blue sting
     [Header("Jellyfish")]
     public float pulseSpeed = 2f;
     public float pulseAmount = 0.15f;
