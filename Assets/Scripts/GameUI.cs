@@ -190,6 +190,12 @@ public class GameUI : MonoBehaviour
     private Text _magnetIndicator;
     private bool _magnetIndicatorCreated;
 
+    // Race position indicator
+    private Text _racePositionText;
+    private bool _racePositionCreated;
+    private int _lastRacePosition;
+    private float _racePosChangeTime;
+
     // Fork preview arrows
     private RectTransform _forkArrowRoot;
     private CanvasGroup _forkArrowGroup;
@@ -272,6 +278,9 @@ public class GameUI : MonoBehaviour
 
         // Update fork preview arrows
         UpdateForkArrows();
+
+        // Update race position
+        UpdateRacePosition();
     }
 
     void CreateBoostBar()
@@ -687,6 +696,86 @@ public class GameUI : MonoBehaviour
     {
         if (_forkArrowRoot != null && _forkArrowRoot.gameObject.activeSelf)
             _forkArrowRoot.gameObject.SetActive(false);
+    }
+
+    void CreateRacePosition()
+    {
+        if (_racePositionCreated) return;
+        _racePositionCreated = true;
+
+        Canvas canvas = GetComponentInParent<Canvas>();
+        if (canvas == null) return;
+
+        Font font = Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
+        if (font == null) font = Font.CreateDynamicFontFromOSFont("Arial", 14);
+
+        // Large position indicator top-left
+        GameObject obj = new GameObject("RacePosition");
+        RectTransform rt = obj.AddComponent<RectTransform>();
+        rt.SetParent(canvas.transform, false);
+        rt.anchorMin = new Vector2(0.02f, 0.85f);
+        rt.anchorMax = new Vector2(0.18f, 0.95f);
+        rt.offsetMin = Vector2.zero;
+        rt.offsetMax = Vector2.zero;
+
+        _racePositionText = obj.AddComponent<Text>();
+        _racePositionText.font = font;
+        _racePositionText.fontSize = Mathf.RoundToInt(28 * _uiScale);
+        _racePositionText.alignment = TextAnchor.MiddleLeft;
+        _racePositionText.fontStyle = FontStyle.Bold;
+        _racePositionText.color = Color.white;
+
+        Outline ol = obj.AddComponent<Outline>();
+        ol.effectColor = new Color(0, 0, 0, 0.9f);
+        ol.effectDistance = new Vector2(2, -2);
+
+        obj.SetActive(false);
+    }
+
+    void UpdateRacePosition()
+    {
+        if (RaceManager.Instance == null ||
+            (RaceManager.Instance.RaceState != RaceManager.State.Racing &&
+             RaceManager.Instance.RaceState != RaceManager.State.PlayerFinished))
+        {
+            if (_racePositionText != null && _racePositionText.gameObject.activeSelf)
+                _racePositionText.gameObject.SetActive(false);
+            return;
+        }
+
+        if (!_racePositionCreated) CreateRacePosition();
+        if (_racePositionText == null) return;
+
+        _racePositionText.gameObject.SetActive(true);
+
+        int pos = RaceManager.Instance.GetPlayerPosition();
+        string ordinal = pos == 1 ? "ST" : pos == 2 ? "ND" : pos == 3 ? "RD" : "TH";
+        _racePositionText.text = $"{pos}{ordinal} / 5";
+
+        // Color by position
+        Color posColor;
+        if (pos == 1) posColor = new Color(1f, 0.85f, 0.2f);      // gold
+        else if (pos == 2) posColor = new Color(0.8f, 0.8f, 0.9f); // silver
+        else if (pos == 3) posColor = new Color(0.8f, 0.55f, 0.3f);// bronze
+        else posColor = new Color(0.7f, 0.3f, 0.3f);               // red-ish
+
+        // Punch animation on position change
+        if (pos != _lastRacePosition && _lastRacePosition > 0)
+        {
+            _racePosChangeTime = Time.time;
+            if (pos < _lastRacePosition && ProceduralAudio.Instance != null)
+                ProceduralAudio.Instance.PlayComboUp(); // moving up!
+            HapticManager.LightTap();
+        }
+        _lastRacePosition = pos;
+
+        float changeSince = Time.time - _racePosChangeTime;
+        float scale = 1f;
+        if (changeSince < 0.3f)
+            scale = 1f + (1f - changeSince / 0.3f) * 0.4f;
+
+        _racePositionText.color = posColor;
+        _racePositionText.transform.localScale = Vector3.one * scale;
     }
 
     public void UpdateMultiplier(float mult)

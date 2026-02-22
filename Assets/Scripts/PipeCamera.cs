@@ -47,6 +47,7 @@ public class PipeCamera : MonoBehaviour
     private float _breathePhase;   // subtle organic camera breathing
     private float _recoilAmount;   // backward kick on collision
     private float _lastSpeed;      // for acceleration lean
+    private float _tensionBlend;   // 0-1 tension when stunned (tighter camera)
 
     void Awake()
     {
@@ -71,8 +72,19 @@ public class PipeCamera : MonoBehaviour
         {
             float playerDist = _tc.DistanceTraveled;
 
+            // === TENSION: Tighter camera when stunned for claustrophobic feel ===
+            float tensionTarget = 0f;
+            if (_tc.CurrentHitState == TurdController.HitState.Stunned)
+                tensionTarget = 1f;
+            else if (_tc.CurrentHitState == TurdController.HitState.Recovering)
+                tensionTarget = 0.4f;
+            _tensionBlend = Mathf.Lerp(_tensionBlend, tensionTarget, Time.deltaTime * (tensionTarget > _tensionBlend ? 12f : 3f));
+
+            float effectiveFollow = Mathf.Lerp(followDistance, followDistance * 0.6f, _tensionBlend);
+            float effectivePull = Mathf.Lerp(centerPull, centerPull + 0.2f, _tensionBlend);
+
             // === CAMERA POSITION: Behind the turd, elevated toward center ===
-            float camDist = Mathf.Max(0f, playerDist - followDistance);
+            float camDist = Mathf.Max(0f, playerDist - effectiveFollow);
             Vector3 camCenter, camFwd, camRight, camUp;
             Vector3 playerCenter, playerFwd, playerRight, playerUp;
 
@@ -118,7 +130,7 @@ public class PipeCamera : MonoBehaviour
 
             // Camera: behind player on the path, at the player's angular position
             // but pulled toward pipe center by centerPull (0.45 = slightly above/behind)
-            Vector3 desiredPos = camCenter + playerOffset * (1f - centerPull);
+            Vector3 desiredPos = camCenter + playerOffset * (1f - effectivePull);
 
             // === LOOK TARGET: Ahead of the turd, at the turd's level ===
             // Dynamic look-ahead: further ahead at higher speeds
@@ -186,7 +198,8 @@ public class PipeCamera : MonoBehaviour
             {
                 float speedNorm = playerDist > 1f
                     ? Mathf.InverseLerp(6f, 14f, _tc.CurrentSpeed) : 0f;
-                float targetFOV = baseFOV + speedNorm * speedFOVBoost + _fovPunch;
+                float tensionFOV = _tensionBlend * -4f; // narrow FOV when stunned
+                float targetFOV = baseFOV + speedNorm * speedFOVBoost + _fovPunch + tensionFOV;
                 _cam.fieldOfView = Mathf.Lerp(_cam.fieldOfView, targetFOV, Time.deltaTime * 5f);
             }
 

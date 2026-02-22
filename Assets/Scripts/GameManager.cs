@@ -331,10 +331,40 @@ public class GameManager : MonoBehaviour
         AddScore(scorePerCoin);
     }
 
+    // Near-miss streak milestones
+    private static readonly int[] DodgeMilestones = { 3, 5, 10, 20 };
+    private static readonly string[] DodgeNames = { "SLIPPERY!", "UNTOUCHABLE!", "GHOST MODE!", "PHANTOM FLUSH!" };
+    private static readonly Color[] DodgeColors = {
+        new Color(0.3f, 0.9f, 1f),     // cyan
+        new Color(0.4f, 0.6f, 1f),     // blue
+        new Color(0.7f, 0.3f, 1f),     // purple
+        new Color(1f, 0.85f, 0.2f)     // gold
+    };
+
     public void RecordNearMiss()
     {
         _runNearMisses++;
         _nearMissStreak++;
+
+        // Dodge streak milestones
+        for (int i = DodgeMilestones.Length - 1; i >= 0; i--)
+        {
+            if (_nearMissStreak == DodgeMilestones[i])
+            {
+                int bonus = 50 * (i + 1);
+                AddScore(bonus);
+                if (CheerOverlay.Instance != null)
+                    CheerOverlay.Instance.ShowCheer(DodgeNames[i], DodgeColors[i], i >= 2);
+                if (ScorePopup.Instance != null && player != null)
+                    ScorePopup.Instance.Show(player.transform.position + Vector3.up * 1.5f, bonus);
+                if (PipeCamera.Instance != null)
+                    PipeCamera.Instance.PunchFOV(2f + i * 1.5f);
+                if (i >= 1 && ProceduralAudio.Instance != null)
+                    ProceduralAudio.Instance.PlayComboUp();
+                HapticManager.LightTap();
+                break;
+            }
+        }
     }
 
     public void RecordCombo(int comboCount)
