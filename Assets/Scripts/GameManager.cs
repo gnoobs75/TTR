@@ -455,8 +455,9 @@ public class GameManager : MonoBehaviour
         if (PauseMenu.Instance != null)
             PauseMenu.Instance.HidePauseButton();
 
-        if (gameUI != null)
-            gameUI.ShowGameOver(finalScore, PlayerData.HighScore, _runCoins, distanceTraveled, _runNearMisses, _runBestCombo);
+        // Delay game-over screen slightly so death effects breathe
+        int _finalScore = finalScore;
+        StartCoroutine(DelayedGameOver(_finalScore, _runCoins, distanceTraveled, _runNearMisses, _runBestCombo));
 
         // Game Center: report scores and check zone achievements
         if (GameCenterManager.Instance != null)
@@ -490,7 +491,47 @@ public class GameManager : MonoBehaviour
             RaceManager.Instance.OnPlayerCrashed();
 
         if (player != null)
+        {
             player.enabled = false;
+            // Start death tumble animation on the model
+            StartCoroutine(DeathTumble(player.transform));
+        }
+    }
+
+    IEnumerator DelayedGameOver(int finalScore, int coins, float distance, int nearMisses, int bestCombo)
+    {
+        // Brief pause so camera shake and death effects play out
+        yield return new WaitForSecondsRealtime(0.35f);
+        if (gameUI != null)
+            gameUI.ShowGameOver(finalScore, PlayerData.HighScore, coins, distance, nearMisses, bestCombo);
+    }
+
+    IEnumerator DeathTumble(Transform playerTransform)
+    {
+        if (playerTransform == null) yield break;
+        Vector3 startScale = playerTransform.localScale;
+        Quaternion startRot = playerTransform.rotation;
+        float elapsed = 0f;
+        float duration = 0.8f;
+        // Random tumble axis for variety
+        Vector3 tumbleAxis = new Vector3(
+            Random.Range(-1f, 1f), Random.Range(0.5f, 1f), Random.Range(-1f, 1f)).normalized;
+
+        while (elapsed < duration && playerTransform != null)
+        {
+            elapsed += Time.unscaledDeltaTime;
+            float t = elapsed / duration;
+            // Tumble rotation (accelerating spin)
+            float angle = t * t * 360f;
+            playerTransform.rotation = startRot * Quaternion.AngleAxis(angle, tumbleAxis);
+            // Shrink toward end (starts at 60% through)
+            float shrink = t > 0.6f ? Mathf.Lerp(1f, 0.1f, (t - 0.6f) / 0.4f) : 1f;
+            playerTransform.localScale = startScale * shrink;
+            yield return null;
+        }
+        // Hide the model at the end
+        if (playerTransform != null)
+            playerTransform.localScale = Vector3.zero;
     }
 
     public void RestartGame()
