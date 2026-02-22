@@ -65,9 +65,13 @@ public class Obstacle : MonoBehaviour
 
             tc.StompBounce();
 
-            // Squash VFX
+            // Squash VFX (obstacle-colored burst for variety)
             if (ParticleManager.Instance != null)
-                ParticleManager.Instance.PlayHitExplosion(transform.position);
+            {
+                Color stompColor = behavior != null ? behavior.HitFlashColor : Color.white;
+                ParticleManager.Instance.PlayHitExplosion(transform.position, stompColor);
+                ParticleManager.Instance.PlayStompSquash(transform.position, stompColor);
+            }
 
             // Disable collider so it can't hit player again
             Collider col = GetComponent<Collider>();

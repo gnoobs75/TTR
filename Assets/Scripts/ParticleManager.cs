@@ -497,6 +497,26 @@ public class ParticleManager : MonoBehaviour
     public void PlaySpiderWeb(Vector3 position) => PlayAt(_spiderWeb, position);
     public void PlayStompSquash(Vector3 position) => PlayAt(_stompSquash, position);
 
+    /// <summary>Stomp burst with obstacle-specific color.</summary>
+    public void PlayStompSquash(Vector3 position, Color color)
+    {
+        if (_stompSquash == null) return;
+        var main = _stompSquash.main;
+        Color darkColor = new Color(color.r * 0.5f, color.g * 0.5f, color.b * 0.5f);
+        main.startColor = new ParticleSystem.MinMaxGradient(color, darkColor);
+        PlayAt(_stompSquash, position);
+    }
+
+    /// <summary>Hit explosion with obstacle-specific color.</summary>
+    public void PlayHitExplosion(Vector3 position, Color color)
+    {
+        if (_hitExplosion == null) return;
+        var main = _hitExplosion.main;
+        Color darkColor = new Color(color.r * 0.5f, color.g * 0.5f, color.b * 0.5f);
+        main.startColor = new ParticleSystem.MinMaxGradient(color, darkColor);
+        PlayAt(_hitExplosion, position);
+    }
+
     // === UNDERWATER DIVE VFX ===
 
     ParticleSystem CreateUnderwaterBubbles()

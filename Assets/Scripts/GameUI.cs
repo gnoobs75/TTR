@@ -437,6 +437,15 @@ public class GameUI : MonoBehaviour
                 }
             }
 
+            // Zone context: where you died
+            if (PipeZoneSystem.Instance != null)
+                stats += $"\nZone: {PipeZoneSystem.Instance.CurrentZoneName}";
+
+            // Stat-based flavor line
+            string flavor = GetStatFlavor(coins, nearMisses, bestCombo, distance);
+            if (!string.IsNullOrEmpty(flavor))
+                stats += $"\n<size=18><i>{flavor}</i></size>";
+
             runStatsText.text = stats;
         }
 
@@ -619,5 +628,23 @@ public class GameUI : MonoBehaviour
         if (n == 2) return "ND";
         if (n == 3) return "RD";
         return "TH";
+    }
+
+    /// <summary>Pick a stat-based flavor quip for the game over screen.</summary>
+    static string GetStatFlavor(int coins, int nearMisses, int bestCombo, float distance)
+    {
+        // Priority: highlight their best achievement
+        if (bestCombo >= 15) return "Combo legend!";
+        if (coins >= 50) return "Fartcoin millionaire in the making!";
+        if (nearMisses >= 10) return "Living on the edge!";
+        if (distance >= 800f) return "So close to Brown Town!";
+        if (distance >= 500f) return "Deep in the pipes!";
+        if (bestCombo >= 8) return "Nice combo skills!";
+        if (coins >= 20) return "Coin magnet!";
+        if (nearMisses >= 5) return "Daredevil poop!";
+        if (distance >= 200f) return "Getting the hang of it!";
+        if (distance < 30f) return "That was quick...";
+        if (coins == 0) return "Not a single coin? Ouch.";
+        return "";
     }
 }

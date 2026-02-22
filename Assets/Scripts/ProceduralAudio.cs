@@ -86,6 +86,11 @@ public class ProceduralAudio : MonoBehaviour
     private float _targetMusicVol = 1f;
     private float _currentMusicVol = 1f;
 
+    // Dynamic music state
+    private float _stunDipTimer;       // drops pitch/vol briefly on stun
+    private float _rivalProximityPulse; // bass pulse when rival is close
+    private float _zoneTransitionSweep; // pitch wobble on zone change
+
     const int SAMPLE_RATE = 44100;
 
     void Awake()
@@ -827,6 +832,12 @@ public class ProceduralAudio : MonoBehaviour
         _targetMusicVol = Mathf.Lerp(0.85f, 1.1f, t);
     }
 
+    /// <summary>Briefly dip music pitch/volume on player stun.</summary>
+    public void TriggerStunDip() { _stunDipTimer = 0.8f; }
+
+    /// <summary>Brief pitch wobble on zone transition.</summary>
+    public void TriggerZoneSweep() { _zoneTransitionSweep = 0.5f; }
+
     void Update()
     {
         if (_musicSource != null && _musicPlaying)
@@ -851,12 +862,50 @@ public class ProceduralAudio : MonoBehaviour
                 }
             }
 
+            // Stun dip: drop pitch and vol when stunned, recover gradually
+            float pitchMod = 0f;
+            float volMod = 0f;
+            if (_stunDipTimer > 0f)
+            {
+                _stunDipTimer -= Time.deltaTime;
+                float stunT = _stunDipTimer / 0.8f;
+                pitchMod -= stunT * 0.15f; // drop pitch up to 15%
+                volMod -= stunT * 0.25f;   // drop volume 25%
+            }
+
+            // Zone transition sweep: brief pitch wobble
+            if (_zoneTransitionSweep > 0f)
+            {
+                _zoneTransitionSweep -= Time.deltaTime;
+                float sweepT = _zoneTransitionSweep / 0.5f;
+                pitchMod += Mathf.Sin(sweepT * Mathf.PI * 3f) * 0.06f * sweepT;
+            }
+
+            // Rival proximity: subtle volume pulse when someone is close behind
+            if (RaceManager.Instance != null)
+            {
+                float closestBehind = float.MaxValue;
+                float pDist = RaceManager.Instance.PlayerController != null
+                    ? RaceManager.Instance.PlayerController.DistanceTraveled : 0f;
+                foreach (var ai in Object.FindObjectsByType<RacerAI>(FindObjectsSortMode.None))
+                {
+                    if (ai.IsFinished) continue;
+                    float gap = pDist - ai.DistanceTraveled;
+                    if (gap > 0f && gap < closestBehind) closestBehind = gap;
+                }
+                // Pulse intensity based on how close rival is (within 8m)
+                float rivalT = closestBehind < 8f ? 1f - (closestBehind / 8f) : 0f;
+                _rivalProximityPulse = Mathf.Lerp(_rivalProximityPulse, rivalT, Time.deltaTime * 4f);
+                if (_rivalProximityPulse > 0.05f)
+                    volMod += Mathf.Sin(Time.time * 4f) * _rivalProximityPulse * 0.08f;
+            }
+
             // Smooth pitch interpolation (avoids jarring jumps)
-            _currentPitch = Mathf.Lerp(_currentPitch, _targetPitch, Time.deltaTime * 3f);
-            _currentMusicVol = Mathf.Lerp(_currentMusicVol, _targetMusicVol, Time.deltaTime * 3f);
+            _currentPitch = Mathf.Lerp(_currentPitch, _targetPitch + pitchMod, Time.deltaTime * 3f);
+            _currentMusicVol = Mathf.Lerp(_currentMusicVol, _targetMusicVol + volMod, Time.deltaTime * 3f);
 
             _musicSource.pitch = _currentPitch;
-            _musicSource.volume = masterVolume * musicVolume * _currentMusicVol;
+            _musicSource.volume = masterVolume * musicVolume * Mathf.Max(0.1f, _currentMusicVol);
         }
     }
 }

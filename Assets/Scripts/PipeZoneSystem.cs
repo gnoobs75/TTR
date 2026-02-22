@@ -247,7 +247,10 @@ public class PipeZoneSystem : MonoBehaviour
         if (zoneChanged)
         {
             if (ProceduralAudio.Instance != null)
+            {
                 ProceduralAudio.Instance.PlayZoneTransition();
+                ProceduralAudio.Instance.TriggerZoneSweep(); // music pitch wobble on zone change
+            }
             // Show zone name with sewer-themed subtitle
             if (ScorePopup.Instance != null && _tc != null)
             {

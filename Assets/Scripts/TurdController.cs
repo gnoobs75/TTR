@@ -521,7 +521,10 @@ public class TurdController : MonoBehaviour
 
         // Audio + haptics
         if (ProceduralAudio.Instance != null)
+        {
             ProceduralAudio.Instance.PlayObstacleHit();
+            ProceduralAudio.Instance.TriggerStunDip(); // music drops on stun
+        }
         HapticManager.HeavyTap();
 
         // Screen flash overlay (obstacle-type-specific color)
