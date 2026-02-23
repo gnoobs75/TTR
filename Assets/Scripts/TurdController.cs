@@ -95,6 +95,15 @@ public class TurdController : MonoBehaviour
     private float _coinMagnetTimer = 0f;
     private const float COIN_MAGNET_RADIUS = 6f;
 
+    // Power-up: Shield (temporary invincibility without stun)
+    private float _shieldPowerTimer = 0f;
+    public bool IsShieldPowerActive => _shieldPowerTimer > 0f;
+
+    // Power-up: Slow-Mo
+    private float _slowMoTimer = 0f;
+    private float _savedTimeScale = 1f;
+    public bool IsSlowMoActive => _slowMoTimer > 0f;
+
     // Vertical drop state
     private bool _isDropping = false;
     private float _dropTimer = 0f;
@@ -570,6 +579,43 @@ public class TurdController : MonoBehaviour
                 ParticleManager.Instance?.StopCoinMagnet();
         }
 
+        // === SHIELD POWER-UP ===
+        if (_shieldPowerTimer > 0f)
+        {
+            _shieldPowerTimer -= Time.deltaTime;
+            // Pulse shield bubble
+            if (_shieldBubble != null && _shieldMat != null)
+            {
+                float pulse = 1f + Mathf.Sin(Time.time * 3f) * 0.1f;
+                _shieldBubble.transform.localScale = Vector3.one * 0.65f * pulse;
+                float remaining = Mathf.Clamp01(_shieldPowerTimer / 1.5f);
+                Color c = _shieldMat.GetColor("_BaseColor");
+                float alpha = remaining < 1f ? Mathf.Lerp(0.05f, 0.22f, remaining) : 0.22f;
+                _shieldMat.SetColor("_BaseColor", new Color(c.r, c.g, c.b, alpha));
+            }
+            if (_shieldPowerTimer <= 0f)
+            {
+                DestroyShieldBubble();
+                if (ScreenEffects.Instance != null)
+                    ScreenEffects.Instance.TriggerInvincibilityFlash();
+            }
+        }
+
+        // === SLOW-MO POWER-UP ===
+        if (_slowMoTimer > 0f)
+        {
+            _slowMoTimer -= Time.unscaledDeltaTime;
+            if (_slowMoTimer <= 0f)
+            {
+                Time.timeScale = _savedTimeScale;
+                Time.fixedDeltaTime = 0.02f * Time.timeScale;
+                if (ScreenEffects.Instance != null)
+                    ScreenEffects.Instance.TriggerPowerUpFlash();
+                if (CheerOverlay.Instance != null)
+                    CheerOverlay.Instance.ShowCheer("BACK TO SPEED!", new Color(0.3f, 1f, 0.8f), false);
+            }
+        }
+
         // === INVINCIBILITY FLASH ===
         if (_hitState == HitState.Invincible && _renderers != null)
         {
@@ -624,6 +670,23 @@ public class TurdController : MonoBehaviour
     public void TakeHit(ObstacleBehavior obstacle)
     {
         if (_hitState != HitState.Normal) return;
+
+        // Shield power-up absorbs one hit
+        if (_shieldPowerTimer > 0f)
+        {
+            _shieldPowerTimer = 0f;
+            DestroyShieldBubble();
+            if (ScorePopup.Instance != null)
+                ScorePopup.Instance.ShowMilestone(transform.position + Vector3.up * 1.5f, "SHIELD BLOCKED!");
+            if (ScreenEffects.Instance != null)
+                ScreenEffects.Instance.TriggerPowerUpFlash();
+            if (ProceduralAudio.Instance != null)
+                ProceduralAudio.Instance.PlayNearMiss();
+            if (CheerOverlay.Instance != null)
+                CheerOverlay.Instance.ShowCheer("SAVED!", new Color(0.2f, 0.8f, 1f), true);
+            HapticManager.HeavyTap();
+            return;
+        }
 #if UNITY_EDITOR
         Debug.Log($"[HIT] TakeHit by {(obstacle != null ? obstacle.name : "null")} at dist={DistanceTraveled:F1} speed={_currentSpeed:F1} state={_hitState} drop={_isDropping}");
 #endif
@@ -973,6 +1036,52 @@ public class TurdController : MonoBehaviour
         if (PipeCamera.Instance != null)
             PipeCamera.Instance.PunchFOV(3f);
         HapticManager.MediumTap();
+    }
+
+    public void ActivateShieldPower(float duration)
+    {
+        _shieldPowerTimer = duration;
+        CreateShieldBubble();
+
+        // Override shield color to cyan for power-up (vs golden for hit recovery)
+        if (_shieldMat != null)
+        {
+            _shieldMat.SetColor("_BaseColor", new Color(0.2f, 0.85f, 1f, 0.22f));
+            _shieldMat.SetColor("_EmissionColor", new Color(0.1f, 0.6f, 1f) * 0.8f);
+        }
+
+        if (CheerOverlay.Instance != null)
+            CheerOverlay.Instance.ShowCheer("SHIELDED!", new Color(0.2f, 0.85f, 1f), true);
+        if (ScreenEffects.Instance != null)
+            ScreenEffects.Instance.TriggerPowerUpFlash();
+        if (PipeCamera.Instance != null)
+            PipeCamera.Instance.PunchFOV(4f);
+        HapticManager.HeavyTap();
+#if UNITY_EDITOR
+        Debug.Log($"[BOOST] Shield activated for {duration:F1}s");
+#endif
+    }
+
+    public void ActivateSlowMo(float duration, float timeScale = 0.4f)
+    {
+        _slowMoTimer = duration;
+        _savedTimeScale = 1f;
+        Time.timeScale = timeScale;
+        Time.fixedDeltaTime = 0.02f * timeScale;
+
+        if (CheerOverlay.Instance != null)
+            CheerOverlay.Instance.ShowCheer("SLOW-MO!", new Color(0.8f, 0.4f, 1f), true);
+        if (ScreenEffects.Instance != null)
+            ScreenEffects.Instance.SetComboGlow(0.5f);
+        if (PipeCamera.Instance != null)
+        {
+            PipeCamera.Instance.PunchFOV(-4f);
+            PipeCamera.Instance.Shake(0.15f);
+        }
+        HapticManager.HeavyTap();
+#if UNITY_EDITOR
+        Debug.Log($"[BOOST] SlowMo activated for {duration:F1}s at {timeScale:F2}x");
+#endif
     }
 
     void AttractNearbyCoins()

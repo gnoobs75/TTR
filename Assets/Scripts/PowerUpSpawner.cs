@@ -2,8 +2,9 @@ using UnityEngine;
 using System.Collections.Generic;
 
 /// <summary>
-/// Spawns speed boost pads and jump ramps along the pipe path.
+/// Spawns speed boost pads, jump ramps, and special power-ups along the pipe path.
 /// Power-ups can appear on floor, walls, and ceiling - encouraging exploration.
+/// Special power-ups (Shield, Magnet, Slow-Mo) are rarer and appear after 100m.
 /// </summary>
 public class PowerUpSpawner : MonoBehaviour
 {
@@ -17,6 +18,14 @@ public class PowerUpSpawner : MonoBehaviour
     public GameObject speedBoostPrefab;
     public GameObject jumpRampPrefab;
     public GameObject bonusCoinPrefab;
+    public GameObject shieldPrefab;
+    public GameObject magnetPrefab;
+    public GameObject slowMoPrefab;
+
+    [Header("Special Power-Up Settings")]
+    public float specialMinDistance = 100f;
+    public float specialChance = 0.15f; // 15% chance per spawn point (after min distance)
+    public float specialMinSpacing = 80f; // minimum distance between specials
 
     [Header("Player Reference")]
     public Transform player;
@@ -26,6 +35,7 @@ public class PowerUpSpawner : MonoBehaviour
     private float _nextSpawnDist = 40f;
     private List<GameObject> _spawnedObjects = new List<GameObject>();
     private int _typeIndex = 0;
+    private float _lastSpecialDist = -200f;
 
     void Start()
     {
@@ -115,39 +125,75 @@ public class PowerUpSpawner : MonoBehaviour
         float spawnRadius = pipeRadius * 0.82f;
         Vector3 pos = center + (right * Mathf.Cos(angle) + up * Mathf.Sin(angle)) * spawnRadius;
 
-        // In speed corridors: always speed boosts (no jump ramps)
-        // Normal: alternate between speed boost and jump ramp (2:1 ratio)
-        GameObject prefab;
-        if (ObstacleSpawner.IsSpeedCorridor(dist))
+        // Check for special power-up spawn (Shield, Magnet, Slow-Mo)
+        bool spawnedSpecial = false;
+        if (!inCorridor && dist >= specialMinDistance &&
+            dist - _lastSpecialDist >= specialMinSpacing &&
+            Random.value < specialChance)
         {
-            prefab = speedBoostPrefab;
+            GameObject specialPrefab = PickSpecialPrefab();
+            if (specialPrefab != null)
+            {
+                // Specials always on floor for visibility
+                float floorAngle = (270f + Random.Range(-15f, 15f)) * Mathf.Deg2Rad;
+                Vector3 specialPos = center + (right * Mathf.Cos(floorAngle) + up * Mathf.Sin(floorAngle)) * spawnRadius;
+                Vector3 inward = (center - specialPos).normalized;
+                Quaternion rot = Quaternion.LookRotation(forward, inward);
+                GameObject obj = Instantiate(specialPrefab, specialPos, rot, transform);
+                _spawnedObjects.Add(obj);
+                _lastSpecialDist = dist;
+                spawnedSpecial = true;
+#if UNITY_EDITOR
+                Debug.Log($"[SPAWN] Special power-up {specialPrefab.name} at dist={dist:F0}");
+#endif
+            }
         }
-        else
+
+        // Normal spawn: speed boost or jump ramp (skip if we just placed a special)
+        if (!spawnedSpecial)
         {
-            _typeIndex = (_typeIndex + 1) % 3;
-            prefab = _typeIndex < 2 ? speedBoostPrefab : jumpRampPrefab;
+            GameObject prefab;
+            if (inCorridor)
+            {
+                prefab = speedBoostPrefab;
+            }
+            else
+            {
+                _typeIndex = (_typeIndex + 1) % 3;
+                prefab = _typeIndex < 2 ? speedBoostPrefab : jumpRampPrefab;
+            }
+            if (prefab == null) return;
+
+            Vector3 inward = (center - pos).normalized;
+            Quaternion rot = Quaternion.LookRotation(forward, inward);
+            GameObject obj = Instantiate(prefab, pos, rot, transform);
+            _spawnedObjects.Add(obj);
+
+            // Spawn a bonus Fartcoin after every jump ramp - only reachable by jumping
+            if (prefab == jumpRampPrefab && bonusCoinPrefab != null)
+            {
+                float bonusDist = dist + 6f;
+                Vector3 bCenter, bFwd, bRight, bUp;
+                _pipeGen.GetPathFrame(bonusDist, out bCenter, out bFwd, out bRight, out bUp);
+
+                Vector3 coinPos = bCenter - bUp * (pipeRadius * 0.1f);
+                Quaternion coinRot = Quaternion.LookRotation(bFwd, bUp);
+                GameObject coin = Instantiate(bonusCoinPrefab, coinPos, coinRot, transform);
+                _spawnedObjects.Add(coin);
+            }
         }
-        if (prefab == null) return;
+    }
 
-        // Orient: face forward, "up" points inward so it sits on any surface
-        Vector3 inward = (center - pos).normalized;
-        Quaternion rot = Quaternion.LookRotation(forward, inward);
-        GameObject obj = Instantiate(prefab, pos, rot, transform);
-        _spawnedObjects.Add(obj);
-
-        // Spawn a bonus Fartcoin after every jump ramp - only reachable by jumping
-        if (prefab == jumpRampPrefab && bonusCoinPrefab != null)
-        {
-            // Place the coin at the apex of the jump arc: ~6m ahead, ~3m above the surface
-            float bonusDist = dist + 6f;
-            Vector3 bCenter, bFwd, bRight, bUp;
-            _pipeGen.GetPathFrame(bonusDist, out bCenter, out bFwd, out bRight, out bUp);
-
-            // Position coin near pipe center (high up from surface = only reachable mid-air)
-            Vector3 coinPos = bCenter - bUp * (pipeRadius * 0.1f);
-            Quaternion coinRot = Quaternion.LookRotation(bFwd, bUp);
-            GameObject coin = Instantiate(bonusCoinPrefab, coinPos, coinRot, transform);
-            _spawnedObjects.Add(coin);
-        }
+    GameObject PickSpecialPrefab()
+    {
+        // Equal weight: 1/3 each
+        float pick = Random.value;
+        if (pick < 0.33f && shieldPrefab != null) return shieldPrefab;
+        if (pick < 0.66f && magnetPrefab != null) return magnetPrefab;
+        if (slowMoPrefab != null) return slowMoPrefab;
+        // Fallback if some prefabs are null
+        if (shieldPrefab != null) return shieldPrefab;
+        if (magnetPrefab != null) return magnetPrefab;
+        return null;
     }
 }

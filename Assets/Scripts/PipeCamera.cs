@@ -49,6 +49,11 @@ public class PipeCamera : MonoBehaviour
     private Image _fadeOverlay;    // black overlay for fade-in from black
     private float _fadeAlpha = 1f; // starts fully black
 
+    // Fork camera smoothing
+    private Vector3 _smoothTunnelDir;  // smoothed tunnel direction to prevent fork whip
+    private bool _tunnelDirInitialized;
+    private float _camForkBlend;       // camera's own smoothed fork blend (0→1→0)
+
     void Awake()
     {
         Instance = this;
@@ -131,11 +136,9 @@ public class PipeCamera : MonoBehaviour
             Vector3 playerCenter, playerFwd, playerRight, playerUp;
 
             // === FORK-AWARE PATH FOLLOWING ===
-            // Branch paths are just laterally offset from the main pipe — they follow
-            // the same general direction. We use branch POSITIONS for camera placement
-            // but MAIN PATH forward/up for orientation. Branch forward vectors are
-            // unreliable (up to 90° off) because pipe curvature rotates the lateral
-            // offset between samples, corrupting the position-delta tangent.
+            // Strategy: During forks, SNAP to the branch pipe center fast and
+            // stay near center (0.92 pull). Use ONLY the smooth main-path forward
+            // for look direction. SmoothDamp handles the physical transition.
             PipeFork fork = _tc.CurrentFork;
             int branch = _tc.ForkBranch;
             bool inFork = fork != null && branch >= 0;
@@ -146,53 +149,64 @@ public class PipeCamera : MonoBehaviour
 
             if (inFork)
             {
-                // Use the SAME blend as TurdController so camera and player agree
-                // on where "pipe center" is. Without this, playerOffset is wrong
-                // because the player is at a blended position but camera would
-                // subtract the full branch center.
+                // Snap blend toward 1.0 fast so camera is fully in the branch ASAP.
+                // Being "between" pipes is what causes wall clipping.
+                _camForkBlend = Mathf.MoveTowards(_camForkBlend, 1f, Time.deltaTime * 8f);
+
+                // Move BOTH camera and player centers into the branch
                 Vector3 bC, bF, bR, bU;
                 if (fork.GetBranchFrame(branch, camDist, out bC, out bF, out bR, out bU))
-                {
-                    float camBlend = fork.GetBranchBlend(camDist);
-                    camCenter = Vector3.Lerp(camCenter, bC, camBlend);
-                }
+                    camCenter = Vector3.Lerp(camCenter, bC, _camForkBlend);
 
                 Vector3 bPC, bPF, bPR, bPU;
                 if (fork.GetBranchFrame(branch, playerDist, out bPC, out bPF, out bPR, out bPU))
-                {
-                    float pBlend = fork.GetBranchBlend(playerDist);
-                    playerCenter = Vector3.Lerp(playerCenter, bPC, pBlend);
-                }
-            }
+                    playerCenter = Vector3.Lerp(playerCenter, bPC, _camForkBlend);
 
-#if UNITY_EDITOR
-            if (inFork)
+                // Nearly at pipe center during forks — prevents all wall clipping
+                effectivePull = Mathf.Lerp(effectivePull, 0.92f, _camForkBlend);
+            }
+            else
             {
-                float dbgBlend = fork.GetBranchBlend(playerDist);
-                Vector3 td = (playerCenter - camCenter).normalized;
-                Debug.Log($"[CAM] pDist={playerDist:F1} blend={dbgBlend:F2} tunnel=({td.x:F2},{td.y:F2},{td.z:F2}) mainFwd=({playerFwd.x:F2},{playerFwd.y:F2},{playerFwd.z:F2})");
+                // Ease blend back to zero after exiting fork
+                _camForkBlend = Mathf.MoveTowards(_camForkBlend, 0f, Time.deltaTime * 6f);
             }
-#endif
 
-            // Player's offset from pipe center (their position on the pipe wall)
+            // Player's offset from pipe center
             Vector3 playerOffset = target.position - playerCenter;
 
-            // Camera: behind player on the path, at the player's angular position
-            // but pulled toward pipe center by centerPull (0.45 = slightly above/behind)
+            // Camera position: behind player, pulled toward pipe center
             Vector3 desiredPos = camCenter + playerOffset * (1f - effectivePull);
 
-            // === LOOK TARGET: Ahead of the turd along the ACTUAL tunnel direction ===
-            // Use the vector between camera center and player center as the tunnel
-            // direction. This naturally follows the branch curve because both centers
-            // are blended into the branch. Main path forward points straight through
-            // the Y-junction center — wrong when the player is on a branch.
+            // === LOOK TARGET ===
             float dynLookAhead = lookAhead + Mathf.InverseLerp(6f, 14f, _tc.CurrentSpeed) * 4f;
-            Vector3 tunnelDir = (playerCenter - camCenter);
-            if (tunnelDir.sqrMagnitude > 0.01f)
-                tunnelDir.Normalize();
+
+            // During forks (or fading out of fork), use ONLY playerFwd (main path
+            // forward) for look direction. It's always smooth and reliable.
+            // Outside forks, use position-delta tangent for better curve tracking.
+            Vector3 tunnelDir;
+            if (_camForkBlend > 0.01f)
+            {
+                // Pure main-path forward during forks — zero noise
+                tunnelDir = playerFwd;
+            }
             else
-                tunnelDir = playerFwd; // fallback if centers overlap
-            Vector3 lookTarget = target.position + tunnelDir * dynLookAhead;
+            {
+                Vector3 rawDir = (playerCenter - camCenter);
+                tunnelDir = rawDir.sqrMagnitude > 0.01f ? rawDir.normalized : playerFwd;
+            }
+
+            if (!_tunnelDirInitialized)
+            {
+                _smoothTunnelDir = tunnelDir;
+                _tunnelDirInitialized = true;
+            }
+
+            // Smooth direction: fast outside forks, very gentle inside
+            float dirSpeed = _camForkBlend > 0.01f ? 4f : 12f;
+            _smoothTunnelDir = Vector3.Slerp(_smoothTunnelDir, tunnelDir, Time.deltaTime * dirSpeed);
+            _smoothTunnelDir.Normalize();
+
+            Vector3 lookTarget = target.position + _smoothTunnelDir * dynLookAhead;
 
             // === WORLD UP ===
             Vector3 upDir = Vector3.up;
@@ -215,13 +229,14 @@ public class PipeCamera : MonoBehaviour
             transform.position = Vector3.SmoothDamp(
                 transform.position, desiredPos, ref _velocity, 1f / positionSmooth);
 
-            // Smooth rotation to look forward
+            // Smooth rotation to look forward (gentler during forks for stability)
+            float effectiveRotSmooth = _camForkBlend > 0.01f ? rotationSmooth * 0.6f : rotationSmooth;
             Vector3 lookDir = (lookTarget - transform.position);
             if (lookDir.sqrMagnitude > 0.01f)
             {
                 Quaternion targetRot = Quaternion.LookRotation(lookDir.normalized, upDir);
                 transform.rotation = Quaternion.Slerp(
-                    transform.rotation, targetRot, Time.deltaTime * rotationSmooth);
+                    transform.rotation, targetRot, Time.deltaTime * effectiveRotSmooth);
             }
 
             // Hit recoil: pushes camera backward briefly

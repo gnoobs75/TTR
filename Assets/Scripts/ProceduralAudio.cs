@@ -117,6 +117,9 @@ public class ProceduralAudio : MonoBehaviour
     private AudioSource _ambientSource2; // second source for crossfading
     private bool _ambientSwapping; // which source is active
 
+    // Water drain
+    private AudioClip _drainGurgle;
+
     // Tour mode audio
     private AudioClip _tourAmbient;
     private AudioClip _tourEntryChime;
@@ -752,6 +755,22 @@ public class ProceduralAudio : MonoBehaviour
             return (drone + sub + noise + dissonance) * env * 0.5f;
         });
 
+        // Drain gurgle: bubbly water suction sound
+        _drainGurgle = GenerateClip("DrainGurgle", 0.8f, (t, dur) =>
+        {
+            float prog = t / dur;
+            float env = Mathf.Sin(Mathf.PI * prog);
+            // Descending bubbly tone
+            float freq = Mathf.Lerp(300f, 80f, prog);
+            float gurgle = Mathf.Sin(2f * Mathf.PI * freq * t) * 0.3f;
+            // Bubble modulation
+            float bubbles = Mathf.Sin(2f * Mathf.PI * 18f * t) * 0.5f + 0.5f;
+            gurgle *= bubbles;
+            // Water noise
+            float noise = (Random.value * 2f - 1f) * 0.1f * env;
+            return (gurgle + noise) * env * 0.5f;
+        });
+
         // Tour ambient: calm exploratory loop (warm pads, soft drips)
         _tourAmbient = GenerateClip("TourAmbient", 4f, (t, dur) =>
         {
@@ -987,6 +1006,9 @@ public class ProceduralAudio : MonoBehaviour
 
     // Zone approach build
     public void PlayZoneApproachBuild() => PlaySFX(_zoneApproachBuild, 0.6f);
+
+    // Water drain gurgle
+    public void PlayDrainGurgle() => PlaySFX(_drainGurgle, 0.7f);
 
     // Tour audio
     public void PlayTourEntry() => PlaySFX(_tourEntryChime, 0.7f);

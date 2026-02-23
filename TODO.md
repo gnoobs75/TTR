@@ -33,13 +33,12 @@
 - [ ] Camera breathing/fog may still be too heavy in later zones
   - Zone profiles in PipeCamera.cs lines 286-292
   - Fog density in PipeZoneSystem.cs
-- [ ] SceneBootstrapper sets raceDistance=1000 but should be 1300
-  - Check line ~3153 in SceneBootstrapper.cs
-  - RaceManager.raceDistance needs to be 1300 at setup time
+- [x] SceneBootstrapper raceDistance already correct (2000m)
 
 ## FUTURE POLISH IDEAS
-- [ ] Pause menu volume sliders (currently only on splash screen)
-- [ ] Music crossfade between splash and race (instead of stop→start)
+- [x] Pause menu volume sliders (Music + Sound, synced with PlayerPrefs)
+- [x] Music crossfade between splash and race (1s fade-out, 1.5s fade-in)
+- [x] Power-ups: Shield (5s invincibility), Magnet (8s coins), Slow-Mo (3s time slow)
 - [ ] Persist high score per track/mode
 - [ ] AI racer names and personalities visible in pre-race screen
 - [ ] Fork preview camera (brief peek down each branch before choosing)
@@ -47,7 +46,6 @@
 - [ ] Ghost racer (race against your personal best)
 - [ ] More obstacle variety per zone (themed creatures)
 - [ ] Boss encounters at zone boundaries
-- [ ] Power-ups: shield, magnet, slow-mo, double coins
 - [ ] Seasonal skins and themed pipes
 - [ ] Leaderboard integration (GameCenter/Google Play)
 - [ ] Tutorial improvements (interactive first-race walkthrough)

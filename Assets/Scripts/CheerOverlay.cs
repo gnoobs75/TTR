@@ -324,8 +324,8 @@ public class CheerOverlay : MonoBehaviour
         p.root.anchorMax = new Vector2(POS_X[idx], 0f);
         p.root.pivot = new Vector2(0.5f, 0f);
         p.root.sizeDelta = new Vector2(220, 300);
-        p.root.anchoredPosition = new Vector2(0, 10);
-        p.baseY = 10f;
+        p.root.anchoredPosition = new Vector2(0, -30);
+        p.baseY = -30f;
         p.phase = idx * 1.1f + Random.Range(0f, 1.5f);
 
         // Body

@@ -58,6 +58,9 @@ public class RaceManager : MonoBehaviour
     private bool _musicFading;
     private float _musicFadeTimer;
     private const float MUSIC_FADE_DURATION = 2f;
+    private bool _musicFadingIn;
+    private float _musicFadeInTimer;
+    private const float MUSIC_FADE_IN_DURATION = 1.5f;
     private float MusicVolume => ProceduralAudio.Instance != null
         ? ProceduralAudio.Instance.musicVolume : 0.4f;
 
@@ -501,6 +504,10 @@ public class RaceManager : MonoBehaviour
 
     void Update()
     {
+#if UNITY_EDITOR
+        if (_state == State.PreRace && Time.frameCount % 120 == 0)
+            Debug.Log($"[RACE] PreRace check: GM={GameManager.Instance != null} playing={GameManager.Instance?.isPlaying} player={playerController != null} aiRacers={aiRacers?.Length ?? -1} leaderboard={leaderboard != null}");
+#endif
         switch (_state)
         {
             case State.PreRace:
@@ -526,6 +533,16 @@ public class RaceManager : MonoBehaviour
             case State.Finished:
                 UpdateOrbit();
                 break;
+        }
+
+        // Music fade-in (smooth start)
+        if (_musicFadingIn && _musicSource != null)
+        {
+            _musicFadeInTimer += Time.deltaTime;
+            float t = Mathf.Clamp01(_musicFadeInTimer / MUSIC_FADE_IN_DURATION);
+            _musicSource.volume = MusicVolume * t;
+            if (t >= 1f)
+                _musicFadingIn = false;
         }
 
         // Music fade-out
@@ -998,9 +1015,11 @@ public class RaceManager : MonoBehaviour
 
         AudioClip song = raceSongs[Random.Range(0, raceSongs.Length)];
         _musicSource.clip = song;
-        _musicSource.volume = MusicVolume;
+        _musicSource.volume = 0f; // Start silent, fade in smoothly
         _musicSource.Play();
         _musicFading = false;
+        _musicFadingIn = true;
+        _musicFadeInTimer = 0f;
         Debug.Log($"TTR Race: Playing \"{song.name}\" ({raceSongs.Length} songs available)");
     }
 

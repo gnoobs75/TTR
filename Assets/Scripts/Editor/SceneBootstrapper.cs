@@ -2163,6 +2163,11 @@ public class SceneBootstrapper
 
         // Create bonus Fartcoin prefab - special big coin only reachable after ramp jumps
         spawner.bonusCoinPrefab = CreateBonusCoinPrefab();
+
+        // Create special power-up prefabs (Shield, Magnet, Slow-Mo)
+        spawner.shieldPrefab = CreateShieldPickupPrefab();
+        spawner.magnetPrefab = CreateMagnetPickupPrefab();
+        spawner.slowMoPrefab = CreateSlowMoPickupPrefab();
     }
 
     static GameObject CreateSpeedBoostPrefab()
@@ -2927,6 +2932,189 @@ public class SceneBootstrapper
         GameObject prefab = PrefabUtility.SaveAsPrefabAsset(root, prefabPath);
         Object.DestroyImmediate(root);
         Debug.Log("TTR: Created Bonus Fartcoin (gold penny, 10x value, post-ramp reward)");
+        return prefab;
+    }
+
+    // ===== SPECIAL POWER-UP PREFABS =====
+
+    static GameObject CreateShieldPickupPrefab()
+    {
+        string prefabPath = "Assets/Prefabs/ShieldPickup.prefab";
+        GameObject root = new GameObject("ShieldPickup");
+
+        // Cyan translucent shield orb
+        Material shieldMat = MakeURPMat("Shield_Orb", new Color(0.2f, 0.85f, 1f, 0.6f), 0.8f, 0.95f);
+        shieldMat.EnableKeyword("_EMISSION");
+        shieldMat.SetColor("_EmissionColor", new Color(0.1f, 0.6f, 1f) * 3f);
+        shieldMat.SetFloat("_Surface", 1f);
+        shieldMat.SetFloat("_Blend", 0f);
+        shieldMat.SetFloat("_SrcBlend", 5f);
+        shieldMat.SetFloat("_DstBlend", 10f);
+        shieldMat.SetFloat("_ZWrite", 0f);
+        shieldMat.SetOverrideTag("RenderType", "Transparent");
+        shieldMat.renderQueue = 3000;
+        shieldMat.EnableKeyword("_SURFACE_TYPE_TRANSPARENT");
+        SaveMaterial(shieldMat);
+
+        Material coreMat = MakeURPMat("Shield_Core", new Color(0.4f, 0.9f, 1f), 0.9f, 0.98f);
+        coreMat.EnableKeyword("_EMISSION");
+        coreMat.SetColor("_EmissionColor", new Color(0.3f, 0.8f, 1f) * 4f);
+        SaveMaterial(coreMat);
+
+        // Outer sphere (translucent shield)
+        AddPrimChild(root, "ShieldOrb", PrimitiveType.Sphere,
+            Vector3.zero, Quaternion.identity, Vector3.one * 0.5f, shieldMat);
+
+        // Inner core (bright solid)
+        AddPrimChild(root, "Core", PrimitiveType.Sphere,
+            Vector3.zero, Quaternion.identity, Vector3.one * 0.2f, coreMat);
+
+        // Orbiting ring
+        AddPrimChild(root, "Ring", PrimitiveType.Cylinder,
+            Vector3.zero, Quaternion.Euler(90f, 0, 0),
+            new Vector3(0.55f, 0.02f, 0.55f), coreMat);
+
+        // Cross bars (shield emblem)
+        AddPrimChild(root, "CrossH", PrimitiveType.Cube,
+            Vector3.zero, Quaternion.identity,
+            new Vector3(0.35f, 0.04f, 0.04f), coreMat);
+        AddPrimChild(root, "CrossV", PrimitiveType.Cube,
+            Vector3.zero, Quaternion.identity,
+            new Vector3(0.04f, 0.35f, 0.04f), coreMat);
+
+        SphereCollider col = root.AddComponent<SphereCollider>();
+        col.isTrigger = true;
+        col.radius = 0.8f;
+        root.AddComponent<ShieldPickup>();
+
+        GameObject prefab = PrefabUtility.SaveAsPrefabAsset(root, prefabPath);
+        Object.DestroyImmediate(root);
+        Debug.Log("TTR: Created Shield Pickup (cyan orb, 5s invincibility)");
+        return prefab;
+    }
+
+    static GameObject CreateMagnetPickupPrefab()
+    {
+        string prefabPath = "Assets/Prefabs/MagnetPickup.prefab";
+        GameObject root = new GameObject("MagnetPickup");
+
+        Material magnetMat = MakeURPMat("Magnet_Body", new Color(1f, 0.15f, 0.1f), 0.7f, 0.6f);
+        magnetMat.EnableKeyword("_EMISSION");
+        magnetMat.SetColor("_EmissionColor", new Color(1f, 0.2f, 0.1f) * 1.5f);
+        SaveMaterial(magnetMat);
+
+        Material tipMat = MakeURPMat("Magnet_Tip", new Color(0.8f, 0.8f, 0.85f), 0.9f, 0.8f);
+        tipMat.EnableKeyword("_EMISSION");
+        tipMat.SetColor("_EmissionColor", new Color(1f, 0.9f, 0.3f) * 2f);
+        SaveMaterial(tipMat);
+
+        Material goldMat = MakeURPMat("Magnet_Gold", new Color(1f, 0.85f, 0.1f), 0.8f, 0.85f);
+        goldMat.EnableKeyword("_EMISSION");
+        goldMat.SetColor("_EmissionColor", new Color(1f, 0.8f, 0.1f) * 3f);
+        SaveMaterial(goldMat);
+
+        // Horseshoe magnet shape from primitives
+        // Left arm
+        AddPrimChild(root, "LeftArm", PrimitiveType.Cube,
+            new Vector3(-0.15f, 0, 0), Quaternion.identity,
+            new Vector3(0.08f, 0.4f, 0.08f), magnetMat);
+        // Right arm
+        AddPrimChild(root, "RightArm", PrimitiveType.Cube,
+            new Vector3(0.15f, 0, 0), Quaternion.identity,
+            new Vector3(0.08f, 0.4f, 0.08f), magnetMat);
+        // Top bridge
+        AddPrimChild(root, "Bridge", PrimitiveType.Cube,
+            new Vector3(0, 0.2f, 0), Quaternion.identity,
+            new Vector3(0.38f, 0.08f, 0.08f), magnetMat);
+        // Tips (silver/white)
+        AddPrimChild(root, "TipL", PrimitiveType.Cube,
+            new Vector3(-0.15f, -0.22f, 0), Quaternion.identity,
+            new Vector3(0.1f, 0.06f, 0.1f), tipMat);
+        AddPrimChild(root, "TipR", PrimitiveType.Cube,
+            new Vector3(0.15f, -0.22f, 0), Quaternion.identity,
+            new Vector3(0.1f, 0.06f, 0.1f), tipMat);
+        // Golden aura sphere
+        AddPrimChild(root, "Aura", PrimitiveType.Sphere,
+            Vector3.zero, Quaternion.identity, Vector3.one * 0.45f, goldMat);
+
+        SphereCollider col = root.AddComponent<SphereCollider>();
+        col.isTrigger = true;
+        col.radius = 0.8f;
+        root.AddComponent<MagnetPickup>();
+
+        GameObject prefab = PrefabUtility.SaveAsPrefabAsset(root, prefabPath);
+        Object.DestroyImmediate(root);
+        Debug.Log("TTR: Created Magnet Pickup (horseshoe, 8s coin attraction)");
+        return prefab;
+    }
+
+    static GameObject CreateSlowMoPickupPrefab()
+    {
+        string prefabPath = "Assets/Prefabs/SlowMoPickup.prefab";
+        GameObject root = new GameObject("SlowMoPickup");
+
+        Material clockMat = MakeURPMat("SlowMo_Clock", new Color(0.6f, 0.2f, 1f, 0.7f), 0.6f, 0.85f);
+        clockMat.EnableKeyword("_EMISSION");
+        clockMat.SetColor("_EmissionColor", new Color(0.5f, 0.15f, 1f) * 3f);
+        clockMat.SetFloat("_Surface", 1f);
+        clockMat.SetFloat("_Blend", 0f);
+        clockMat.SetFloat("_SrcBlend", 5f);
+        clockMat.SetFloat("_DstBlend", 10f);
+        clockMat.SetFloat("_ZWrite", 0f);
+        clockMat.SetOverrideTag("RenderType", "Transparent");
+        clockMat.renderQueue = 3000;
+        clockMat.EnableKeyword("_SURFACE_TYPE_TRANSPARENT");
+        SaveMaterial(clockMat);
+
+        Material handMat = MakeURPMat("SlowMo_Hand", new Color(1f, 1f, 1f), 0.9f, 0.95f);
+        handMat.EnableKeyword("_EMISSION");
+        handMat.SetColor("_EmissionColor", new Color(0.8f, 0.5f, 1f) * 4f);
+        SaveMaterial(handMat);
+
+        // Clock face (flat cylinder)
+        AddPrimChild(root, "ClockFace", PrimitiveType.Cylinder,
+            Vector3.zero, Quaternion.identity,
+            new Vector3(0.4f, 0.03f, 0.4f), clockMat);
+
+        // Clock frame ring
+        AddPrimChild(root, "Frame", PrimitiveType.Cylinder,
+            Vector3.zero, Quaternion.identity,
+            new Vector3(0.45f, 0.04f, 0.45f), handMat);
+
+        // Hour hand
+        AddPrimChild(root, "HourHand", PrimitiveType.Cube,
+            new Vector3(0, 0.04f, 0.06f), Quaternion.identity,
+            new Vector3(0.025f, 0.02f, 0.12f), handMat);
+
+        // Minute hand (longer)
+        AddPrimChild(root, "MinuteHand", PrimitiveType.Cube,
+            new Vector3(0.05f, 0.04f, 0), Quaternion.identity,
+            new Vector3(0.16f, 0.02f, 0.02f), handMat);
+
+        // Center dot
+        AddPrimChild(root, "CenterDot", PrimitiveType.Sphere,
+            new Vector3(0, 0.04f, 0), Quaternion.identity,
+            Vector3.one * 0.04f, handMat);
+
+        // Hour markers (12 small dots)
+        for (int i = 0; i < 12; i++)
+        {
+            float a = (i / 12f) * Mathf.PI * 2f;
+            float mx = Mathf.Sin(a) * 0.16f;
+            float mz = Mathf.Cos(a) * 0.16f;
+            AddPrimChild(root, $"Mark{i}", PrimitiveType.Sphere,
+                new Vector3(mx, 0.04f, mz), Quaternion.identity,
+                Vector3.one * 0.02f, handMat);
+        }
+
+        SphereCollider col = root.AddComponent<SphereCollider>();
+        col.isTrigger = true;
+        col.radius = 0.8f;
+        root.AddComponent<SlowMoPickup>();
+
+        GameObject prefab = PrefabUtility.SaveAsPrefabAsset(root, prefabPath);
+        Object.DestroyImmediate(root);
+        Debug.Log("TTR: Created Slow-Mo Pickup (purple clock, 3s time slow)");
         return prefab;
     }
 
@@ -5580,9 +5768,18 @@ public class SceneBootstrapper
     /// </summary>
     static Material SaveMaterial(Material m)
     {
+        // If the material is already a saved asset, just return it as-is
+        if (AssetDatabase.Contains(m))
+            return m;
+
         EnsureMaterialsFolder();
         string safeName = m.name.Replace(" ", "_").Replace("/", "_");
         string path = $"Assets/Materials/{safeName}_{_matCounter++}.mat";
+
+        // If asset already exists at this path, delete it first to avoid CreateAsset failure
+        if (AssetDatabase.LoadAssetAtPath<Material>(path) != null)
+            AssetDatabase.DeleteAsset(path);
+
         AssetDatabase.CreateAsset(m, path);
         return AssetDatabase.LoadAssetAtPath<Material>(path);
     }
@@ -5748,8 +5945,14 @@ public class SceneBootstrapper
             outlineMat.SetFloat("_DepthThreshold", 1.5f);
             outlineMat.SetFloat("_NormalThreshold", 0.4f);
             EnsureMaterialsFolder();
-            AssetDatabase.CreateAsset(outlineMat, $"Assets/Materials/OutlineEdgeDetect_{_matCounter++}.mat");
-            outlineMat = AssetDatabase.LoadAssetAtPath<Material>($"Assets/Materials/OutlineEdgeDetect_{_matCounter - 1}.mat");
+            if (!AssetDatabase.Contains(outlineMat))
+            {
+                string outlinePath = $"Assets/Materials/OutlineEdgeDetect_{_matCounter++}.mat";
+                if (AssetDatabase.LoadAssetAtPath<Material>(outlinePath) != null)
+                    AssetDatabase.DeleteAsset(outlinePath);
+                AssetDatabase.CreateAsset(outlineMat, outlinePath);
+                outlineMat = AssetDatabase.LoadAssetAtPath<Material>(outlinePath);
+            }
 
             // Find the URP renderer data asset and add the outline feature
             string[] rendererGuids = AssetDatabase.FindAssets("PC_Renderer t:ScriptableObject");

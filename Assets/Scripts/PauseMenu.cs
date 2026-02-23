@@ -24,6 +24,12 @@ public class PauseMenu : MonoBehaviour
     private bool _pauseFadingIn;
     private bool _pauseFadingOut;
 
+    // Volume sliders
+    private Slider _musicSlider;
+    private Slider _sfxSlider;
+    private Text _musicValueText;
+    private Text _sfxValueText;
+
     // Control scheme display
     private static readonly string[] SCHEME_NAMES = { "Touch Zones", "Swipe", "Tilt", "Keyboard" };
 
@@ -206,21 +212,29 @@ public class PauseMenu : MonoBehaviour
         // === RESUME BUTTON ===
         CreateMenuButton(_pausePanel.transform, "ResumeBtn", "UNCLOG!", font,
             new Color(0.15f, 0.55f, 0.12f), new Color(1f, 1f, 0.9f),
-            new Vector2(0.2f, 0.48f), new Vector2(0.8f, 0.60f),
+            new Vector2(0.2f, 0.52f), new Vector2(0.8f, 0.64f),
             Resume);
 
         // === RESTART BUTTON ===
         CreateMenuButton(_pausePanel.transform, "RestartBtn", "FLUSH AGAIN", font,
             new Color(0.55f, 0.12f, 0.08f), new Color(1f, 1f, 0.9f),
-            new Vector2(0.2f, 0.34f), new Vector2(0.8f, 0.46f),
+            new Vector2(0.2f, 0.39f), new Vector2(0.8f, 0.50f),
             Restart);
+
+        // === VOLUME SLIDERS ===
+        _musicSlider = CreateVolumeSlider(_pausePanel.transform, "MusicSlider", "MUSIC", font,
+            new Vector2(0.08f, 0.24f), new Vector2(0.48f, 0.37f),
+            PlayerPrefs.GetFloat("MusicVolume", 0.4f), OnPauseMusicVolume);
+        _sfxSlider = CreateVolumeSlider(_pausePanel.transform, "SFXSlider", "SOUND", font,
+            new Vector2(0.52f, 0.24f), new Vector2(0.92f, 0.37f),
+            PlayerPrefs.GetFloat("SFXVolume", 1f), OnPauseSFXVolume);
 
         // === CONTROL SCHEME SELECTOR ===
         GameObject controlRow = new GameObject("ControlRow");
         controlRow.transform.SetParent(_pausePanel.transform, false);
         RectTransform crRt = controlRow.AddComponent<RectTransform>();
-        crRt.anchorMin = new Vector2(0.1f, 0.20f);
-        crRt.anchorMax = new Vector2(0.9f, 0.30f);
+        crRt.anchorMin = new Vector2(0.1f, 0.14f);
+        crRt.anchorMax = new Vector2(0.9f, 0.22f);
         crRt.offsetMin = Vector2.zero;
         crRt.offsetMax = Vector2.zero;
 
@@ -367,9 +381,10 @@ public class PauseMenu : MonoBehaviour
         if (_pauseButton != null) _pauseButton.SetActive(false);
 
         UpdateSchemeLabel();
+        SyncVolumeSliders();
 
-        // Mute audio during pause
-        AudioListener.pause = true;
+        // Keep music playing during pause so volume sliders give real-time feedback
+        // TimeScale=0 prevents gameplay SFX from firing
 
         HapticManager.LightTap();
     }
@@ -387,8 +402,6 @@ public class PauseMenu : MonoBehaviour
         _pauseFadeTimer = 0f;
         if (_pauseButton != null) _pauseButton.SetActive(true);
 
-        AudioListener.pause = false;
-
         // Welcome back!
         if (CheerOverlay.Instance != null)
             CheerOverlay.Instance.ShowCheer("LET'S GO!", new Color(0.3f, 1f, 0.5f), false);
@@ -401,7 +414,6 @@ public class PauseMenu : MonoBehaviour
     {
         _isPaused = false;
         Time.timeScale = 1f;
-        AudioListener.pause = false;
         if (_pausePanel != null) _pausePanel.SetActive(false);
         _pauseFadingIn = false;
         _pauseFadingOut = false;
@@ -441,5 +453,139 @@ public class PauseMenu : MonoBehaviour
         int idx = TouchInput.Instance != null ? (int)TouchInput.Instance.controlScheme : 0;
         if (idx >= 0 && idx < SCHEME_NAMES.Length)
             _controlSchemeLabel.text = SCHEME_NAMES[idx];
+    }
+
+    void SyncVolumeSliders()
+    {
+        if (_musicSlider != null)
+            _musicSlider.value = PlayerPrefs.GetFloat("MusicVolume", 0.4f);
+        if (_sfxSlider != null)
+            _sfxSlider.value = PlayerPrefs.GetFloat("SFXVolume", 1f);
+    }
+
+    void OnPauseMusicVolume(float val)
+    {
+        PlayerPrefs.SetFloat("MusicVolume", val);
+        if (ProceduralAudio.Instance != null)
+            ProceduralAudio.Instance.musicVolume = val;
+        // Update any active music AudioSources
+        foreach (var src in Object.FindObjectsByType<AudioSource>(FindObjectsSortMode.None))
+        {
+            if (src != null && src.isPlaying && src.clip != null && src.clip.length > 10f)
+                src.volume = val;
+        }
+        if (_musicValueText != null)
+            _musicValueText.text = $"MUSIC {Mathf.RoundToInt(val * 100)}%";
+    }
+
+    void OnPauseSFXVolume(float val)
+    {
+        PlayerPrefs.SetFloat("SFXVolume", val);
+        if (ProceduralAudio.Instance != null)
+            ProceduralAudio.Instance.sfxVolume = val;
+        if (_sfxValueText != null)
+            _sfxValueText.text = $"SOUND {Mathf.RoundToInt(val * 100)}%";
+    }
+
+    Slider CreateVolumeSlider(Transform parent, string name, string label, Font font,
+        Vector2 anchorMin, Vector2 anchorMax, float defaultValue,
+        UnityEngine.Events.UnityAction<float> onChange)
+    {
+        GameObject container = new GameObject(name);
+        container.transform.SetParent(parent, false);
+        RectTransform crt = container.AddComponent<RectTransform>();
+        crt.anchorMin = anchorMin;
+        crt.anchorMax = anchorMax;
+        crt.offsetMin = Vector2.zero;
+        crt.offsetMax = Vector2.zero;
+
+        // Label with percentage (top 40%)
+        GameObject labelObj = new GameObject("Label");
+        labelObj.transform.SetParent(container.transform, false);
+        RectTransform lrt = labelObj.AddComponent<RectTransform>();
+        lrt.anchorMin = new Vector2(0f, 0.55f);
+        lrt.anchorMax = new Vector2(1f, 1f);
+        lrt.offsetMin = Vector2.zero;
+        lrt.offsetMax = Vector2.zero;
+
+        Text labelText = labelObj.AddComponent<Text>();
+        labelText.font = font;
+        labelText.fontSize = 16;
+        labelText.alignment = TextAnchor.MiddleCenter;
+        labelText.color = new Color(0.8f, 0.75f, 0.65f, 0.9f);
+        labelText.text = $"{label} {Mathf.RoundToInt(defaultValue * 100)}%";
+
+        if (label == "MUSIC") _musicValueText = labelText;
+        else _sfxValueText = labelText;
+
+        // Slider (bottom 50%)
+        GameObject sliderObj = new GameObject("Slider");
+        sliderObj.transform.SetParent(container.transform, false);
+        RectTransform srt = sliderObj.AddComponent<RectTransform>();
+        srt.anchorMin = new Vector2(0.08f, 0.05f);
+        srt.anchorMax = new Vector2(0.92f, 0.50f);
+        srt.offsetMin = Vector2.zero;
+        srt.offsetMax = Vector2.zero;
+
+        // Background track
+        GameObject bgObj = new GameObject("Background");
+        bgObj.transform.SetParent(sliderObj.transform, false);
+        RectTransform bgRt = bgObj.AddComponent<RectTransform>();
+        bgRt.anchorMin = new Vector2(0f, 0.25f);
+        bgRt.anchorMax = new Vector2(1f, 0.75f);
+        bgRt.offsetMin = Vector2.zero;
+        bgRt.offsetMax = Vector2.zero;
+        Image bgImg = bgObj.AddComponent<Image>();
+        bgImg.color = new Color(0.15f, 0.13f, 0.10f, 0.7f);
+
+        // Fill area
+        GameObject fillArea = new GameObject("Fill Area");
+        fillArea.transform.SetParent(sliderObj.transform, false);
+        RectTransform fillAreaRt = fillArea.AddComponent<RectTransform>();
+        fillAreaRt.anchorMin = new Vector2(0f, 0.25f);
+        fillAreaRt.anchorMax = new Vector2(1f, 0.75f);
+        fillAreaRt.offsetMin = Vector2.zero;
+        fillAreaRt.offsetMax = Vector2.zero;
+
+        GameObject fill = new GameObject("Fill");
+        fill.transform.SetParent(fillArea.transform, false);
+        RectTransform fillRt = fill.AddComponent<RectTransform>();
+        fillRt.anchorMin = Vector2.zero;
+        fillRt.anchorMax = Vector2.one;
+        fillRt.offsetMin = Vector2.zero;
+        fillRt.offsetMax = Vector2.zero;
+        Image fillImg = fill.AddComponent<Image>();
+        fillImg.color = new Color(0.65f, 0.50f, 0.12f, 0.9f);
+
+        // Handle slide area
+        GameObject handleArea = new GameObject("Handle Slide Area");
+        handleArea.transform.SetParent(sliderObj.transform, false);
+        RectTransform handleAreaRt = handleArea.AddComponent<RectTransform>();
+        handleAreaRt.anchorMin = Vector2.zero;
+        handleAreaRt.anchorMax = Vector2.one;
+        handleAreaRt.offsetMin = new Vector2(10f, 0f);
+        handleAreaRt.offsetMax = new Vector2(-10f, 0f);
+
+        GameObject handle = new GameObject("Handle");
+        handle.transform.SetParent(handleArea.transform, false);
+        RectTransform handleRt = handle.AddComponent<RectTransform>();
+        handleRt.sizeDelta = new Vector2(20f, 0f);
+        handleRt.anchorMin = new Vector2(0f, 0f);
+        handleRt.anchorMax = new Vector2(0f, 1f);
+        Image handleImg = handle.AddComponent<Image>();
+        handleImg.color = new Color(0.9f, 0.85f, 0.7f);
+
+        // Slider component
+        Slider slider = sliderObj.AddComponent<Slider>();
+        slider.fillRect = fillRt;
+        slider.handleRect = handleRt;
+        slider.targetGraphic = handleImg;
+        slider.direction = Slider.Direction.LeftToRight;
+        slider.minValue = 0f;
+        slider.maxValue = 1f;
+        slider.value = defaultValue;
+        slider.onValueChanged.AddListener(onChange);
+
+        return slider;
     }
 }

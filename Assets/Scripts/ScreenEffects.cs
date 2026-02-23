@@ -21,6 +21,10 @@ public class ScreenEffects : MonoBehaviour
     // Zone vignette (atmospheric colored edges per zone)
     private Image _zoneVignette;
 
+    // Water level rise/drain overlay (bottom-up fill during water rush)
+    private Image _waterLevelOverlay;
+    private float _waterRushLevel; // 0=dry, 1=submerged
+
     // Speed streaks (radial lines from center at high speed)
     private Image _speedStreaks;
     private float _speedStreakIntensity;
@@ -45,7 +49,7 @@ public class ScreenEffects : MonoBehaviour
     private float _hitFlashDecay = 3f;
 
     // Speed overlay
-    private float _maxSpeedOverlay = 0.15f;
+    private float _maxSpeedOverlay = 0.10f;
 
     // Hit chromatic aberration (color-shifted overlays)
     private Image _chromaticLeft;
@@ -147,6 +151,19 @@ public class ScreenEffects : MonoBehaviour
 
         // Death desaturation overlay (gray wash)
         _desatOverlay = CreateOverlay("DesatOverlay", new Color(0.3f, 0.3f, 0.3f, 0f));
+
+        // Water level rise/drain overlay (anchored to bottom, stretches upward)
+        _waterLevelOverlay = CreateOverlay("WaterLevel", new Color(0.05f, 0.2f, 0.1f, 0f));
+        ApplyWaterLevelTexture(_waterLevelOverlay);
+        // Start hidden (zero height)
+        if (_waterLevelOverlay != null)
+        {
+            RectTransform wrt = _waterLevelOverlay.GetComponent<RectTransform>();
+            wrt.anchorMin = new Vector2(0f, 0f);
+            wrt.anchorMax = new Vector2(1f, 0f); // zero height
+            wrt.offsetMin = Vector2.zero;
+            wrt.offsetMax = Vector2.zero;
+        }
     }
 
     void ApplyVignetteTexture(Image img)
@@ -379,6 +396,51 @@ public class ScreenEffects : MonoBehaviour
         img.preserveAspect = false;
     }
 
+    void ApplyWaterLevelTexture(Image img)
+    {
+        if (img == null) return;
+        int w = 4, h = 128;
+        Texture2D tex = new Texture2D(w, h, TextureFormat.RGBA32, false);
+        for (int y = 0; y < h; y++)
+        {
+            // t=0 at bottom, t=1 at top
+            float t = (float)y / h;
+            float alpha;
+            if (t < 0.7f)
+            {
+                // Solid murky water below 70% of the overlay
+                alpha = 0.55f;
+            }
+            else if (t < 0.88f)
+            {
+                // Transition band: water surface with brighter foam-like edge
+                float fadeT = (t - 0.7f) / 0.18f; // 0→1 over transition
+                alpha = Mathf.Lerp(0.55f, 0f, fadeT * fadeT);
+            }
+            else
+            {
+                alpha = 0f;
+            }
+
+            // Slight brightness bump at the water line (~0.7-0.75) for a visible surface
+            if (t > 0.68f && t < 0.78f)
+            {
+                float surfaceBump = 1f - Mathf.Abs(t - 0.73f) / 0.05f;
+                surfaceBump = Mathf.Max(0f, surfaceBump);
+                alpha = Mathf.Max(alpha, surfaceBump * 0.4f);
+            }
+
+            for (int x = 0; x < w; x++)
+                tex.SetPixel(x, y, new Color(1f, 1f, 1f, alpha));
+        }
+        tex.Apply();
+        tex.wrapMode = TextureWrapMode.Clamp;
+        Sprite spr = Sprite.Create(tex, new Rect(0, 0, w, h), new Vector2(0.5f, 0.5f));
+        img.sprite = spr;
+        img.type = Image.Type.Simple;
+        img.preserveAspect = false;
+    }
+
     Image CreateOverlay(string name, Color color)
     {
         GameObject obj = new GameObject(name);
@@ -509,24 +571,24 @@ public class ScreenEffects : MonoBehaviour
             switch (zi)
             {
                 case 0: // Porcelain: barely visible, calm
-                    pulse = 1f + Mathf.Sin(t * 0.7f) * 0.1f;
-                    baseAlpha = 0.06f;
+                    pulse = 1f + Mathf.Sin(t * 0.7f) * 0.05f;
+                    baseAlpha = 0.04f;
                     break;
                 case 1: // Grimy: slightly murky, slow throb
-                    pulse = 1f + Mathf.Sin(t * 1.0f) * 0.15f;
-                    baseAlpha = 0.10f;
+                    pulse = 1f + Mathf.Sin(t * 1.0f) * 0.07f;
+                    baseAlpha = 0.06f;
                     break;
                 case 2: // Toxic: nauseating slow pulse, stronger edges
-                    pulse = 1f + Mathf.Sin(t * 0.6f) * 0.25f + Mathf.Sin(t * 1.7f) * 0.1f;
-                    baseAlpha = 0.10f;
+                    pulse = 1f + Mathf.Sin(t * 0.6f) * 0.12f + Mathf.Sin(t * 1.7f) * 0.05f;
+                    baseAlpha = 0.07f;
                     break;
                 case 3: // Rusty: industrial flicker
-                    pulse = 1f + (Mathf.PerlinNoise(t * 3f, 7f) - 0.5f) * 0.3f;
-                    baseAlpha = 0.11f;
+                    pulse = 1f + (Mathf.PerlinNoise(t * 3f, 7f) - 0.5f) * 0.15f;
+                    baseAlpha = 0.07f;
                     break;
                 default: // Hellsewer: aggressive rapid pulse
-                    pulse = 1f + Mathf.Sin(t * 3.5f) * 0.2f + Mathf.Sin(t * 7f) * 0.1f;
-                    baseAlpha = 0.13f;
+                    pulse = 1f + Mathf.Sin(t * 3.5f) * 0.1f + Mathf.Sin(t * 7f) * 0.05f;
+                    baseAlpha = 0.08f;
                     break;
             }
 
@@ -656,6 +718,46 @@ public class ScreenEffects : MonoBehaviour
         {
             _underwaterTint.color = new Color(0.02f, 0.12f, 0.06f, 0f);
         }
+
+        // Water level rise/drain overlay (bottom-up fill)
+        if (_waterLevelOverlay != null)
+        {
+            if (_waterRushLevel > 0.001f)
+            {
+                // Raise the overlay from bottom: anchorMax.y = level
+                RectTransform wrt = _waterLevelOverlay.GetComponent<RectTransform>();
+                wrt.anchorMax = new Vector2(1f, _waterRushLevel);
+                wrt.offsetMin = Vector2.zero;
+                wrt.offsetMax = Vector2.zero;
+
+                // Zone-colored murky water
+                Color waterColor = new Color(0.05f, 0.2f, 0.1f);
+                if (PipeZoneSystem.Instance != null)
+                {
+                    int zi = PipeZoneSystem.Instance.CurrentZoneIndex;
+                    Color[] wColors = {
+                        new Color(0.05f, 0.18f, 0.12f),  // Porcelain: blue-green
+                        new Color(0.04f, 0.2f, 0.08f),   // Grimy: murky green
+                        new Color(0.03f, 0.22f, 0.05f),   // Toxic: thick green
+                        new Color(0.14f, 0.1f, 0.04f),    // Rusty: brown murk
+                        new Color(0.2f, 0.05f, 0.03f),    // Hellsewer: blood-red
+                    };
+                    if (zi < wColors.Length) waterColor = wColors[zi];
+                }
+
+                // Gentle caustic wave at the surface
+                float wave = 1f + Mathf.Sin(Time.time * 2.5f) * 0.06f;
+                float alpha = _waterRushLevel * wave;
+                _waterLevelOverlay.color = new Color(waterColor.r, waterColor.g, waterColor.b, alpha);
+            }
+            else
+            {
+                // Hidden when dry
+                RectTransform wrt = _waterLevelOverlay.GetComponent<RectTransform>();
+                wrt.anchorMax = new Vector2(1f, 0f);
+                _waterLevelOverlay.color = new Color(0.05f, 0.2f, 0.1f, 0f);
+            }
+        }
     }
 
     // === PUBLIC API ===
@@ -737,7 +839,7 @@ public class ScreenEffects : MonoBehaviour
         // Speed vignette: two-stage tunnel vision
         // Stage 1 (8-14 SMPH): gentle darkening at edges
         // Stage 2 (14+ SMPH): dramatic tunnel vision closing in
-        float vigTarget = tLow * tLow * 0.25f + tHigh * tHigh * 0.35f;
+        float vigTarget = tLow * tLow * 0.25f + tHigh * tHigh * 0.20f;
         _vignetteIntensity = Mathf.Max(_vignetteIntensity, vigTarget);
 
         // Speed streaks: radial lines ramp in with exponential curve
@@ -750,14 +852,14 @@ public class ScreenEffects : MonoBehaviour
         {
             int zi = PipeZoneSystem.Instance.CurrentZoneIndex;
             // Porcelain=0, Grimy=0.05, Toxic=0.15, Rusty=0.2, Hellsewer=0.3
-            zoneGrainBoost = zi * 0.075f;
+            zoneGrainBoost = zi * 0.04f;
         }
         float grainBase = Mathf.Clamp01((currentSpeed - 7f) / 6f);
         float grainTarget = grainBase * (0.6f + tHigh * 0.4f) + zoneGrainBoost;
         _grainIntensity = Mathf.Lerp(_grainIntensity, grainTarget, Time.deltaTime * 3f);
 
         // Speed chromatic: subtle at moderate, aggressive at extreme
-        float chromTarget = tLow * 0.15f + tHigh * tHigh * 0.5f;
+        float chromTarget = tLow * 0.15f + tHigh * tHigh * 0.3f;
         _speedChromaticTarget = Mathf.Lerp(_speedChromaticTarget, chromTarget, Time.deltaTime * 3f);
     }
 
@@ -801,6 +903,12 @@ public class ScreenEffects : MonoBehaviour
         _hitFlashColor = new Color(zoneColor.r, zoneColor.g, zoneColor.b, 0.4f);
         _vignetteIntensity = Mathf.Max(_vignetteIntensity, 0.4f);
         Invoke(nameof(ResetFlashColor), 0.5f);
+    }
+
+    /// <summary>Set water rush level for rising/draining water overlay (0=dry, 1=submerged).</summary>
+    public void SetWaterRushLevel(float level)
+    {
+        _waterRushLevel = Mathf.Clamp01(level);
     }
 
     /// <summary>Enable/disable underwater tint for vertical drop sections.</summary>

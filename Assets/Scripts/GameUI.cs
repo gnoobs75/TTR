@@ -287,6 +287,14 @@ public class GameUI : MonoBehaviour
     private Text _magnetIndicator;
     private bool _magnetIndicatorCreated;
 
+    // Shield power-up indicator
+    private Text _shieldIndicator;
+    private bool _shieldIndicatorCreated;
+
+    // Slow-Mo indicator
+    private Text _slowMoIndicator;
+    private bool _slowMoIndicatorCreated;
+
     // Race position indicator
     private Text _racePositionText;
     private bool _racePositionCreated;
@@ -377,6 +385,8 @@ public class GameUI : MonoBehaviour
 
         // Update coin magnet indicator
         UpdateMagnetIndicator();
+        UpdateShieldIndicator();
+        UpdateSlowMoIndicator();
 
         // Update fork preview arrows
         UpdateForkArrows();
@@ -643,6 +653,116 @@ public class GameUI : MonoBehaviour
         // Gentle scale breathing
         float scale = 1f + Mathf.Sin(Time.time * 3f) * 0.08f;
         _magnetIndicator.transform.localScale = Vector3.one * scale;
+    }
+
+    void CreateShieldIndicator()
+    {
+        if (_shieldIndicatorCreated) return;
+        _shieldIndicatorCreated = true;
+
+        Canvas canvas = GetComponentInParent<Canvas>();
+        if (canvas == null) return;
+        Font font = Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
+        if (font == null) font = Font.CreateDynamicFontFromOSFont("Arial", 14);
+
+        GameObject obj = new GameObject("ShieldIndicator");
+        RectTransform rt = obj.AddComponent<RectTransform>();
+        rt.SetParent(canvas.transform, false);
+        rt.anchorMin = new Vector2(0.70f, 0.50f);
+        rt.anchorMax = new Vector2(0.98f, 0.54f);
+        rt.offsetMin = Vector2.zero;
+        rt.offsetMax = Vector2.zero;
+
+        _shieldIndicator = obj.AddComponent<Text>();
+        _shieldIndicator.font = font;
+        _shieldIndicator.fontSize = Mathf.RoundToInt(14 * _uiScale);
+        _shieldIndicator.alignment = TextAnchor.MiddleCenter;
+        _shieldIndicator.fontStyle = FontStyle.Bold;
+        _shieldIndicator.color = new Color(0.2f, 0.85f, 1f);
+        _shieldIndicator.text = "SHIELD";
+
+        Outline ol = obj.AddComponent<Outline>();
+        ol.effectColor = new Color(0f, 0.2f, 0.4f, 0.9f);
+        ol.effectDistance = new Vector2(1, -1);
+
+        obj.SetActive(false);
+    }
+
+    void UpdateShieldIndicator()
+    {
+        if (GameManager.Instance == null || GameManager.Instance.player == null) return;
+        TurdController tc = GameManager.Instance.player;
+
+        if (!tc.IsShieldPowerActive)
+        {
+            if (_shieldIndicator != null && _shieldIndicator.gameObject.activeSelf)
+                _shieldIndicator.gameObject.SetActive(false);
+            return;
+        }
+
+        if (!_shieldIndicatorCreated) CreateShieldIndicator();
+        if (_shieldIndicator == null) return;
+
+        _shieldIndicator.gameObject.SetActive(true);
+        float pulse = 0.7f + Mathf.Sin(Time.time * 4f) * 0.3f;
+        _shieldIndicator.color = new Color(0.2f, 0.85f, 1f, pulse);
+        float scale = 1f + Mathf.Sin(Time.time * 2.5f) * 0.1f;
+        _shieldIndicator.transform.localScale = Vector3.one * scale;
+    }
+
+    void CreateSlowMoIndicator()
+    {
+        if (_slowMoIndicatorCreated) return;
+        _slowMoIndicatorCreated = true;
+
+        Canvas canvas = GetComponentInParent<Canvas>();
+        if (canvas == null) return;
+        Font font = Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
+        if (font == null) font = Font.CreateDynamicFontFromOSFont("Arial", 14);
+
+        GameObject obj = new GameObject("SlowMoIndicator");
+        RectTransform rt = obj.AddComponent<RectTransform>();
+        rt.SetParent(canvas.transform, false);
+        rt.anchorMin = new Vector2(0.70f, 0.45f);
+        rt.anchorMax = new Vector2(0.98f, 0.49f);
+        rt.offsetMin = Vector2.zero;
+        rt.offsetMax = Vector2.zero;
+
+        _slowMoIndicator = obj.AddComponent<Text>();
+        _slowMoIndicator.font = font;
+        _slowMoIndicator.fontSize = Mathf.RoundToInt(14 * _uiScale);
+        _slowMoIndicator.alignment = TextAnchor.MiddleCenter;
+        _slowMoIndicator.fontStyle = FontStyle.Bold;
+        _slowMoIndicator.color = new Color(0.7f, 0.3f, 1f);
+        _slowMoIndicator.text = "SLOW-MO";
+
+        Outline ol = obj.AddComponent<Outline>();
+        ol.effectColor = new Color(0.2f, 0f, 0.4f, 0.9f);
+        ol.effectDistance = new Vector2(1, -1);
+
+        obj.SetActive(false);
+    }
+
+    void UpdateSlowMoIndicator()
+    {
+        if (GameManager.Instance == null || GameManager.Instance.player == null) return;
+        TurdController tc = GameManager.Instance.player;
+
+        if (!tc.IsSlowMoActive)
+        {
+            if (_slowMoIndicator != null && _slowMoIndicator.gameObject.activeSelf)
+                _slowMoIndicator.gameObject.SetActive(false);
+            return;
+        }
+
+        if (!_slowMoIndicatorCreated) CreateSlowMoIndicator();
+        if (_slowMoIndicator == null) return;
+
+        _slowMoIndicator.gameObject.SetActive(true);
+        float pulse = 0.7f + Mathf.Sin(Time.unscaledTime * 2f) * 0.3f;
+        _slowMoIndicator.color = new Color(0.7f, 0.3f, 1f, pulse);
+        float scale = 1f + Mathf.Sin(Time.unscaledTime * 1.5f) * 0.12f;
+        _slowMoIndicator.transform.localScale = Vector3.one * scale;
     }
 
     void CreateForkArrows()
@@ -1107,7 +1227,7 @@ public class GameUI : MonoBehaviour
             if (_startScreenFading)
             {
                 _startFadeTimer += Time.deltaTime;
-                float fadeDur = 0.4f;
+                float fadeDur = 1.0f; // longer cinematic fade
                 float t = Mathf.Clamp01(_startFadeTimer / fadeDur);
 
                 if (_startCanvasGroup != null)
@@ -1116,11 +1236,12 @@ public class GameUI : MonoBehaviour
                 // Slight zoom-in as it fades
                 startPanel.transform.localScale = Vector3.one * (1f + t * 0.15f);
 
-                // Fade out splash music with the UI
+                // Smooth music crossfade: starts fading at 30%, done by 90%
                 if (_splashMusic != null && _splashMusic.isPlaying)
                 {
                     float baseVol = musicVolumeSlider != null ? musicVolumeSlider.value : 0.4f;
-                    _splashMusic.volume = baseVol * (1f - t);
+                    float musicFade = Mathf.Clamp01((t - 0.3f) / 0.6f);
+                    _splashMusic.volume = baseVol * (1f - musicFade);
                 }
 
                 if (t >= 1f)
