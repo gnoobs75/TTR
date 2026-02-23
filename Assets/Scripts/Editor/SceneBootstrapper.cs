@@ -2670,67 +2670,35 @@ public class SceneBootstrapper
         string prefabPath = "Assets/Prefabs/CornCoin.prefab";
         GameObject root = new GameObject("Fartcoin");
 
-        // === MATERIALS (semi-transparent ghostly coin) ===
-        // Copper penny body - noticeably transparent
-        Material copperMat = MakeURPMat("Fartcoin_Copper", new Color(0.72f, 0.45f, 0.2f, 0.4f), 0.65f, 0.7f);
-        copperMat.SetFloat("_Surface", 1f); // Transparent
-        copperMat.SetFloat("_Blend", 0f);   // Alpha blend
-        copperMat.SetFloat("_SrcBlend", 5f);
-        copperMat.SetFloat("_DstBlend", 10f);
-        copperMat.SetFloat("_ZWrite", 0f);
-        copperMat.SetOverrideTag("RenderType", "Transparent");
-        copperMat.renderQueue = 3000;
-        copperMat.EnableKeyword("_SURFACE_TYPE_TRANSPARENT");
+        // === MATERIALS (opaque bright gold coin) ===
+        // Gold coin body - fully opaque, bright and visible
+        Material copperMat = MakeURPMat("Fartcoin_Copper", new Color(0.95f, 0.75f, 0.15f), 0.7f, 0.8f);
         copperMat.EnableKeyword("_EMISSION");
-        copperMat.SetColor("_EmissionColor", new Color(0.8f, 0.5f, 0.15f) * 0.4f);
+        copperMat.SetColor("_EmissionColor", new Color(0.9f, 0.65f, 0.1f) * 0.5f);
         EditorUtility.SetDirty(copperMat);
 
-        // Darker patina for the raised rim - semi-transparent
-        Material patinaMat = MakeURPMat("Fartcoin_Patina", new Color(0.5f, 0.32f, 0.12f, 0.35f), 0.5f, 0.5f);
-        patinaMat.SetFloat("_Surface", 1f);
-        patinaMat.SetFloat("_Blend", 0f);
-        patinaMat.SetFloat("_SrcBlend", 5f);
-        patinaMat.SetFloat("_DstBlend", 10f);
-        patinaMat.SetFloat("_ZWrite", 0f);
-        patinaMat.SetOverrideTag("RenderType", "Transparent");
-        patinaMat.renderQueue = 3000;
-        patinaMat.EnableKeyword("_SURFACE_TYPE_TRANSPARENT");
+        // Darker rim ring
+        Material patinaMat = MakeURPMat("Fartcoin_Patina", new Color(0.75f, 0.55f, 0.1f), 0.6f, 0.7f);
         patinaMat.EnableKeyword("_EMISSION");
-        patinaMat.SetColor("_EmissionColor", new Color(0.6f, 0.35f, 0.1f) * 0.2f);
+        patinaMat.SetColor("_EmissionColor", new Color(0.7f, 0.5f, 0.08f) * 0.3f);
         EditorUtility.SetDirty(patinaMat);
 
-        // Gold for the $ symbol - slightly brighter but still transparent
-        Material symbolMat = MakeURPMat("Fartcoin_Symbol", new Color(1f, 0.85f, 0.25f, 0.7f), 0.8f, 0.85f);
-        symbolMat.SetFloat("_Surface", 1f);
-        symbolMat.SetFloat("_Blend", 0f);
-        symbolMat.SetFloat("_SrcBlend", 5f);
-        symbolMat.SetFloat("_DstBlend", 10f);
-        symbolMat.SetFloat("_ZWrite", 0f);
-        symbolMat.SetOverrideTag("RenderType", "Transparent");
-        symbolMat.renderQueue = 3000;
-        symbolMat.EnableKeyword("_SURFACE_TYPE_TRANSPARENT");
+        // Bright gold for the $ symbol
+        Material symbolMat = MakeURPMat("Fartcoin_Symbol", new Color(1f, 0.9f, 0.2f), 0.85f, 0.9f);
         symbolMat.EnableKeyword("_EMISSION");
-        symbolMat.SetColor("_EmissionColor", new Color(1f, 0.82f, 0.12f) * 0.5f);
+        symbolMat.SetColor("_EmissionColor", new Color(1f, 0.85f, 0.15f) * 0.7f);
         EditorUtility.SetDirty(symbolMat);
 
-        // Edge ridges material - semi-transparent
-        Material ridgeMat = MakeURPMat("Fartcoin_Ridge", new Color(0.6f, 0.38f, 0.15f, 0.5f), 0.7f, 0.6f);
-        ridgeMat.SetFloat("_Surface", 1f);
-        ridgeMat.SetFloat("_Blend", 0f);
-        ridgeMat.SetFloat("_SrcBlend", 5f);
-        ridgeMat.SetFloat("_DstBlend", 10f);
-        ridgeMat.SetFloat("_ZWrite", 0f);
-        ridgeMat.SetOverrideTag("RenderType", "Transparent");
-        ridgeMat.renderQueue = 3000;
-        ridgeMat.EnableKeyword("_SURFACE_TYPE_TRANSPARENT");
+        // Edge ridges material
+        Material ridgeMat = MakeURPMat("Fartcoin_Ridge", new Color(0.8f, 0.6f, 0.12f), 0.75f, 0.7f);
         ridgeMat.EnableKeyword("_EMISSION");
-        ridgeMat.SetColor("_EmissionColor", new Color(0.65f, 0.4f, 0.12f) * 0.3f);
+        ridgeMat.SetColor("_EmissionColor", new Color(0.7f, 0.5f, 0.1f) * 0.3f);
         EditorUtility.SetDirty(ridgeMat);
 
-        // Halo glow - soft transparent
-        Material haloMat = MakeURPMat("CoinHalo_Glow", new Color(0.9f, 0.7f, 0.2f, 0.25f), 0f, 0.1f);
+        // Halo glow - soft transparent beckoning ring
+        Material haloMat = MakeURPMat("CoinHalo_Glow", new Color(1f, 0.85f, 0.2f, 0.3f), 0f, 0.1f);
         haloMat.EnableKeyword("_EMISSION");
-        haloMat.SetColor("_EmissionColor", new Color(0.9f, 0.65f, 0.15f) * 0.5f);
+        haloMat.SetColor("_EmissionColor", new Color(1f, 0.8f, 0.15f) * 0.8f);
         haloMat.SetFloat("_Surface", 1f);
         haloMat.SetFloat("_Blend", 0f);
         haloMat.SetFloat("_SrcBlend", 5f);
@@ -2741,9 +2709,9 @@ public class SceneBootstrapper
         haloMat.EnableKeyword("_SURFACE_TYPE_TRANSPARENT");
         EditorUtility.SetDirty(haloMat);
 
-        // === COIN BODY (compact see-through penny) ===
-        float coinDiam = 0.12f;
-        float coinThick = 0.035f;
+        // === COIN BODY (visible, collectible-sized gold coin) ===
+        float coinDiam = 0.3f;
+        float coinThick = 0.08f;
         AddPrimChild(root, "CoinBody", PrimitiveType.Cylinder,
             Vector3.zero, Quaternion.identity,
             new Vector3(coinDiam, coinThick, coinDiam), copperMat);
@@ -2768,21 +2736,20 @@ public class SceneBootstrapper
                 new Vector3(ridgeW, coinThick * 1.1f, ridgeD), ridgeMat);
         }
 
-        // === $ SYMBOL on both faces (scaled to coin size) ===
-        float sc = coinDiam; // scale factor (was 1.0, now relative to coinDiam)
-        float symbolHeight = coinDiam * 0.35f;
-        float cubeSize = 0.06f * sc;
-        float barWidth = 0.04f * sc;
+        // === $ SYMBOL on both faces (bold, visible) ===
+        float symbolHeight = coinDiam * 0.6f;
+        float cubeSize = 0.04f;
+        float barWidth = 0.025f;
 
         Vector3[] sPath = {
-            new Vector3( 0.08f * sc, 0, -symbolHeight * 0.45f),
-            new Vector3( 0.12f * sc, 0, -symbolHeight * 0.3f),
-            new Vector3( 0.10f * sc, 0, -symbolHeight * 0.15f),
-            new Vector3( 0.04f * sc, 0,  0f),
-            new Vector3(-0.02f * sc, 0,  0f),
-            new Vector3(-0.10f * sc, 0,  symbolHeight * 0.15f),
-            new Vector3(-0.12f * sc, 0,  symbolHeight * 0.3f),
-            new Vector3(-0.08f * sc, 0,  symbolHeight * 0.45f),
+            new Vector3( 0.04f, 0, -symbolHeight * 0.45f),
+            new Vector3( 0.06f, 0, -symbolHeight * 0.3f),
+            new Vector3( 0.05f, 0, -symbolHeight * 0.15f),
+            new Vector3( 0.02f, 0,  0f),
+            new Vector3(-0.01f, 0,  0f),
+            new Vector3(-0.05f, 0,  symbolHeight * 0.15f),
+            new Vector3(-0.06f, 0,  symbolHeight * 0.3f),
+            new Vector3(-0.04f, 0,  symbolHeight * 0.45f),
         };
 
         float embossY = coinThick * 0.55f;
@@ -2836,36 +2803,20 @@ public class SceneBootstrapper
         string prefabPath = "Assets/Prefabs/BonusCoin.prefab";
         GameObject root = new GameObject("BonusCoin");
 
-        // Gold material - semi-transparent with gentle glow
-        Material goldMat = MakeURPMat("BonusCoin_Gold", new Color(1f, 0.9f, 0.15f, 0.65f), 0.9f, 0.9f);
-        goldMat.SetFloat("_Surface", 1f);
-        goldMat.SetFloat("_Blend", 0f);
-        goldMat.SetFloat("_SrcBlend", 5f);
-        goldMat.SetFloat("_DstBlend", 10f);
-        goldMat.SetFloat("_ZWrite", 0f);
-        goldMat.SetOverrideTag("RenderType", "Transparent");
-        goldMat.renderQueue = 3000;
-        goldMat.EnableKeyword("_SURFACE_TYPE_TRANSPARENT");
+        // Gold material - opaque bright gold with strong glow
+        Material goldMat = MakeURPMat("BonusCoin_Gold", new Color(1f, 0.85f, 0.1f), 0.9f, 0.9f);
         goldMat.EnableKeyword("_EMISSION");
-        goldMat.SetColor("_EmissionColor", new Color(1f, 0.85f, 0.1f) * 0.6f);
+        goldMat.SetColor("_EmissionColor", new Color(1f, 0.85f, 0.1f) * 0.8f);
         EditorUtility.SetDirty(goldMat);
 
-        Material symbolMat = MakeURPMat("BonusCoin_Symbol", new Color(1f, 0.95f, 0.4f, 0.75f), 0.95f, 0.95f);
-        symbolMat.SetFloat("_Surface", 1f);
-        symbolMat.SetFloat("_Blend", 0f);
-        symbolMat.SetFloat("_SrcBlend", 5f);
-        symbolMat.SetFloat("_DstBlend", 10f);
-        symbolMat.SetFloat("_ZWrite", 0f);
-        symbolMat.SetOverrideTag("RenderType", "Transparent");
-        symbolMat.renderQueue = 3000;
-        symbolMat.EnableKeyword("_SURFACE_TYPE_TRANSPARENT");
+        Material symbolMat = MakeURPMat("BonusCoin_Symbol", new Color(1f, 0.95f, 0.3f), 0.95f, 0.95f);
         symbolMat.EnableKeyword("_EMISSION");
-        symbolMat.SetColor("_EmissionColor", new Color(1f, 0.9f, 0.3f) * 0.7f);
+        symbolMat.SetColor("_EmissionColor", new Color(1f, 0.9f, 0.3f) * 0.9f);
         EditorUtility.SetDirty(symbolMat);
 
-        // Bonus coin body (slightly bigger than regular, but not giant)
-        float coinDiam = 0.25f;
-        float coinThick = 0.07f;
+        // Bonus coin body (bigger than regular, flashy)
+        float coinDiam = 0.45f;
+        float coinThick = 0.1f;
         AddPrimChild(root, "CoinBody", PrimitiveType.Cylinder,
             Vector3.zero, Quaternion.identity,
             new Vector3(coinDiam, coinThick, coinDiam), goldMat);
@@ -4931,24 +4882,49 @@ public class SceneBootstrapper
         string prefabPath = "Assets/Prefabs/ToxicBarrel.prefab";
         GameObject root = new GameObject("ToxicBarrel");
 
-        Material barrelMat = MakeURPMat("Barrel_Body", new Color(0.2f, 0.55f, 0.12f), 0.3f, 0.4f);
-        Material bandMat = MakeURPMat("Barrel_Band", new Color(0.35f, 0.32f, 0.25f), 0.7f, 0.5f);
-        Material hazardYellow = MakeURPMat("Barrel_Hazard", new Color(0.95f, 0.8f, 0.1f), 0.1f, 0.3f);
+        // Dark/black barrel body - stands out against ANY pipe color
+        Material barrelMat = MakeURPMat("Barrel_Body", new Color(0.08f, 0.08f, 0.06f), 0.4f, 0.5f);
+        // Rusty metal bands
+        Material bandMat = MakeURPMat("Barrel_Band", new Color(0.45f, 0.35f, 0.2f), 0.8f, 0.6f);
+        bandMat.EnableKeyword("_EMISSION");
+        bandMat.SetColor("_EmissionColor", new Color(0.3f, 0.2f, 0.1f) * 0.2f);
+        EditorUtility.SetDirty(bandMat);
+        // Bright hazard yellow with strong glow
+        Material hazardYellow = MakeURPMat("Barrel_Hazard", new Color(1f, 0.9f, 0.05f), 0.1f, 0.3f);
         hazardYellow.EnableKeyword("_EMISSION");
-        hazardYellow.SetColor("_EmissionColor", new Color(0.8f, 0.65f, 0.05f) * 0.5f);
+        hazardYellow.SetColor("_EmissionColor", new Color(1f, 0.85f, 0.05f) * 1.5f);
         EditorUtility.SetDirty(hazardYellow);
-        Material slimeMat = MakeURPMat("Barrel_Slime", new Color(0.15f, 0.8f, 0.1f), 0.2f, 0.9f);
+        // Neon green toxic slime - unmistakable
+        Material slimeMat = MakeURPMat("Barrel_Slime", new Color(0.2f, 1f, 0.1f), 0.2f, 0.9f);
         slimeMat.EnableKeyword("_EMISSION");
-        slimeMat.SetColor("_EmissionColor", new Color(0.1f, 0.6f, 0.05f) * 2f);
+        slimeMat.SetColor("_EmissionColor", new Color(0.15f, 0.9f, 0.05f) * 4f);
         EditorUtility.SetDirty(slimeMat);
-        Material eyeMat = MakeURPMat("Barrel_Eye", new Color(1f, 0.2f, 0.1f), 0f, 0.85f);
+        // Blazing red skull eyes
+        Material eyeMat = MakeURPMat("Barrel_Eye", new Color(1f, 0.15f, 0.05f), 0f, 0.85f);
         eyeMat.EnableKeyword("_EMISSION");
-        eyeMat.SetColor("_EmissionColor", new Color(1f, 0.15f, 0.05f) * 1.5f);
+        eyeMat.SetColor("_EmissionColor", new Color(1f, 0.1f, 0.02f) * 5f);
         EditorUtility.SetDirty(eyeMat);
-        Material skullMat = MakeURPMat("Barrel_Skull", new Color(0.9f, 0.88f, 0.8f), 0f, 0.5f);
-        Material darkMat = MakeURPMat("Barrel_Dark", new Color(0.06f, 0.06f, 0.04f), 0f, 0.3f);
+        // Bone-white skull markings
+        Material skullMat = MakeURPMat("Barrel_Skull", new Color(0.95f, 0.92f, 0.85f), 0f, 0.5f);
+        skullMat.EnableKeyword("_EMISSION");
+        skullMat.SetColor("_EmissionColor", new Color(0.8f, 0.75f, 0.65f) * 0.4f);
+        EditorUtility.SetDirty(skullMat);
+        Material darkMat = MakeURPMat("Barrel_Dark", new Color(0.03f, 0.03f, 0.02f), 0f, 0.3f);
+        // Smoke wisp material - semi-transparent gray-green
+        Material smokeMat = MakeURPMat("Barrel_Smoke", new Color(0.4f, 0.5f, 0.3f, 0.25f), 0f, 0.1f);
+        smokeMat.EnableKeyword("_EMISSION");
+        smokeMat.SetColor("_EmissionColor", new Color(0.3f, 0.45f, 0.15f) * 0.6f);
+        smokeMat.SetFloat("_Surface", 1f);
+        smokeMat.SetFloat("_Blend", 0f);
+        smokeMat.SetFloat("_SrcBlend", 5f);
+        smokeMat.SetFloat("_DstBlend", 10f);
+        smokeMat.SetFloat("_ZWrite", 0f);
+        smokeMat.SetOverrideTag("RenderType", "Transparent");
+        smokeMat.renderQueue = 3000;
+        smokeMat.EnableKeyword("_SURFACE_TYPE_TRANSPARENT");
+        EditorUtility.SetDirty(smokeMat);
 
-        // Main barrel body
+        // Main barrel body - DARK so it pops in any zone
         AddPrimChild(root, "Barrel", PrimitiveType.Cylinder, Vector3.zero,
             Quaternion.identity, new Vector3(1.4f, 1.2f, 1.4f), barrelMat);
         // Dented top
@@ -4957,75 +4933,113 @@ public class SceneBootstrapper
 
         // Metal bands
         AddPrimChild(root, "TopBand", PrimitiveType.Cylinder, new Vector3(0, 0.9f, 0),
-            Quaternion.identity, new Vector3(1.5f, 0.06f, 1.5f), bandMat);
+            Quaternion.identity, new Vector3(1.55f, 0.07f, 1.55f), bandMat);
         AddPrimChild(root, "MidBand", PrimitiveType.Cylinder, new Vector3(0, 0, 0),
-            Quaternion.identity, new Vector3(1.5f, 0.06f, 1.5f), bandMat);
+            Quaternion.identity, new Vector3(1.55f, 0.07f, 1.55f), bandMat);
         AddPrimChild(root, "BotBand", PrimitiveType.Cylinder, new Vector3(0, -0.9f, 0),
-            Quaternion.identity, new Vector3(1.5f, 0.06f, 1.5f), bandMat);
+            Quaternion.identity, new Vector3(1.55f, 0.07f, 1.55f), bandMat);
 
-        // Hazard warning stripes on front
-        for (int i = 0; i < 3; i++)
+        // Hazard warning stripes on front AND back (visible from both sides)
+        for (int face = 0; face < 2; face++)
         {
-            float y = -0.4f + i * 0.4f;
-            AddPrimChild(root, $"Stripe{i}", PrimitiveType.Cube,
-                new Vector3(0, y, 0.68f), Quaternion.Euler(0, 0, 45),
-                new Vector3(0.5f, 0.12f, 0.04f), (i % 2 == 0) ? hazardYellow : darkMat);
+            float zOff = (face == 0) ? 0.68f : -0.68f;
+            for (int i = 0; i < 5; i++)
+            {
+                float y = -0.5f + i * 0.25f;
+                AddPrimChild(root, $"Stripe{face}_{i}", PrimitiveType.Cube,
+                    new Vector3(0, y, zOff), Quaternion.Euler(0, 0, 45),
+                    new Vector3(0.55f, 0.14f, 0.04f), (i % 2 == 0) ? hazardYellow : darkMat);
+            }
         }
 
-        // Skull face painted on barrel
-        // Eye sockets (dark circles with glowing red centers)
+        // SKULL AND CROSSBONES on front (larger, more visible)
+        // Skull outline (white circle)
+        AddPrimChild(root, "SkullHead", PrimitiveType.Sphere,
+            new Vector3(0, 0.2f, 0.7f), Quaternion.identity,
+            new Vector3(0.55f, 0.6f, 0.08f), skullMat);
+        // Eye sockets (big dark holes)
         AddPrimChild(root, "LeftSocket", PrimitiveType.Sphere,
-            new Vector3(-0.22f, 0.25f, 0.7f), Quaternion.identity,
-            new Vector3(0.28f, 0.32f, 0.1f), darkMat);
+            new Vector3(-0.14f, 0.3f, 0.72f), Quaternion.identity,
+            new Vector3(0.2f, 0.22f, 0.1f), darkMat);
         AddPrimChild(root, "RightSocket", PrimitiveType.Sphere,
-            new Vector3(0.22f, 0.25f, 0.7f), Quaternion.identity,
-            new Vector3(0.28f, 0.32f, 0.1f), darkMat);
-        // Glowing red eyes inside sockets
+            new Vector3(0.14f, 0.3f, 0.72f), Quaternion.identity,
+            new Vector3(0.2f, 0.22f, 0.1f), darkMat);
+        // Blazing red eyes inside sockets
         AddPrimChild(root, "LeftGlow", PrimitiveType.Sphere,
-            new Vector3(-0.22f, 0.25f, 0.72f), Quaternion.identity,
-            new Vector3(0.15f, 0.18f, 0.08f), eyeMat);
+            new Vector3(-0.14f, 0.3f, 0.74f), Quaternion.identity,
+            new Vector3(0.12f, 0.14f, 0.06f), eyeMat);
         AddPrimChild(root, "RightGlow", PrimitiveType.Sphere,
-            new Vector3(0.22f, 0.25f, 0.72f), Quaternion.identity,
-            new Vector3(0.15f, 0.18f, 0.08f), eyeMat);
+            new Vector3(0.14f, 0.3f, 0.74f), Quaternion.identity,
+            new Vector3(0.12f, 0.14f, 0.06f), eyeMat);
         // Nose hole
         AddPrimChild(root, "NoseHole", PrimitiveType.Sphere,
-            new Vector3(0, 0.02f, 0.72f), Quaternion.identity,
-            new Vector3(0.12f, 0.15f, 0.06f), darkMat);
-        // Jagged teeth/grimace
-        for (int i = 0; i < 5; i++)
+            new Vector3(0, 0.1f, 0.73f), Quaternion.identity,
+            new Vector3(0.08f, 0.1f, 0.05f), darkMat);
+        // Jagged teeth
+        for (int i = 0; i < 6; i++)
         {
-            float x = (i - 2) * 0.12f;
-            float h = (i % 2 == 0) ? 0.12f : 0.08f;
+            float x = (i - 2.5f) * 0.08f;
+            float h = (i % 2 == 0) ? 0.1f : 0.07f;
             AddPrimChild(root, $"SkullTooth{i}", PrimitiveType.Cube,
-                new Vector3(x, -0.22f, 0.71f), Quaternion.identity,
-                new Vector3(0.08f, h, 0.04f), skullMat);
+                new Vector3(x, -0.08f, 0.72f), Quaternion.identity,
+                new Vector3(0.06f, h, 0.04f), skullMat);
+        }
+        // CROSSBONES behind skull
+        AddPrimChild(root, "Bone1", PrimitiveType.Capsule,
+            new Vector3(0, 0.15f, 0.69f), Quaternion.Euler(0, 0, 45),
+            new Vector3(0.08f, 0.4f, 0.08f), skullMat);
+        AddPrimChild(root, "Bone2", PrimitiveType.Capsule,
+            new Vector3(0, 0.15f, 0.69f), Quaternion.Euler(0, 0, -45),
+            new Vector3(0.08f, 0.4f, 0.08f), skullMat);
+        // Bone knobs at ends
+        for (int b = 0; b < 4; b++)
+        {
+            float bx = (b < 2 ? -1f : 1f) * 0.28f;
+            float by = (b % 2 == 0 ? -1f : 1f) * 0.28f + 0.15f;
+            AddPrimChild(root, $"BoneKnob{b}", PrimitiveType.Sphere,
+                new Vector3(bx, by, 0.69f), Quaternion.identity,
+                Vector3.one * 0.07f, skullMat);
         }
 
         // Oozing slime over the top
         AddPrimChild(root, "SlimeTop", PrimitiveType.Sphere,
             new Vector3(-0.1f, 1.1f, 0.1f), Quaternion.identity,
-            new Vector3(0.9f, 0.4f, 0.9f), slimeMat);
-        // Dripping slime
+            new Vector3(1.0f, 0.45f, 1.0f), slimeMat);
+        // Dripping slime - thicker, more visible
         AddPrimChild(root, "Drip1", PrimitiveType.Capsule,
             new Vector3(0.35f, 0.5f, 0.55f), Quaternion.identity,
-            new Vector3(0.12f, 0.4f, 0.12f), slimeMat);
+            new Vector3(0.15f, 0.45f, 0.15f), slimeMat);
         AddPrimChild(root, "Drip2", PrimitiveType.Capsule,
             new Vector3(-0.4f, 0.6f, -0.3f), Quaternion.identity,
-            new Vector3(0.1f, 0.35f, 0.1f), slimeMat);
+            new Vector3(0.13f, 0.4f, 0.13f), slimeMat);
         AddPrimChild(root, "Drip3", PrimitiveType.Capsule,
             new Vector3(0.1f, 0.3f, -0.6f), Quaternion.identity,
-            new Vector3(0.09f, 0.3f, 0.09f), slimeMat);
+            new Vector3(0.12f, 0.35f, 0.12f), slimeMat);
+        AddPrimChild(root, "Drip4", PrimitiveType.Capsule,
+            new Vector3(-0.15f, 0.4f, 0.6f), Quaternion.identity,
+            new Vector3(0.11f, 0.3f, 0.11f), slimeMat);
 
-        // Puddle at base
+        // SMOKE WISPS rising from top (semi-transparent puffs)
+        AddPrimChild(root, "Smoke1", PrimitiveType.Sphere,
+            new Vector3(0.1f, 1.5f, 0f), Quaternion.identity,
+            new Vector3(0.5f, 0.35f, 0.5f), smokeMat);
+        AddPrimChild(root, "Smoke2", PrimitiveType.Sphere,
+            new Vector3(-0.15f, 1.85f, 0.1f), Quaternion.identity,
+            new Vector3(0.4f, 0.3f, 0.4f), smokeMat);
+        AddPrimChild(root, "Smoke3", PrimitiveType.Sphere,
+            new Vector3(0.05f, 2.15f, -0.05f), Quaternion.identity,
+            new Vector3(0.3f, 0.25f, 0.3f), smokeMat);
+
+        // Puddle at base (brighter)
         AddPrimChild(root, "Puddle", PrimitiveType.Sphere,
             new Vector3(0.2f, -1.15f, 0.3f), Quaternion.identity,
-            new Vector3(1.1f, 0.15f, 1.1f), slimeMat);
+            new Vector3(1.2f, 0.15f, 1.2f), slimeMat);
 
         SphereCollider col = root.AddComponent<SphereCollider>();
-        col.isTrigger = true; col.radius = 0.9f;
+        col.isTrigger = true; col.radius = 1.0f;
         root.AddComponent<Obstacle>(); root.tag = "Obstacle";
         root.AddComponent<ToxicBarrelBehavior>();
-        root.transform.localScale = Vector3.one * 1.1f;
+        root.transform.localScale = Vector3.one * 1.2f;
 
         GameObject prefab = PrefabUtility.SaveAsPrefabAsset(root, prefabPath);
         Object.DestroyImmediate(root);
@@ -5155,13 +5169,21 @@ public class SceneBootstrapper
         string prefabPath = "Assets/Prefabs/SewerMine.prefab";
         GameObject root = new GameObject("SewerMine");
 
-        Material bombMat = MakeURPMat("Mine_Bomb", new Color(0.08f, 0.08f, 0.08f), 0.3f, 0.5f);
+        Material bombMat = MakeURPMat("Mine_Bomb", new Color(0.18f, 0.16f, 0.14f), 0.35f, 0.5f);
         Material fuseTubeMat = MakeURPMat("Mine_FuseTube", new Color(0.45f, 0.35f, 0.2f), 0f, 0.3f);
         Material fuseSparkMat = MakeURPMat("Mine_Spark", new Color(1f, 0.7f, 0.1f), 0f, 0.9f);
         fuseSparkMat.EnableKeyword("_EMISSION");
-        fuseSparkMat.SetColor("_EmissionColor", new Color(1f, 0.5f, 0.05f) * 4f);
+        fuseSparkMat.SetColor("_EmissionColor", new Color(1f, 0.5f, 0.05f) * 6f);
         EditorUtility.SetDirty(fuseSparkMat);
-        Material metalRingMat = MakeURPMat("Mine_Ring", new Color(0.35f, 0.3f, 0.25f), 0.7f, 0.5f);
+        Material metalRingMat = MakeURPMat("Mine_Ring", new Color(0.45f, 0.38f, 0.3f), 0.8f, 0.6f);
+        metalRingMat.EnableKeyword("_EMISSION");
+        metalRingMat.SetColor("_EmissionColor", new Color(0.3f, 0.25f, 0.2f) * 0.2f);
+        EditorUtility.SetDirty(metalRingMat);
+        // Pulsing red warning light material
+        Material warnRedMat = MakeURPMat("Mine_WarnRed", new Color(1f, 0.1f, 0.05f), 0f, 0.9f);
+        warnRedMat.EnableKeyword("_EMISSION");
+        warnRedMat.SetColor("_EmissionColor", new Color(1f, 0.15f, 0.05f) * 5f);
+        EditorUtility.SetDirty(warnRedMat);
 
         // Main bomb body - big round black sphere
         AddPrimChild(root, "BombBody", PrimitiveType.Sphere, Vector3.zero,
@@ -5182,15 +5204,20 @@ public class SceneBootstrapper
             new Vector3(0.03f, 1.0f, 0.08f), Quaternion.Euler(0, 0, 30f),
             new Vector3(0.04f, 0.08f, 0.04f), fuseTubeMat);
 
-        // Fuse spark - glowing ball at the lit end (this is the "warning" element)
+        // Fuse spark - LARGE glowing ball at the lit end (primary warning)
         AddPrimChild(root, "WarnLight", PrimitiveType.Sphere,
             new Vector3(0.06f, 1.08f, 0.1f), Quaternion.identity,
-            Vector3.one * 0.12f, fuseSparkMat);
+            Vector3.one * 0.22f, fuseSparkMat);
 
-        // Subtle equator band (decorative ring around the middle of the bomb)
+        // Pulsing red warning light on front of bomb (secondary warning)
+        AddPrimChild(root, "RedWarnLight", PrimitiveType.Sphere,
+            new Vector3(0, 0, 0.72f), Quaternion.identity,
+            Vector3.one * 0.15f, warnRedMat);
+
+        // Equator band (metallic sheen ring around the middle)
         AddPrimChild(root, "EquatorBand", PrimitiveType.Cylinder,
             new Vector3(0, 0, 0), Quaternion.identity,
-            new Vector3(0.78f, 0.025f, 0.78f), metalRingMat);
+            new Vector3(0.80f, 0.04f, 0.80f), metalRingMat);
 
         // Rivets around equator
         for (int i = 0; i < 6; i++)
@@ -5224,13 +5251,16 @@ public class SceneBootstrapper
         string prefabPath = "Assets/Prefabs/Cockroach.prefab";
         GameObject root = new GameObject("Cockroach");
 
-        // Shiny chitin
-        Material chitinMat = MakeURPMat("Roach_Chitin", new Color(0.22f, 0.14f, 0.06f), 0.15f, 0.7f);
+        // Shiny chitin with visible sheen
+        Material chitinMat = MakeURPMat("Roach_Chitin", new Color(0.3f, 0.2f, 0.1f), 0.2f, 0.85f);
+        chitinMat.EnableKeyword("_EMISSION");
+        chitinMat.SetColor("_EmissionColor", new Color(0.15f, 0.1f, 0.04f) * 0.3f);
+        EditorUtility.SetDirty(chitinMat);
         Material darkMat = MakeURPMat("Roach_Dark", new Color(0.12f, 0.08f, 0.04f), 0.1f, 0.65f);
         Material bellyMat = MakeURPMat("Roach_Belly", new Color(0.35f, 0.22f, 0.1f), 0.05f, 0.5f);
         Material whiteMat = MakeURPMat("Roach_EyeW", Color.white, 0f, 0.85f);
         whiteMat.EnableKeyword("_EMISSION");
-        whiteMat.SetColor("_EmissionColor", new Color(0.6f, 0.6f, 0.6f));
+        whiteMat.SetColor("_EmissionColor", new Color(1f, 1f, 0.9f) * 1.5f);
         EditorUtility.SetDirty(whiteMat);
         Material pupilMat = MakeURPMat("Roach_Pupil", new Color(0.02f, 0.02f, 0.02f), 0f, 0.95f);
         Material legMat = MakeURPMat("Roach_Leg", new Color(0.18f, 0.12f, 0.06f), 0.1f, 0.5f);
@@ -5325,7 +5355,7 @@ public class SceneBootstrapper
         col.isTrigger = true; col.radius = 1.0f;
         root.AddComponent<Obstacle>(); root.tag = "Obstacle";
         root.AddComponent<CockroachBehavior>();
-        root.transform.localScale = Vector3.one * 0.85f;
+        root.transform.localScale = Vector3.one * 1.1f;
 
         GameObject prefab = PrefabUtility.SaveAsPrefabAsset(root, prefabPath);
         Object.DestroyImmediate(root);
@@ -6874,119 +6904,96 @@ public class SceneBootstrapper
             startBg.color = new Color(0.04f, 0.07f, 0.03f, 0.93f);
         }
 
-        // === Metal plate bolted to the stall door (front of door, compact) ===
-        GameObject metalPlate = new GameObject("MetalPlate");
-        metalPlate.transform.SetParent(startPanel.transform, false);
+        // === Invisible hotspot buttons over door artwork (glow on hover) ===
+        // The splash image already has "Poop Alone" and "Poop With Friends"
+        // painted on the door - we just need clickable areas that light up.
+
+        // "Poop Alone" hotspot (left side of door artwork)
+        GameObject startBtnObj = new GameObject("StartButton");
+        startBtnObj.transform.SetParent(startPanel.transform, false);
         {
-            RectTransform prt = metalPlate.AddComponent<RectTransform>();
-            prt.anchorMin = new Vector2(0.22f, 0.38f);
-            prt.anchorMax = new Vector2(0.78f, 0.47f);
-            prt.offsetMin = Vector2.zero;
-            prt.offsetMax = Vector2.zero;
+            RectTransform rt = startBtnObj.AddComponent<RectTransform>();
+            rt.anchorMin = new Vector2(0.24f, 0.34f);
+            rt.anchorMax = new Vector2(0.49f, 0.52f);
+            rt.offsetMin = Vector2.zero;
+            rt.offsetMax = Vector2.zero;
         }
-        Image plateImg = metalPlate.AddComponent<Image>();
-        plateImg.color = new Color(0.42f, 0.40f, 0.37f, 0.92f);
-
-        // Corner bolts on the metal plate
-        Vector2[] boltAnchors = {
-            new Vector2(0.03f, 0.82f), new Vector2(0.97f, 0.82f),
-            new Vector2(0.03f, 0.18f), new Vector2(0.97f, 0.18f)
-        };
-        foreach (var bp in boltAnchors)
+        Image startBtnImg = startBtnObj.AddComponent<Image>();
+        startBtnImg.color = new Color(1f, 1f, 1f, 0f); // fully transparent
+        Button startButton = startBtnObj.AddComponent<Button>();
         {
-            GameObject bolt = new GameObject("Bolt");
-            bolt.transform.SetParent(metalPlate.transform, false);
-            RectTransform brt = bolt.AddComponent<RectTransform>();
-            brt.anchorMin = new Vector2(bp.x - 0.02f, bp.y - 0.08f);
-            brt.anchorMax = new Vector2(bp.x + 0.02f, bp.y + 0.08f);
-            brt.offsetMin = Vector2.zero;
-            brt.offsetMax = Vector2.zero;
-            Image boltImg = bolt.AddComponent<Image>();
-            boltImg.color = new Color(0.55f, 0.52f, 0.48f);
+            ColorBlock cb = startButton.colors;
+            cb.normalColor = new Color(1f, 1f, 1f, 0f);       // invisible
+            cb.highlightedColor = new Color(1f, 0.95f, 0.7f, 0.25f); // warm glow
+            cb.pressedColor = new Color(1f, 0.90f, 0.5f, 0.45f);     // brighter press
+            cb.selectedColor = new Color(1f, 1f, 1f, 0f);     // back to invisible
+            cb.fadeDuration = 0.15f;
+            startButton.colors = cb;
         }
+        startBtnObj.AddComponent<ButtonPressEffect>();
 
-        // "Poop Alone" button (left half = Single Player / Start)
-        Button startButton = MakeButton(metalPlate.transform, "StartButton", "Poop\nAlone",
-            26, new Color(0.50f, 0.48f, 0.44f, 0.95f), Color.white,
-            new Vector2(0.02f, 0.06f), new Vector2(0.48f, 0.94f));
-        // Extra thick outline for bold sticker look
+        // "Poop With Friends" hotspot (right side of door artwork)
+        GameObject tourBtnObj = new GameObject("TourButton");
+        tourBtnObj.transform.SetParent(startPanel.transform, false);
         {
-            Text lbl = startButton.GetComponentInChildren<Text>();
-            if (lbl != null)
-            {
-                Outline o2 = lbl.gameObject.AddComponent<Outline>();
-                o2.effectColor = new Color(0f, 0f, 0f, 0.9f);
-                o2.effectDistance = new Vector2(3, -3);
-            }
+            RectTransform rt = tourBtnObj.AddComponent<RectTransform>();
+            rt.anchorMin = new Vector2(0.51f, 0.34f);
+            rt.anchorMax = new Vector2(0.76f, 0.52f);
+            rt.offsetMin = Vector2.zero;
+            rt.offsetMax = Vector2.zero;
         }
-
-        // Red divider stripe between the two buttons
-        GameObject divider = new GameObject("Divider");
-        divider.transform.SetParent(metalPlate.transform, false);
+        Image tourBtnImg = tourBtnObj.AddComponent<Image>();
+        tourBtnImg.color = new Color(1f, 1f, 1f, 0f); // fully transparent
+        Button tourButton = tourBtnObj.AddComponent<Button>();
         {
-            RectTransform drt = divider.AddComponent<RectTransform>();
-            drt.anchorMin = new Vector2(0.49f, 0.10f);
-            drt.anchorMax = new Vector2(0.51f, 0.90f);
-            drt.offsetMin = Vector2.zero;
-            drt.offsetMax = Vector2.zero;
+            ColorBlock cb = tourButton.colors;
+            cb.normalColor = new Color(1f, 1f, 1f, 0f);       // invisible
+            cb.highlightedColor = new Color(1f, 0.95f, 0.7f, 0.25f); // warm glow
+            cb.pressedColor = new Color(1f, 0.90f, 0.5f, 0.45f);     // brighter press
+            cb.selectedColor = new Color(1f, 1f, 1f, 0f);     // back to invisible
+            cb.fadeDuration = 0.15f;
+            tourButton.colors = cb;
         }
-        divider.AddComponent<Image>().color = new Color(0.65f, 0.12f, 0.08f);
+        tourBtnObj.AddComponent<ButtonPressEffect>();
 
-        // "Poop With Friends" button (right half = Sewer Tour / Multiplayer)
-        Button tourButton = MakeButton(metalPlate.transform, "TourButton", "Poop With\nFriends",
-            22, new Color(0.12f, 0.12f, 0.12f, 0.95f), Color.white,
-            new Vector2(0.52f, 0.06f), new Vector2(0.98f, 0.94f));
-        // Extra thick outline for bold sticker look
-        {
-            Text lbl = tourButton.GetComponentInChildren<Text>();
-            if (lbl != null)
-            {
-                Outline o2 = lbl.gameObject.AddComponent<Outline>();
-                o2.effectColor = new Color(0f, 0f, 0f, 0.9f);
-                o2.effectDistance = new Vector2(3, -3);
-            }
-        }
+        // === SHOP & GALLERY on the stall columns ===
 
-        // === Wall-mounted sign buttons (on the walls flanking the stall door) ===
-
-        // SHOP sign on left wall (vertical, like a wall-mounted plaque)
+        // SHOP on left column
         Button shopButton = MakeButton(startPanel.transform, "ShopButton", "SHOP",
-            28, new Color(0.65f, 0.50f, 0.12f, 0.95f), Color.white,
-            new Vector2(0.02f, 0.40f), new Vector2(0.18f, 0.54f));
-        shopButton.transform.localRotation = Quaternion.Euler(0, 0, -5f);
-        // Add border outline for wall-sign look
+            24, new Color(0.65f, 0.50f, 0.12f, 0.85f), Color.white,
+            new Vector2(0.06f, 0.30f), new Vector2(0.18f, 0.48f));
+        shopButton.transform.localRotation = Quaternion.Euler(0, 0, -3f);
         {
             Outline shopOutline = shopButton.GetComponent<Image>().gameObject.AddComponent<Outline>();
             shopOutline.effectColor = new Color(0.3f, 0.22f, 0.05f);
             shopOutline.effectDistance = new Vector2(3, -3);
         }
 
-        // GALLERY sign on right wall (vertical, like a wall-mounted plaque)
+        // GALLERY on right column
         Button galleryButton = MakeButton(startPanel.transform, "GalleryButton", "GALLERY",
-            24, new Color(0.15f, 0.42f, 0.58f, 0.95f), Color.white,
-            new Vector2(0.82f, 0.40f), new Vector2(0.98f, 0.54f));
-        galleryButton.transform.localRotation = Quaternion.Euler(0, 0, 5f);
-        // Add border outline for wall-sign look
+            20, new Color(0.15f, 0.42f, 0.58f, 0.85f), Color.white,
+            new Vector2(0.82f, 0.30f), new Vector2(0.94f, 0.48f));
+        galleryButton.transform.localRotation = Quaternion.Euler(0, 0, 3f);
         {
             Outline galOutline = galleryButton.GetComponent<Image>().gameObject.AddComponent<Outline>();
             galOutline.effectColor = new Color(0.08f, 0.2f, 0.32f);
             galOutline.effectDistance = new Vector2(3, -3);
         }
 
-        // Wallet/Fartcoin count (small display above the metal plate)
+        // Wallet/Fartcoin count (above the door hotspots)
         Text startWalletText = MakeStretchText(startPanel.transform, "StartWallet", "0 Fartcoins",
             20, TextAnchor.MiddleCenter, new Color(1f, 0.85f, 0.2f),
-            new Vector2(0.30f, 0.48f), new Vector2(0.70f, 0.52f), true);
+            new Vector2(0.30f, 0.53f), new Vector2(0.70f, 0.57f), true);
 
         // Daily challenge text (below the door, subtle on dark area)
         Text challengeText = MakeStretchText(startPanel.transform, "ChallengeText", "DAILY: ...",
             16, TextAnchor.MiddleCenter, new Color(1f, 0.85f, 0.3f, 0.7f),
             new Vector2(0.15f, 0.27f), new Vector2(0.85f, 0.32f), true);
 
-        // Race tagline above the daily challenge
+        // Race tagline above the wallet
         MakeStretchText(startPanel.transform, "RaceTagline", "RACE TO BROWN TOWN!",
             24, TextAnchor.MiddleCenter, new Color(1f, 0.65f, 0.15f, 0.85f),
-            new Vector2(0.10f, 0.54f), new Vector2(0.90f, 0.59f), true);
+            new Vector2(0.10f, 0.57f), new Vector2(0.90f, 0.62f), true);
 
         // "or press SPACE" hint at very bottom
         MakeStretchText(startPanel.transform, "HintText", "or press SPACE",
@@ -7198,6 +7205,9 @@ public class SceneBootstrapper
             tour.speedBoostPrefab = pus.speedBoostPrefab;
             tour.jumpRampPrefab = pus.jumpRampPrefab;
             tour.bonusCoinPrefab = pus.bonusCoinPrefab;
+            tour.shieldPrefab = pus.shieldPrefab;
+            tour.magnetPrefab = pus.magnetPrefab;
+            tour.slowMoPrefab = pus.slowMoPrefab;
         }
 
         ScenerySpawner ss = Object.FindFirstObjectByType<ScenerySpawner>();

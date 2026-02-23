@@ -13,7 +13,7 @@ public class SewerTour : MonoBehaviour
     public static SewerTour Instance { get; private set; }
 
     [Header("Tour Settings")]
-    public float tourSpeed = 3f;
+    public float tourSpeed = 2f;
     public float lookRotateSpeed = 90f; // degrees per second
     public float pipeRadius = 3.5f;
 
@@ -31,6 +31,9 @@ public class SewerTour : MonoBehaviour
     public GameObject gratePrefab;
     public GameObject dropZonePrefab;
     public GameObject squirtPrefab;
+    public GameObject shieldPrefab;
+    public GameObject magnetPrefab;
+    public GameObject slowMoPrefab;
     public GameObject[] sceneryPrefabs;
     public GameObject[] grossPrefabs;
     public GameObject[] signPrefabs;
@@ -157,7 +160,7 @@ public class SewerTour : MonoBehaviour
         _hasSpawnedShowcase = true;
 
         float dist = 20f; // start spawning at 20m
-        float spacing = 12f; // space between showcase items
+        float spacing = 16f; // space between showcase items (generous for inspection)
 
         // OBSTACLES
         if (obstaclePrefabs != null)
@@ -192,6 +195,21 @@ public class SewerTour : MonoBehaviour
         if (jumpRampPrefab != null)
         {
             SpawnShowcaseItem(jumpRampPrefab, dist, 270f, 0.82f, "Jump Ramp", "PowerUp");
+            dist += spacing;
+        }
+        if (shieldPrefab != null)
+        {
+            SpawnShowcaseItem(shieldPrefab, dist, 270f, 0.82f, "Shield", "PowerUp");
+            dist += spacing;
+        }
+        if (magnetPrefab != null)
+        {
+            SpawnShowcaseItem(magnetPrefab, dist, 270f, 0.82f, "Magnet", "PowerUp");
+            dist += spacing;
+        }
+        if (slowMoPrefab != null)
+        {
+            SpawnShowcaseItem(slowMoPrefab, dist, 270f, 0.82f, "Slow-Mo", "PowerUp");
             dist += spacing;
         }
 
@@ -287,10 +305,15 @@ public class SewerTour : MonoBehaviour
         }
 
         // Signs face inward so player can read them
+        // Sign text is at +Z in local space, so sign's forward must point toward center (inward)
         if (category == "Sign")
-            rot = Quaternion.LookRotation(-((center - pos).normalized), forward);
+            rot = Quaternion.LookRotation((center - pos).normalized, forward);
 
         GameObject obj = Instantiate(prefab, pos, rot, transform);
+
+        // Scale up obstacles and creatures for easier inspection
+        if (category == "Obstacle" || category == "Creature")
+            obj.transform.localScale *= 1.5f;
 
         // Disable colliders and behaviors so items stay still during tour
         foreach (Collider c in obj.GetComponentsInChildren<Collider>())

@@ -211,6 +211,8 @@ public class PipeCamera : MonoBehaviour
             // Smooth direction: fast outside forks, very gentle inside
             float dirSpeed = _camForkBlend > 0.01f ? 3f : 12f;
             _smoothTunnelDir = Vector3.Slerp(_smoothTunnelDir, tunnelDir, Time.deltaTime * dirSpeed);
+            if (_smoothTunnelDir.sqrMagnitude < 0.001f)
+                _smoothTunnelDir = tunnelDir; // fallback if Slerp collapses
             _smoothTunnelDir.Normalize();
 
             Vector3 lookTarget = target.position + _smoothTunnelDir * dynLookAhead;
@@ -229,6 +231,13 @@ public class PipeCamera : MonoBehaviour
                     transform.rotation = Quaternion.LookRotation(initDir.normalized, upDir);
                 _velocity = Vector3.zero;
                 _initialized = true;
+                return;
+            }
+
+            // NaN guard: if any input went bad, hold last good position
+            if (float.IsNaN(desiredPos.x) || float.IsNaN(desiredPos.y) || float.IsNaN(desiredPos.z))
+            {
+                _velocity = Vector3.zero;
                 return;
             }
 
