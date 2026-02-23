@@ -40,6 +40,10 @@ public class ObstacleSpawner : MonoBehaviour
     private float _cleanupDistance = 50f;
     private int _obstacleIndex = 0;
 
+    // Object pooling
+    private Dictionary<GameObject, Queue<GameObject>> _pool = new Dictionary<GameObject, Queue<GameObject>>();
+    private Dictionary<GameObject, GameObject> _instanceToPrefab = new Dictionary<GameObject, GameObject>();
+
     // Zone-themed obstacle pools (built once at Start from obstaclePrefabs)
     // Porcelain: PoopBlob, ToxicBarrel, Duck (easy intro)
     // Grimy: HairWad (the clog)
@@ -117,6 +121,51 @@ public class ObstacleSpawner : MonoBehaviour
         BuildZonePools();
     }
 
+    GameObject GetFromPool(GameObject prefab, Vector3 pos, Quaternion rot)
+    {
+        if (!_pool.ContainsKey(prefab))
+            _pool[prefab] = new Queue<GameObject>();
+
+        GameObject obj;
+        if (_pool[prefab].Count > 0)
+        {
+            obj = _pool[prefab].Dequeue();
+            obj.transform.position = pos;
+            obj.transform.rotation = rot;
+            obj.transform.SetParent(transform);
+            obj.SetActive(true);
+
+            // Reset behavior state
+            var behavior = obj.GetComponent<ObstacleBehavior>();
+            if (behavior != null) behavior.OnPoolReset();
+        }
+        else
+        {
+            obj = Instantiate(prefab, pos, rot, transform);
+        }
+
+        _instanceToPrefab[obj] = prefab;
+        return obj;
+    }
+
+    void ReturnToPool(GameObject instance)
+    {
+        if (instance == null) return;
+
+        if (_instanceToPrefab.TryGetValue(instance, out GameObject prefab))
+        {
+            instance.SetActive(false);
+            if (!_pool.ContainsKey(prefab))
+                _pool[prefab] = new Queue<GameObject>();
+            _pool[prefab].Enqueue(instance);
+            _instanceToPrefab.Remove(instance);
+        }
+        else
+        {
+            Destroy(instance);
+        }
+    }
+
     void BuildZonePools()
     {
         _zonePools = new List<GameObject>[5];
@@ -136,13 +185,22 @@ public class ObstacleSpawner : MonoBehaviour
             // Classify by behavior component or name
             if (prefab.GetComponent<PoopBlobBehavior>() != null ||
                 prefab.GetComponent<ToxicBarrelBehavior>() != null ||
+                prefab.GetComponent<ToiletPaperMummyBehavior>() != null ||
                 prefab.name.IndexOf("Duck", System.StringComparison.OrdinalIgnoreCase) >= 0)
             {
                 _zonePools[0].Add(prefab); // Porcelain
+                // TP Mummy also in Grimy
+                if (prefab.GetComponent<ToiletPaperMummyBehavior>() != null)
+                    _zonePools[1].Add(prefab);
             }
             else if (prefab.GetComponent<HairWadBehavior>() != null)
             {
                 _zonePools[1].Add(prefab); // Grimy
+            }
+            else if (prefab.GetComponent<SewerSnakeBehavior>() != null)
+            {
+                _zonePools[1].Add(prefab); // Grimy
+                _zonePools[3].Add(prefab); // Rusty
             }
             else if (prefab.GetComponent<ToxicFrogBehavior>() != null ||
                      prefab.GetComponent<SewerJellyfishBehavior>() != null ||
@@ -150,11 +208,21 @@ public class ObstacleSpawner : MonoBehaviour
             {
                 _zonePools[2].Add(prefab); // Toxic
             }
+            else if (prefab.GetComponent<GreaseGlobBehavior>() != null)
+            {
+                _zonePools[2].Add(prefab); // Toxic
+                _zonePools[3].Add(prefab); // Rusty
+            }
             else if (prefab.GetComponent<SewerRatBehavior>() != null ||
                      prefab.GetComponent<CockroachBehavior>() != null ||
                      prefab.GetComponent<SewerSpiderBehavior>() != null)
             {
                 _zonePools[3].Add(prefab); // Rusty
+            }
+            else if (prefab.GetComponent<PoopFlySwarmBehavior>() != null)
+            {
+                _zonePools[3].Add(prefab); // Rusty
+                _zonePools[4].Add(prefab); // Hellsewer (also gets added via "all" below)
             }
             else
             {
@@ -200,6 +268,19 @@ public class ObstacleSpawner : MonoBehaviour
         return pool[idx];
     }
 
+    /// <summary>Check if a distance is inside any fork zone. Push dist past the fork if so.</summary>
+    bool IsInForkZone(float dist)
+    {
+        return _pipeGen != null && _pipeGen.GetForkAtDistance(dist) != null;
+    }
+
+    float PushPastFork(float dist)
+    {
+        if (_pipeGen == null) return dist;
+        PipeFork fork = _pipeGen.GetForkAtDistance(dist);
+        return fork != null ? fork.rejoinDistance + 10f : dist;
+    }
+
     void Update()
     {
         if (player == null) return;
@@ -215,11 +296,13 @@ public class ObstacleSpawner : MonoBehaviour
             _nextSpawnDist += Random.Range(minSpacing, maxSpacing) * spacingMult;
         }
 
-        // Special events: big air ramps (every 300-500m) — skip in corridors
+        // Special events: big air ramps (every 300-500m) — skip in corridors AND forks
         if (bigAirRampPrefab != null && _nextBigAirDist < playerDist + spawnDistance)
         {
             if (IsSpeedCorridor(_nextBigAirDist))
-                _nextBigAirDist = GetCorridorEnd(_nextBigAirDist) + 20f; // push past corridor
+                _nextBigAirDist = GetCorridorEnd(_nextBigAirDist) + 20f;
+            else if (IsInForkZone(_nextBigAirDist))
+                _nextBigAirDist = PushPastFork(_nextBigAirDist);
             else
             {
                 SpawnBigAirRamp(_nextBigAirDist);
@@ -227,11 +310,13 @@ public class ObstacleSpawner : MonoBehaviour
             }
         }
 
-        // Special events: vertical drops (every 400-600m, starts after 200m) — skip in corridors
+        // Special events: vertical drops (every 400-600m, starts after 200m) — skip in corridors AND forks
         if (dropZonePrefab != null && _nextDropDist < playerDist + spawnDistance)
         {
             if (IsSpeedCorridor(_nextDropDist))
                 _nextDropDist = GetCorridorEnd(_nextDropDist) + 20f;
+            else if (IsInForkZone(_nextDropDist))
+                _nextDropDist = PushPastFork(_nextDropDist);
             else
             {
                 SpawnDropZone(_nextDropDist);
@@ -239,11 +324,13 @@ public class ObstacleSpawner : MonoBehaviour
             }
         }
 
-        // Grate obstacles (every 60-120m, starts after 80m) — skip in corridors
+        // Grate obstacles (every 60-120m, starts after 80m) — skip in corridors AND forks
         if (gratePrefab != null && _nextGrateDist < playerDist + spawnDistance)
         {
             if (IsSpeedCorridor(_nextGrateDist))
                 _nextGrateDist = GetCorridorEnd(_nextGrateDist) + 10f;
+            else if (IsInForkZone(_nextGrateDist))
+                _nextGrateDist = PushPastFork(_nextGrateDist);
             else
             {
                 SpawnGrate(_nextGrateDist);
@@ -254,7 +341,7 @@ public class ObstacleSpawner : MonoBehaviour
         // Speed corridor entry announcements
         CheckCorridorEntry(playerDist);
 
-        // Cleanup behind
+        // Cleanup behind (return to pool instead of destroying)
         for (int i = _spawnedObjects.Count - 1; i >= 0; i--)
         {
             if (_spawnedObjects[i] == null)
@@ -266,7 +353,7 @@ public class ObstacleSpawner : MonoBehaviour
             Vector3 toObj = _spawnedObjects[i].transform.position - player.position;
             if (toObj.magnitude > _cleanupDistance && Vector3.Dot(toObj, player.forward) < 0)
             {
-                Destroy(_spawnedObjects[i]);
+                ReturnToPool(_spawnedObjects[i]);
                 _spawnedObjects.RemoveAt(i);
             }
         }
@@ -295,12 +382,33 @@ public class ObstacleSpawner : MonoBehaviour
         if (spacingMult > 1f)
             currentChance *= (1f / spacingMult); // reduce obstacle chance near corridors
 
-        // Fork density modifier: if in a fork zone, adjust spawn rates
-        float coinMult = 1f;
+        // Fork zone check: use the spawn DISTANCE to find forks, not the player's state.
+        // The player may not have entered the fork yet, but we're spawning ahead into it.
+        PipeFork forkAtDist = _pipeGen != null ? _pipeGen.GetForkAtDistance(dist) : null;
+
+        // If spawn point is inside a fork zone, skip obstacles entirely.
+        // Fork zones are short (50-80m) and the Y-junction geometry fills the space.
+        // Spawning on the main path center would place objects between diverging branches.
+        if (forkAtDist != null)
+        {
+            // Only spawn coins (on the player's branch if known, otherwise skip)
+            PipeFork playerFork = _tc != null ? _tc.CurrentFork : null;
+            int playerBranch = _tc != null ? _tc.ForkBranch : -1;
+            if (playerFork == forkAtDist && playerBranch >= 0 && coinPrefab != null)
+            {
+                float coinMult = forkAtDist.GetCoinMultiplier();
+                if (coinMult > 1.5f)
+                    SpawnCoinTrailAlongPath(dist);
+            }
+            return;
+        }
+
+        // Fork density modifier: if player is in a fork (for non-fork spawn distances)
+        float coinMult2 = 1f;
         float obstacleMult = 1f;
         if (_tc != null && _tc.CurrentFork != null)
         {
-            coinMult = _tc.CurrentFork.GetCoinMultiplier();
+            coinMult2 = _tc.CurrentFork.GetCoinMultiplier();
             obstacleMult = _tc.CurrentFork.GetObstacleMultiplier();
             currentChance *= obstacleMult;
         }
@@ -308,34 +416,7 @@ public class ObstacleSpawner : MonoBehaviour
         if (_pipeGen != null)
         {
             Vector3 center, forward, right, up;
-
-            // Branch-aware: spawn on the player's current branch path
-            PipeFork fork = _tc != null ? _tc.CurrentFork : null;
-            int branch = _tc != null ? _tc.ForkBranch : -1;
-
-            if (fork != null && branch >= 0)
-            {
-                Vector3 mainC, mainF, mainR, mainU;
-                _pipeGen.GetPathFrame(dist, out mainC, out mainF, out mainR, out mainU);
-
-                Vector3 bC, bF, bR, bU;
-                if (fork.GetBranchFrame(branch, dist, out bC, out bF, out bR, out bU))
-                {
-                    float blend = fork.GetBranchBlend(dist);
-                    center = Vector3.Lerp(mainC, bC, blend);
-                    forward = Vector3.Slerp(mainF, bF, blend).normalized;
-                    right = Vector3.Slerp(mainR, bR, blend).normalized;
-                    up = Vector3.Slerp(mainU, bU, blend).normalized;
-                }
-                else
-                {
-                    center = mainC; forward = mainF; right = mainR; up = mainU;
-                }
-            }
-            else
-            {
-                _pipeGen.GetPathFrame(dist, out center, out forward, out right, out up);
-            }
+            _pipeGen.GetPathFrame(dist, out center, out forward, out right, out up);
 
             if (Random.value < currentChance && obstaclePrefabs != null && obstaclePrefabs.Length > 0)
             {
@@ -345,7 +426,7 @@ public class ObstacleSpawner : MonoBehaviour
             {
                 // In risky fork: spawn extra coin trails
                 SpawnCoinTrailAlongPath(dist);
-                if (coinMult > 1.5f && Random.value < 0.4f)
+                if (coinMult2 > 1.5f && Random.value < 0.4f)
                     SpawnCoinTrailAlongPath(dist + 5f); // bonus trail
             }
         }
@@ -457,7 +538,7 @@ public class ObstacleSpawner : MonoBehaviour
             rot = Quaternion.LookRotation(forward, inward);
         else
             rot = Quaternion.LookRotation(forward, inward);
-        GameObject obj = Instantiate(prefab, pos, rot, transform);
+        GameObject obj = GetFromPool(prefab, pos, rot);
         _spawnedObjects.Add(obj);
 #if UNITY_EDITOR
         Debug.Log($"[SPAWN] {prefab.name} at dist={dist:F0} angle={angleDeg:F0}° radius={spawnRadius:F1} fork={fork != null}");

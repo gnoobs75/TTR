@@ -54,6 +54,8 @@ public class PipeCamera : MonoBehaviour
     private bool _tunnelDirInitialized;
     private float _camForkBlend;       // camera's own smoothed fork blend (0→1→0)
 
+    // Fork preview removed — caused chaos by hijacking camera during approach
+
     void Awake()
     {
         Instance = this;
@@ -136,9 +138,9 @@ public class PipeCamera : MonoBehaviour
             Vector3 playerCenter, playerFwd, playerRight, playerUp;
 
             // === FORK-AWARE PATH FOLLOWING ===
-            // Strategy: During forks, SNAP to the branch pipe center fast and
-            // stay near center (0.92 pull). Use ONLY the smooth main-path forward
-            // for look direction. SmoothDamp handles the physical transition.
+            // Strategy: Use the fork's own smoothstep distance-blend for natural
+            // transitions. Stay near center during forks. Use ONLY the smooth
+            // main-path forward for look direction to prevent camera whip.
             PipeFork fork = _tc.CurrentFork;
             int branch = _tc.ForkBranch;
             bool inFork = fork != null && branch >= 0;
@@ -149,26 +151,31 @@ public class PipeCamera : MonoBehaviour
 
             if (inFork)
             {
-                // Snap blend toward 1.0 fast so camera is fully in the branch ASAP.
-                // Being "between" pipes is what causes wall clipping.
-                _camForkBlend = Mathf.MoveTowards(_camForkBlend, 1f, Time.deltaTime * 8f);
+                // Use the fork's own smoothstep blend curve for natural transitions.
+                // Camera position uses camDist blend, player center uses playerDist blend.
+                float camBlendTarget = fork.GetBranchBlend(camDist);
+                float playerBlendTarget = fork.GetBranchBlend(playerDist);
 
-                // Move BOTH camera and player centers into the branch
+                // Smooth the camera-mode flag (prevents snap on enter/exit)
+                _camForkBlend = Mathf.Lerp(_camForkBlend, 1f, Time.deltaTime * 5f);
+
+                // Move camera center into the branch using distance-based blend
                 Vector3 bC, bF, bR, bU;
                 if (fork.GetBranchFrame(branch, camDist, out bC, out bF, out bR, out bU))
-                    camCenter = Vector3.Lerp(camCenter, bC, _camForkBlend);
+                    camCenter = Vector3.Lerp(camCenter, bC, camBlendTarget);
 
+                // Move player center into the branch
                 Vector3 bPC, bPF, bPR, bPU;
                 if (fork.GetBranchFrame(branch, playerDist, out bPC, out bPF, out bPR, out bPU))
-                    playerCenter = Vector3.Lerp(playerCenter, bPC, _camForkBlend);
+                    playerCenter = Vector3.Lerp(playerCenter, bPC, playerBlendTarget);
 
-                // Nearly at pipe center during forks — prevents all wall clipping
-                effectivePull = Mathf.Lerp(effectivePull, 0.92f, _camForkBlend);
+                // Pull toward center during forks to prevent wall clipping
+                effectivePull = Mathf.Lerp(effectivePull, 0.85f, Mathf.Max(camBlendTarget, playerBlendTarget));
             }
             else
             {
-                // Ease blend back to zero after exiting fork
-                _camForkBlend = Mathf.MoveTowards(_camForkBlend, 0f, Time.deltaTime * 6f);
+                // Ease blend back to zero after exiting fork (gentle)
+                _camForkBlend = Mathf.Lerp(_camForkBlend, 0f, Time.deltaTime * 4f);
             }
 
             // Player's offset from pipe center
@@ -202,7 +209,7 @@ public class PipeCamera : MonoBehaviour
             }
 
             // Smooth direction: fast outside forks, very gentle inside
-            float dirSpeed = _camForkBlend > 0.01f ? 4f : 12f;
+            float dirSpeed = _camForkBlend > 0.01f ? 3f : 12f;
             _smoothTunnelDir = Vector3.Slerp(_smoothTunnelDir, tunnelDir, Time.deltaTime * dirSpeed);
             _smoothTunnelDir.Normalize();
 
@@ -230,7 +237,7 @@ public class PipeCamera : MonoBehaviour
                 transform.position, desiredPos, ref _velocity, 1f / positionSmooth);
 
             // Smooth rotation to look forward (gentler during forks for stability)
-            float effectiveRotSmooth = _camForkBlend > 0.01f ? rotationSmooth * 0.6f : rotationSmooth;
+            float effectiveRotSmooth = _camForkBlend > 0.01f ? rotationSmooth * 0.45f : rotationSmooth;
             Vector3 lookDir = (lookTarget - transform.position);
             if (lookDir.sqrMagnitude > 0.01f)
             {

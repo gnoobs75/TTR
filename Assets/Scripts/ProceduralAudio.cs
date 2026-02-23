@@ -84,6 +84,34 @@ public class ProceduralAudio : MonoBehaviour
     private AudioClip _sadTrombone;
     private AudioClip _zoneApproachBuild;
 
+    // New creature sounds
+    private AudioClip _snakeHiss;
+    private AudioClip _snakeStrike;
+    private AudioClip _mummyGroan;
+    private AudioClip _mummyWrap;
+    private AudioClip _globSquelch;
+    private AudioClip _globSplat;
+    private AudioClip _swarmBuzz;
+    private AudioClip _swarmAttack;
+
+    // Sound variations (pitch variants for variety)
+    private AudioClip[] _ratSqueakVariants;
+    private AudioClip[] _frogCroakVariants;
+    private AudioClip[] _jellyZapVariants;
+    private AudioClip[] _spiderHissVariants;
+
+    // Environmental clips
+    private AudioClip _pipeCreak;
+    private AudioClip _distantDrip;
+    private AudioClip _sewerEcho;
+    private AudioClip _metalClang;
+
+    // UI clips
+    private AudioClip _menuSelect;
+    private AudioClip _menuBack;
+    private AudioClip _skinEquip;
+    private AudioClip _skinPurchase;
+
     // Real audio file clips
     private AudioClip _toiletFlush;
     private AudioClip[] _fartClips;
@@ -359,6 +387,155 @@ public class ProceduralAudio : MonoBehaviour
             float tone = Mathf.Sin(2f * Mathf.PI * freq * t) * 0.3f
                        + Mathf.Sin(2f * Mathf.PI * freq * 1.5f * t) * 0.1f;
             return tone * env * 0.3f;
+        });
+
+        // === NEW CREATURE SOUNDS ===
+
+        // Snake hiss: long breathy sibilant
+        _snakeHiss = GenerateClip("SnakeHiss", 0.4f, (t, dur) =>
+        {
+            float env = Mathf.Sin(Mathf.PI * t / dur) * Mathf.Exp(-t * 2.5f);
+            float noise = Mathf.Sin(t * 6543f) * Mathf.Cos(t * 4321f) * 0.35f;
+            float sibilant = Mathf.Sin(2f * Mathf.PI * 4000f * t) * 0.15f;
+            float modulation = 1f + Mathf.Sin(t * 8f) * 0.3f;
+            return (noise + sibilant) * env * modulation * 0.3f;
+        });
+
+        // Snake strike: quick snap with low thud
+        _snakeStrike = GenerateClip("SnakeStrike", 0.15f, (t, dur) =>
+        {
+            float env = Mathf.Exp(-t * 25f);
+            float snap = Mathf.Sin(2f * Mathf.PI * 400f * t) * 0.5f;
+            float thud = Mathf.Sin(2f * Mathf.PI * 80f * t) * 0.4f;
+            return (snap + thud) * env * 0.5f;
+        });
+
+        // Mummy groan: low moan with wavering pitch
+        _mummyGroan = GenerateClip("MummyGroan", 0.5f, (t, dur) =>
+        {
+            float freq = 100f + Mathf.Sin(t * 5f) * 20f;
+            float env = Mathf.Sin(Mathf.PI * t / dur) * 0.8f;
+            float tone = Mathf.Sin(2f * Mathf.PI * freq * t) * 0.4f
+                       + Mathf.Sin(2f * Mathf.PI * freq * 1.5f * t) * 0.15f;
+            float breathy = Mathf.Sin(t * 3456f) * Mathf.Cos(t * 2345f) * 0.1f;
+            return (tone + breathy) * env * 0.3f;
+        });
+
+        // Mummy wrap: papery rustling sound
+        _mummyWrap = GenerateClip("MummyWrap", 0.3f, (t, dur) =>
+        {
+            float env = Mathf.Sin(Mathf.PI * t / dur);
+            float rustle1 = Mathf.Sin(t * 7654f) * 0.2f;
+            float rustle2 = Mathf.Cos(t * 5432f) * 0.15f;
+            float crinkle = Mathf.Sin(2f * Mathf.PI * 2000f * t * (1f + Mathf.Sin(t * 20f) * 0.3f)) * 0.1f;
+            return (rustle1 + rustle2 + crinkle) * env * 0.25f;
+        });
+
+        // Grease glob squelch: wet squishy sound
+        _globSquelch = GenerateClip("GlobSquelch", 0.25f, (t, dur) =>
+        {
+            float freq = Mathf.Lerp(300f, 80f, t / dur);
+            float env = Mathf.Exp(-t * 6f);
+            float squelch = Mathf.Sin(2f * Mathf.PI * freq * t) * 0.4f;
+            float wet = Mathf.Sin(t * 3210f) * Mathf.Sin(t * 2468f) * 0.2f;
+            return (squelch + wet) * env * 0.35f;
+        });
+
+        // Grease glob splat: bigger wet impact
+        _globSplat = GenerateClip("GlobSplat", 0.2f, (t, dur) =>
+        {
+            float env = Mathf.Exp(-t * 12f);
+            float impact = Mathf.Sin(2f * Mathf.PI * 60f * t) * 0.5f;
+            float splatter = Mathf.Sin(t * 8765f) * Mathf.Cos(t * 6543f) * 0.3f;
+            return (impact + splatter) * env * 0.45f;
+        });
+
+        // Swarm buzz: continuous insect buzzing
+        _swarmBuzz = GenerateClip("SwarmBuzz", 0.35f, (t, dur) =>
+        {
+            float env = Mathf.Sin(Mathf.PI * t / dur);
+            float buzz1 = Mathf.Sin(2f * Mathf.PI * 180f * t) * 0.3f;
+            float buzz2 = Mathf.Sin(2f * Mathf.PI * 220f * t) * 0.2f;
+            float buzz3 = Mathf.Sin(2f * Mathf.PI * 360f * t) * 0.15f;
+            float flicker = 1f + Mathf.Sin(t * 40f) * 0.3f; // wing beat modulation
+            return (buzz1 + buzz2 + buzz3) * env * flicker * 0.25f;
+        });
+
+        // Swarm attack: aggressive buzzing surge
+        _swarmAttack = GenerateClip("SwarmAttack", 0.2f, (t, dur) =>
+        {
+            float freq = Mathf.Lerp(200f, 600f, t / dur);
+            float env = Mathf.Exp(-t * 5f);
+            float buzz = Mathf.Sin(2f * Mathf.PI * freq * t) * 0.4f;
+            float noise = Mathf.Sin(t * 9876f) * 0.2f;
+            return (buzz + noise) * env * 0.4f;
+        });
+
+        // Sound variations (pitch-shifted copies)
+        _ratSqueakVariants = GeneratePitchVariants(_ratSqueak, "RatSqueakVar", 3);
+        _frogCroakVariants = GeneratePitchVariants(_frogCroak, "FrogCroakVar", 3);
+        _jellyZapVariants = GeneratePitchVariants(_jellyZap, "JellyZapVar", 3);
+        _spiderHissVariants = GeneratePitchVariants(_spiderHiss, "SpiderHissVar", 3);
+
+        // === ENVIRONMENTAL CLIPS ===
+        _pipeCreak = GenerateClip("PipeCreak", 0.5f, (t, dur) =>
+        {
+            float freq = 80f + Mathf.Sin(t * 3f) * 15f;
+            float env = Mathf.Sin(Mathf.PI * t / dur) * 0.6f;
+            return Mathf.Sin(2f * Mathf.PI * freq * t) * env * 0.15f;
+        });
+
+        _distantDrip = GenerateClip("DistantDrip", 0.15f, (t, dur) =>
+        {
+            float freq = Mathf.Lerp(1200f, 800f, t / dur);
+            float env = Mathf.Exp(-t * 20f);
+            return Mathf.Sin(2f * Mathf.PI * freq * t) * env * 0.2f;
+        });
+
+        _sewerEcho = GenerateClip("SewerEcho", 0.8f, (t, dur) =>
+        {
+            float env = Mathf.Exp(-t * 2f);
+            float tone = Mathf.Sin(2f * Mathf.PI * 200f * t) * 0.1f;
+            float reverb = Mathf.Sin(t * 1234f) * Mathf.Cos(t * 876f) * 0.05f;
+            return (tone + reverb) * env * 0.1f;
+        });
+
+        _metalClang = GenerateClip("MetalClang", 0.3f, (t, dur) =>
+        {
+            float env = Mathf.Exp(-t * 8f);
+            float ring = Mathf.Sin(2f * Mathf.PI * 1800f * t) * 0.3f
+                       + Mathf.Sin(2f * Mathf.PI * 2700f * t) * 0.15f;
+            float impact = (t < 0.01f) ? 0.5f : 0f;
+            return (ring + impact) * env * 0.25f;
+        });
+
+        // === UI CLIPS ===
+        _menuSelect = GenerateClip("MenuSelect", 0.1f, (t, dur) =>
+        {
+            float freq = Mathf.Lerp(600f, 900f, t / dur);
+            float env = Mathf.Exp(-t * 15f);
+            return Mathf.Sin(2f * Mathf.PI * freq * t) * env * 0.3f;
+        });
+
+        _menuBack = GenerateClip("MenuBack", 0.12f, (t, dur) =>
+        {
+            float freq = Mathf.Lerp(600f, 350f, t / dur);
+            float env = Mathf.Exp(-t * 12f);
+            return Mathf.Sin(2f * Mathf.PI * freq * t) * env * 0.25f;
+        });
+
+        _skinEquip = GenerateClip("SkinEquip", 0.2f, (t, dur) =>
+        {
+            float freq = Mathf.Lerp(400f, 800f, t / dur);
+            float env = Mathf.Sin(Mathf.PI * t / dur);
+            return Mathf.Sin(2f * Mathf.PI * freq * t) * env * 0.25f;
+        });
+
+        _skinPurchase = GenerateClip("SkinPurchase", 0.4f, (t, dur) =>
+        {
+            float freq = 400f + 200f * Mathf.Floor(t / dur * 4f); // ascending steps
+            float env = Mathf.Sin(Mathf.PI * t / dur);
+            return Mathf.Sin(2f * Mathf.PI * freq * t) * env * 0.3f;
         });
 
         // Stomp: satisfying squelch + spring bounce
@@ -836,6 +1013,36 @@ public class ProceduralAudio : MonoBehaviour
         return clip;
     }
 
+    /// <summary>Generate pitch-shifted variants of a base clip for variety.</summary>
+    AudioClip[] GeneratePitchVariants(AudioClip baseClip, string baseName, int count)
+    {
+        if (baseClip == null) return new AudioClip[0];
+        float[] baseData = new float[baseClip.samples];
+        baseClip.GetData(baseData, 0);
+
+        AudioClip[] variants = new AudioClip[count];
+        float[] pitches = { 0.9f, 1.0f, 1.15f };
+        for (int v = 0; v < count; v++)
+        {
+            float pitch = pitches[v % pitches.Length];
+            int newLen = Mathf.CeilToInt(baseData.Length / pitch);
+            float[] newData = new float[newLen];
+            for (int i = 0; i < newLen; i++)
+            {
+                float srcIdx = i * pitch;
+                int idx = Mathf.FloorToInt(srcIdx);
+                float frac = srcIdx - idx;
+                if (idx + 1 < baseData.Length)
+                    newData[i] = Mathf.Lerp(baseData[idx], baseData[idx + 1], frac);
+                else if (idx < baseData.Length)
+                    newData[i] = baseData[idx];
+            }
+            variants[v] = AudioClip.Create($"{baseName}_{v}", newLen, 1, SAMPLE_RATE, false);
+            variants[v].SetData(newData, 0);
+        }
+        return variants;
+    }
+
     void GenerateBGM()
     {
         float duration = 8f; // 8-second loop
@@ -1009,6 +1216,58 @@ public class ProceduralAudio : MonoBehaviour
 
     // Water drain gurgle
     public void PlayDrainGurgle() => PlaySFX(_drainGurgle, 0.7f);
+
+    // New creature sounds
+    public void PlaySnakeHiss() => PlaySFX(_snakeHiss);
+    public void PlaySnakeStrike() => PlaySFX(_snakeStrike);
+    public void PlayMummyGroan() => PlaySFX(_mummyGroan);
+    public void PlayMummyWrap() => PlaySFX(_mummyWrap);
+    public void PlayGlobSquelch() => PlaySFX(_globSquelch);
+    public void PlayGlobSplat() => PlaySFX(_globSplat);
+    public void PlaySwarmBuzz() => PlaySFX(_swarmBuzz);
+    public void PlaySwarmAttack() => PlaySFX(_swarmAttack);
+
+    // Sound variations: pick random pitch variant
+    public void PlayRatSqueakVariant()
+    {
+        if (_ratSqueakVariants != null && _ratSqueakVariants.Length > 0)
+            PlaySFX(_ratSqueakVariants[Random.Range(0, _ratSqueakVariants.Length)]);
+        else
+            PlayRatSqueak();
+    }
+    public void PlayFrogCroakVariant()
+    {
+        if (_frogCroakVariants != null && _frogCroakVariants.Length > 0)
+            PlaySFX(_frogCroakVariants[Random.Range(0, _frogCroakVariants.Length)]);
+        else
+            PlayFrogCroak();
+    }
+    public void PlayJellyZapVariant()
+    {
+        if (_jellyZapVariants != null && _jellyZapVariants.Length > 0)
+            PlaySFX(_jellyZapVariants[Random.Range(0, _jellyZapVariants.Length)]);
+        else
+            PlayJellyZap();
+    }
+    public void PlaySpiderHissVariant()
+    {
+        if (_spiderHissVariants != null && _spiderHissVariants.Length > 0)
+            PlaySFX(_spiderHissVariants[Random.Range(0, _spiderHissVariants.Length)]);
+        else
+            PlaySpiderHiss();
+    }
+
+    // Environmental
+    public void PlayPipeCreak() => PlaySFX(_pipeCreak, 0.3f);
+    public void PlayDistantDrip() => PlaySFX(_distantDrip, 0.25f);
+    public void PlaySewerEcho() => PlaySFX(_sewerEcho, 0.2f);
+    public void PlayMetalClang() => PlaySFX(_metalClang, 0.4f);
+
+    // UI
+    public void PlayMenuSelect() => PlaySFX(_menuSelect, 0.5f);
+    public void PlayMenuBack() => PlaySFX(_menuBack, 0.5f);
+    public void PlaySkinEquip() => PlaySFX(_skinEquip, 0.6f);
+    public void PlaySkinPurchase() => PlaySFX(_skinPurchase, 0.6f);
 
     // Tour audio
     public void PlayTourEntry() => PlaySFX(_tourEntryChime, 0.7f);

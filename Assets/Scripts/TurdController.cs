@@ -208,6 +208,8 @@ public class TurdController : MonoBehaviour
                 if (_trickAngle >= 360f * (_tricksCompleted + 1))
                 {
                     _tricksCompleted++;
+                    if (_tricksCompleted == 1 && TutorialOverlay.Instance != null)
+                        TutorialOverlay.Instance.OnFirstTrick();
                     if (ProceduralAudio.Instance != null)
                         ProceduralAudio.Instance.PlayTrickComplete();
                     if (PipeCamera.Instance != null)
@@ -921,6 +923,10 @@ public class TurdController : MonoBehaviour
 #if UNITY_EDITOR
         Debug.Log($"[STOMP] combo={_stompCombo} dist={DistanceTraveled:F1}");
 #endif
+
+        // Tutorial hint on first stomp
+        if (TutorialOverlay.Instance != null)
+            TutorialOverlay.Instance.OnFirstStomp();
 
         // Score bonus: increases with combo
         int stompScore = 50 * _stompCombo;

@@ -569,6 +569,9 @@ public class SceneBootstrapper
         // Skin manager
         obj.AddComponent<SkinManager>();
 
+        // Ghost racer recorder
+        obj.AddComponent<GhostRecorder>();
+
         // Daily challenge system
         ChallengeSystem challenge = obj.AddComponent<ChallengeSystem>();
         if (gameUI != null)
@@ -933,6 +936,18 @@ public class SceneBootstrapper
 
         // Sewer Spider - creepy wall-hanger that drops down
         obstaclePrefabs.Add(CreateSewerSpiderPrefab());
+
+        // Sewer Snake - slithering sine-wave across pipe
+        obstaclePrefabs.Add(CreateSewerSnakePrefab());
+
+        // TP Mummy - wrapped in toilet paper, unfurls when near
+        obstaclePrefabs.Add(CreateTPMummyPrefab());
+
+        // Grease Glob - slides along walls, drools, puffs up
+        obstaclePrefabs.Add(CreateGreaseGlobPrefab());
+
+        // Poop Fly Swarm - 8 orbiting flies that tighten toward player
+        obstaclePrefabs.Add(CreatePoopFlySwarmPrefab());
 
         // Fartcoin - copper penny with $ emboss, sized like a real coin you'd find in a sewer
         GameObject coinPrefab = CreateFartcoinPrefab();
@@ -5421,6 +5436,266 @@ public class SceneBootstrapper
         return prefab;
     }
 
+    // ===== SEWER SNAKE OBSTACLE =====
+    static GameObject CreateSewerSnakePrefab()
+    {
+        string prefabPath = "Assets/Prefabs/SewerSnake.prefab";
+        GameObject root = new GameObject("SewerSnake");
+
+        Material skinMat = MakeURPMat("Snake_Skin", new Color(0.25f, 0.35f, 0.12f), 0.05f, 0.7f);
+        skinMat.EnableKeyword("_EMISSION");
+        skinMat.SetColor("_EmissionColor", new Color(0.03f, 0.06f, 0.01f));
+        EditorUtility.SetDirty(skinMat);
+        Material bellyMat = MakeURPMat("Snake_Belly", new Color(0.6f, 0.55f, 0.3f), 0f, 0.6f);
+        Material whiteMat = MakeURPMat("Snake_EyeW", Color.white, 0f, 0.85f);
+        whiteMat.EnableKeyword("_EMISSION");
+        whiteMat.SetColor("_EmissionColor", new Color(0.5f, 0.5f, 0.5f));
+        EditorUtility.SetDirty(whiteMat);
+        Material pupilMat = MakeURPMat("Snake_Pupil", new Color(0.02f, 0.02f, 0.02f), 0f, 0.95f);
+        Material tongueMat = MakeURPMat("Snake_Tongue", new Color(0.85f, 0.2f, 0.25f), 0f, 0.6f);
+
+        // Head (slightly flattened)
+        AddPrimChild(root, "Head", PrimitiveType.Sphere, new Vector3(0, 0, 0.8f),
+            Quaternion.identity, new Vector3(0.5f, 0.35f, 0.55f), skinMat);
+
+        // 6-8 body segments (elongated spheres in a line)
+        for (int i = 0; i < 7; i++)
+        {
+            float z = 0.5f - i * 0.28f;
+            float segScale = Mathf.Lerp(0.4f, 0.18f, (float)i / 6f); // taper toward tail
+            // Alternating slight color pattern
+            Material segMat = (i % 2 == 0) ? skinMat : bellyMat;
+            AddPrimChild(root, $"Seg{i}", PrimitiveType.Sphere, new Vector3(0, 0, z),
+                Quaternion.identity, new Vector3(segScale, segScale * 0.8f, 0.3f), segMat);
+        }
+
+        // Googly eyes on head
+        for (int side = -1; side <= 1; side += 2)
+        {
+            float x = side * 0.15f;
+            AddPrimChild(root, side < 0 ? "EyeL" : "EyeR", PrimitiveType.Sphere,
+                new Vector3(x, 0.2f, 0.9f), Quaternion.identity,
+                new Vector3(0.18f, 0.18f, 0.18f), whiteMat);
+            AddPrimChild(root, side < 0 ? "PupilL" : "PupilR", PrimitiveType.Sphere,
+                new Vector3(x, 0.2f, 1.0f), Quaternion.identity,
+                new Vector3(0.09f, 0.11f, 0.06f), pupilMat);
+        }
+
+        // Forked tongue
+        AddPrimChild(root, "Tongue", PrimitiveType.Capsule, new Vector3(0, 0, 1.1f),
+            Quaternion.Euler(90, 0, 0), new Vector3(0.04f, 0.12f, 0.03f), tongueMat);
+
+        SphereCollider col = root.AddComponent<SphereCollider>();
+        col.isTrigger = true; col.radius = 0.9f;
+        root.AddComponent<Obstacle>(); root.tag = "Obstacle";
+        root.AddComponent<SewerSnakeBehavior>();
+        root.transform.localScale = Vector3.one * 0.6f;
+
+        GameObject prefab = PrefabUtility.SaveAsPrefabAsset(root, prefabPath);
+        Object.DestroyImmediate(root);
+        Debug.Log("TTR: Created Sewer Snake with 7 body segments and forked tongue!");
+        return prefab;
+    }
+
+    // ===== TP MUMMY OBSTACLE =====
+    static GameObject CreateTPMummyPrefab()
+    {
+        string prefabPath = "Assets/Prefabs/TPMummy.prefab";
+        GameObject root = new GameObject("TPMummy");
+
+        Material wrapMat = MakeURPMat("Mummy_Wrap", new Color(0.9f, 0.88f, 0.8f), 0f, 0.3f);
+        Material dirtMat = MakeURPMat("Mummy_Dirty", new Color(0.7f, 0.65f, 0.5f), 0f, 0.25f);
+        Material whiteMat = MakeURPMat("Mummy_EyeW", Color.white, 0f, 0.85f);
+        whiteMat.EnableKeyword("_EMISSION");
+        whiteMat.SetColor("_EmissionColor", new Color(0.5f, 0.5f, 0.5f));
+        EditorUtility.SetDirty(whiteMat);
+        Material pupilMat = MakeURPMat("Mummy_Pupil", new Color(0.02f, 0.02f, 0.02f), 0f, 0.95f);
+
+        // Cylinder core body
+        AddPrimChild(root, "Body", PrimitiveType.Cylinder, Vector3.zero,
+            Quaternion.identity, new Vector3(0.6f, 0.8f, 0.6f), wrapMat);
+
+        // Head (sphere on top)
+        AddPrimChild(root, "Head", PrimitiveType.Sphere, new Vector3(0, 0.75f, 0),
+            Quaternion.identity, new Vector3(0.55f, 0.5f, 0.5f), wrapMat);
+
+        // Paper strips hanging off (flattened cubes)
+        for (int i = 0; i < 8; i++)
+        {
+            float angle = i * 45f * Mathf.Deg2Rad;
+            float x = Mathf.Cos(angle) * 0.35f;
+            float z = Mathf.Sin(angle) * 0.35f;
+            float y = Random.Range(-0.3f, 0.5f);
+            Material stripMat = (i % 3 == 0) ? dirtMat : wrapMat;
+            AddPrimChild(root, $"Strip{i}", PrimitiveType.Cube,
+                new Vector3(x, y, z),
+                Quaternion.Euler(Random.Range(-10f, 10f), i * 45f, Random.Range(-15f, 15f)),
+                new Vector3(0.08f, 0.35f, 0.25f), stripMat);
+        }
+
+        // Arms (hidden under wraps, extend on react)
+        GameObject armGroup = new GameObject("Arm");
+        armGroup.transform.SetParent(root.transform);
+        armGroup.transform.localPosition = Vector3.zero;
+        AddPrimChild(armGroup, "ArmL", PrimitiveType.Capsule, new Vector3(-0.4f, 0.2f, 0),
+            Quaternion.Euler(0, 0, 30), new Vector3(0.12f, 0.3f, 0.12f), wrapMat);
+        AddPrimChild(armGroup, "ArmR", PrimitiveType.Capsule, new Vector3(0.4f, 0.2f, 0),
+            Quaternion.Euler(0, 0, -30), new Vector3(0.12f, 0.3f, 0.12f), wrapMat);
+
+        // Googly eyes peeking through wraps
+        for (int side = -1; side <= 1; side += 2)
+        {
+            float x = side * 0.12f;
+            AddPrimChild(root, side < 0 ? "EyeL" : "EyeR", PrimitiveType.Sphere,
+                new Vector3(x, 0.85f, 0.2f), Quaternion.identity,
+                new Vector3(0.2f, 0.2f, 0.2f), whiteMat);
+            AddPrimChild(root, side < 0 ? "PupilL" : "PupilR", PrimitiveType.Sphere,
+                new Vector3(x, 0.85f, 0.3f), Quaternion.identity,
+                new Vector3(0.1f, 0.12f, 0.06f), pupilMat);
+        }
+
+        SphereCollider col = root.AddComponent<SphereCollider>();
+        col.isTrigger = true; col.radius = 0.7f;
+        root.AddComponent<Obstacle>(); root.tag = "Obstacle";
+        root.AddComponent<ToiletPaperMummyBehavior>();
+        root.transform.localScale = Vector3.one * 0.6f;
+
+        GameObject prefab = PrefabUtility.SaveAsPrefabAsset(root, prefabPath);
+        Object.DestroyImmediate(root);
+        Debug.Log("TTR: Created TP Mummy with paper strips and peeking eyes!");
+        return prefab;
+    }
+
+    // ===== GREASE GLOB OBSTACLE =====
+    static GameObject CreateGreaseGlobPrefab()
+    {
+        string prefabPath = "Assets/Prefabs/GreaseGlob.prefab";
+        GameObject root = new GameObject("GreaseGlob");
+
+        Material globMat = MakeURPMat("Glob_Body", new Color(0.55f, 0.45f, 0.15f), 0.1f, 0.85f);
+        globMat.EnableKeyword("_EMISSION");
+        globMat.SetColor("_EmissionColor", new Color(0.15f, 0.12f, 0.03f));
+        EditorUtility.SetDirty(globMat);
+        Material dripMat = MakeURPMat("Glob_Drip", new Color(0.5f, 0.4f, 0.1f), 0.05f, 0.9f);
+        dripMat.EnableKeyword("_EMISSION");
+        dripMat.SetColor("_EmissionColor", new Color(0.1f, 0.08f, 0.02f));
+        EditorUtility.SetDirty(dripMat);
+        Material whiteMat = MakeURPMat("Glob_EyeW", Color.white, 0f, 0.85f);
+        whiteMat.EnableKeyword("_EMISSION");
+        whiteMat.SetColor("_EmissionColor", new Color(0.5f, 0.5f, 0.5f));
+        EditorUtility.SetDirty(whiteMat);
+        Material pupilMat = MakeURPMat("Glob_Pupil", new Color(0.02f, 0.02f, 0.02f), 0f, 0.95f);
+
+        // Main body sphere (irregular by using slightly non-uniform scale)
+        AddPrimChild(root, "Body", PrimitiveType.Sphere, Vector3.zero,
+            Quaternion.identity, new Vector3(1.2f, 1.0f, 1.1f), globMat);
+
+        // Drip spheres hanging off bottom
+        for (int i = 0; i < 5; i++)
+        {
+            float angle = i * 72f * Mathf.Deg2Rad;
+            float x = Mathf.Cos(angle) * 0.3f;
+            float z = Mathf.Sin(angle) * 0.3f;
+            float y = -0.4f - Random.Range(0f, 0.2f);
+            float scale = Random.Range(0.12f, 0.22f);
+            AddPrimChild(root, $"Drip{i}", PrimitiveType.Sphere,
+                new Vector3(x, y, z), Quaternion.identity,
+                new Vector3(scale, scale * 1.5f, scale), dripMat);
+        }
+
+        // Smaller blob lumps on surface
+        for (int i = 0; i < 4; i++)
+        {
+            float angle = i * 90f * Mathf.Deg2Rad + 0.5f;
+            float x = Mathf.Cos(angle) * 0.45f;
+            float z = Mathf.Sin(angle) * 0.4f;
+            float y = Random.Range(0.1f, 0.35f);
+            AddPrimChild(root, $"Lump{i}", PrimitiveType.Sphere,
+                new Vector3(x, y, z), Quaternion.identity,
+                new Vector3(0.25f, 0.2f, 0.25f), globMat);
+        }
+
+        // Googly eyes
+        for (int side = -1; side <= 1; side += 2)
+        {
+            float x = side * 0.22f;
+            AddPrimChild(root, side < 0 ? "EyeL" : "EyeR", PrimitiveType.Sphere,
+                new Vector3(x, 0.35f, 0.4f), Quaternion.identity,
+                new Vector3(0.22f, 0.22f, 0.22f), whiteMat);
+            AddPrimChild(root, side < 0 ? "PupilL" : "PupilR", PrimitiveType.Sphere,
+                new Vector3(x, 0.35f, 0.5f), Quaternion.identity,
+                new Vector3(0.11f, 0.13f, 0.07f), pupilMat);
+        }
+
+        SphereCollider col = root.AddComponent<SphereCollider>();
+        col.isTrigger = true; col.radius = 0.7f;
+        root.AddComponent<Obstacle>(); root.tag = "Obstacle";
+        root.AddComponent<GreaseGlobBehavior>();
+        root.transform.localScale = Vector3.one * 0.55f;
+
+        GameObject prefab = PrefabUtility.SaveAsPrefabAsset(root, prefabPath);
+        Object.DestroyImmediate(root);
+        Debug.Log("TTR: Created Grease Glob with drip spheres and iridescent sheen!");
+        return prefab;
+    }
+
+    // ===== POOP FLY SWARM OBSTACLE =====
+    static GameObject CreatePoopFlySwarmPrefab()
+    {
+        string prefabPath = "Assets/Prefabs/PoopFlySwarm.prefab";
+        GameObject root = new GameObject("PoopFlySwarm");
+
+        Material flyMat = MakeURPMat("Fly_Body", new Color(0.08f, 0.08f, 0.06f), 0.1f, 0.5f);
+        Material wingMat = MakeURPMat("Fly_Wing", new Color(0.5f, 0.5f, 0.55f, 0.6f), 0f, 0.7f);
+        wingMat.EnableKeyword("_EMISSION");
+        wingMat.SetColor("_EmissionColor", new Color(0.15f, 0.15f, 0.2f));
+        EditorUtility.SetDirty(wingMat);
+        Material whiteMat = MakeURPMat("Fly_EyeW", new Color(0.9f, 0.1f, 0.05f), 0f, 0.85f); // red compound eyes
+        whiteMat.EnableKeyword("_EMISSION");
+        whiteMat.SetColor("_EmissionColor", new Color(0.4f, 0.05f, 0.02f));
+        EditorUtility.SetDirty(whiteMat);
+
+        // 8 flies orbiting around center
+        for (int i = 0; i < 8; i++)
+        {
+            float angle = i * 45f * Mathf.Deg2Rad;
+            float x = Mathf.Cos(angle) * 0.4f;
+            float z = Mathf.Sin(angle) * 0.4f;
+            float y = Random.Range(-0.2f, 0.2f);
+
+            // Elongated body
+            AddPrimChild(root, $"Fly{i}", PrimitiveType.Sphere,
+                new Vector3(x, y, z), Quaternion.identity,
+                new Vector3(0.08f, 0.06f, 0.14f), flyMat);
+
+            // Wings (tiny cubes)
+            AddPrimChild(root, $"Fly{i}_WingL", PrimitiveType.Cube,
+                new Vector3(x - 0.04f, y + 0.03f, z),
+                Quaternion.Euler(0, 0, -20f),
+                new Vector3(0.07f, 0.01f, 0.04f), wingMat);
+            AddPrimChild(root, $"Fly{i}_WingR", PrimitiveType.Cube,
+                new Vector3(x + 0.04f, y + 0.03f, z),
+                Quaternion.Euler(0, 0, 20f),
+                new Vector3(0.07f, 0.01f, 0.04f), wingMat);
+
+            // Compound eyes (tiny red spheres)
+            AddPrimChild(root, $"Fly{i}_Eye", PrimitiveType.Sphere,
+                new Vector3(x, y + 0.02f, z + 0.06f), Quaternion.identity,
+                new Vector3(0.04f, 0.04f, 0.04f), whiteMat);
+        }
+
+        SphereCollider col = root.AddComponent<SphereCollider>();
+        col.isTrigger = true; col.radius = 0.8f;
+        root.AddComponent<Obstacle>(); root.tag = "Obstacle";
+        root.AddComponent<PoopFlySwarmBehavior>();
+        root.transform.localScale = Vector3.one * 1.2f; // swarm is bigger overall
+
+        GameObject prefab = PrefabUtility.SaveAsPrefabAsset(root, prefabPath);
+        Object.DestroyImmediate(root);
+        Debug.Log("TTR: Created Poop Fly Swarm with 8 buzzing flies!");
+        return prefab;
+    }
+
     // ===== TOXIC FROG OBSTACLE =====
     /// <summary>
     /// Fat toxic frog - squat body, big googly eyes, throat pouch, 4 legs, hidden tongue.
@@ -6599,14 +6874,13 @@ public class SceneBootstrapper
             startBg.color = new Color(0.04f, 0.07f, 0.03f, 0.93f);
         }
 
-        // === Metal plate bolted to the stall door (lower door area) ===
-        // Image shows a metal sign plate at ~53-65% from top (Unity Y anchors 0.35-0.47)
+        // === Metal plate bolted to the stall door (front of door, compact) ===
         GameObject metalPlate = new GameObject("MetalPlate");
         metalPlate.transform.SetParent(startPanel.transform, false);
         {
             RectTransform prt = metalPlate.AddComponent<RectTransform>();
-            prt.anchorMin = new Vector2(0.14f, 0.35f);
-            prt.anchorMax = new Vector2(0.86f, 0.47f);
+            prt.anchorMin = new Vector2(0.22f, 0.38f);
+            prt.anchorMax = new Vector2(0.78f, 0.47f);
             prt.offsetMin = Vector2.zero;
             prt.offsetMax = Vector2.zero;
         }
@@ -6633,7 +6907,7 @@ public class SceneBootstrapper
 
         // "Poop Alone" button (left half = Single Player / Start)
         Button startButton = MakeButton(metalPlate.transform, "StartButton", "Poop\nAlone",
-            36, new Color(0.50f, 0.48f, 0.44f, 0.95f), Color.white,
+            26, new Color(0.50f, 0.48f, 0.44f, 0.95f), Color.white,
             new Vector2(0.02f, 0.06f), new Vector2(0.48f, 0.94f));
         // Extra thick outline for bold sticker look
         {
@@ -6660,7 +6934,7 @@ public class SceneBootstrapper
 
         // "Poop With Friends" button (right half = Sewer Tour / Multiplayer)
         Button tourButton = MakeButton(metalPlate.transform, "TourButton", "Poop With\nFriends",
-            32, new Color(0.12f, 0.12f, 0.12f, 0.95f), Color.white,
+            22, new Color(0.12f, 0.12f, 0.12f, 0.95f), Color.white,
             new Vector2(0.52f, 0.06f), new Vector2(0.98f, 0.94f));
         // Extra thick outline for bold sticker look
         {
@@ -6673,24 +6947,36 @@ public class SceneBootstrapper
             }
         }
 
-        // === Sticker-style buttons on upper door ===
+        // === Wall-mounted sign buttons (on the walls flanking the stall door) ===
 
-        // SHOP sticker (upper-left of door, tilted like a stuck-on tag)
+        // SHOP sign on left wall (vertical, like a wall-mounted plaque)
         Button shopButton = MakeButton(startPanel.transform, "ShopButton", "SHOP",
-            24, new Color(0.65f, 0.50f, 0.12f, 0.92f), Color.white,
-            new Vector2(0.08f, 0.72f), new Vector2(0.30f, 0.78f));
-        shopButton.transform.localRotation = Quaternion.Euler(0, 0, -3f);
+            28, new Color(0.65f, 0.50f, 0.12f, 0.95f), Color.white,
+            new Vector2(0.02f, 0.40f), new Vector2(0.18f, 0.54f));
+        shopButton.transform.localRotation = Quaternion.Euler(0, 0, -5f);
+        // Add border outline for wall-sign look
+        {
+            Outline shopOutline = shopButton.GetComponent<Image>().gameObject.AddComponent<Outline>();
+            shopOutline.effectColor = new Color(0.3f, 0.22f, 0.05f);
+            shopOutline.effectDistance = new Vector2(3, -3);
+        }
 
-        // GALLERY sticker (upper-right of door)
+        // GALLERY sign on right wall (vertical, like a wall-mounted plaque)
         Button galleryButton = MakeButton(startPanel.transform, "GalleryButton", "GALLERY",
-            22, new Color(0.15f, 0.42f, 0.58f, 0.92f), Color.white,
-            new Vector2(0.62f, 0.70f), new Vector2(0.88f, 0.76f));
-        galleryButton.transform.localRotation = Quaternion.Euler(0, 0, 2f);
+            24, new Color(0.15f, 0.42f, 0.58f, 0.95f), Color.white,
+            new Vector2(0.82f, 0.40f), new Vector2(0.98f, 0.54f));
+        galleryButton.transform.localRotation = Quaternion.Euler(0, 0, 5f);
+        // Add border outline for wall-sign look
+        {
+            Outline galOutline = galleryButton.GetComponent<Image>().gameObject.AddComponent<Outline>();
+            galOutline.effectColor = new Color(0.08f, 0.2f, 0.32f);
+            galOutline.effectDistance = new Vector2(3, -3);
+        }
 
         // Wallet/Fartcoin count (small display above the metal plate)
         Text startWalletText = MakeStretchText(startPanel.transform, "StartWallet", "0 Fartcoins",
             20, TextAnchor.MiddleCenter, new Color(1f, 0.85f, 0.2f),
-            new Vector2(0.30f, 0.48f), new Vector2(0.70f, 0.53f), true);
+            new Vector2(0.30f, 0.48f), new Vector2(0.70f, 0.52f), true);
 
         // Daily challenge text (below the door, subtle on dark area)
         Text challengeText = MakeStretchText(startPanel.transform, "ChallengeText", "DAILY: ...",

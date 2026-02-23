@@ -17,10 +17,14 @@ public class GameCenterManager : MonoBehaviour
     // Leaderboard IDs - must match App Store Connect configuration
     public const string LB_HIGH_SCORE = "com.ttrgames.turdtunnelrush.highscore";
     public const string LB_BEST_DISTANCE = "com.ttrgames.turdtunnelrush.bestdistance";
+    public const string LB_RACE_TIME = "com.ttrgames.turdtunnelrush.racetime";
+    public const string LB_RACE_WINS = "com.ttrgames.turdtunnelrush.racewins";
 
     // Achievement IDs
     public const string ACH_FIRST_FLUSH = "com.ttrgames.turdtunnelrush.firstflush";
     public const string ACH_COMBO_KING = "com.ttrgames.turdtunnelrush.comboking";
+    public const string ACH_RACE_WINNER = "com.ttrgames.turdtunnelrush.racewinner";
+    public const string ACH_SPEED_DEMON = "com.ttrgames.turdtunnelrush.speeddemon";
     public const string ACH_ZONE_GRIMY = "com.ttrgames.turdtunnelrush.zone.grimy";
     public const string ACH_ZONE_TOXIC = "com.ttrgames.turdtunnelrush.zone.toxic";
     public const string ACH_ZONE_RUSTY = "com.ttrgames.turdtunnelrush.zone.rusty";
@@ -115,6 +119,42 @@ public class GameCenterManager : MonoBehaviour
         }
         Social.ShowLeaderboardUI();
     }
+
+    /// Report race result (time and finish place)
+    public void ReportRaceResult(float raceTime, int finishPlace)
+    {
+        if (!IsAuthenticated) return;
+
+        // Report race time (in centiseconds, lower is better)
+        Social.ReportScore((long)(raceTime * 100), LB_RACE_TIME, success =>
+        {
+            if (success) Debug.Log($"TTR: Reported race time {raceTime:F1}s to leaderboard");
+        });
+
+        // Report total race wins
+        Social.ReportScore(PlayerData.RaceWins, LB_RACE_WINS, success =>
+        {
+            if (success) Debug.Log($"TTR: Reported {PlayerData.RaceWins} race wins");
+        });
+
+        // Achievements
+        if (finishPlace == 1)
+            ReportAchievement(ACH_RACE_WINNER);
+        if (raceTime > 0f && raceTime < 120f)
+            ReportAchievement(ACH_SPEED_DEMON); // finished race in under 2 minutes
+
+#if UNITY_ANDROID
+        ReportRaceResultAndroid(raceTime, finishPlace);
+#endif
+    }
+
+#if UNITY_ANDROID
+    void ReportRaceResultAndroid(float raceTime, int finishPlace)
+    {
+        // Google Play Games stub - implement when Play Games plugin is added
+        Debug.Log($"TTR: Android race result stub: time={raceTime:F1}s place={finishPlace}");
+    }
+#endif
 
     /// Show native achievements UI
     public void ShowAchievements()

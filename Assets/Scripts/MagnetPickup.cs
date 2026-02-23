@@ -66,6 +66,8 @@ public class MagnetPickup : MonoBehaviour
 #if UNITY_EDITOR
             Debug.Log($"[BOOST] MagnetPickup collected at dist={tc.DistanceTraveled:F0}");
 #endif
+            if (TutorialOverlay.Instance != null)
+                TutorialOverlay.Instance.OnFirstPowerUp();
             tc.ActivateCoinMagnet(duration);
             _used = true;
 

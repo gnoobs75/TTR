@@ -27,8 +27,8 @@ public class PipeFork : MonoBehaviour
     public float forkDistance;           // distance along main pipe where fork starts
     public float rejoinDistance;         // distance where fork zone ends
     public float branchLength = 60f;
-    public float maxSeparation = 3.0f;  // peak lateral offset from main path
-    public float branchPipeRadius = 2.8f;
+    public float maxSeparation = 7.0f;  // peak lateral offset from main path (was 3.0 - caused overlap!)
+    public float branchPipeRadius = 2.5f;
 
     public List<Branch> branches = new List<Branch>();
 
@@ -44,10 +44,10 @@ public class PipeFork : MonoBehaviour
     // Transition zones
     private const float TRANSITION_DIST = 30f; // meters to blend between main/branch (smooth)
 
-    // Y-junction geometry
-    private const float ENTRY_JUNCTION_LENGTH = 18f;
-    private const float EXIT_JUNCTION_LENGTH = 16f;
-    private const int JUNCTION_RINGS = 8;
+    // Y-junction geometry (longer + more rings for smooth wide separation)
+    private const float ENTRY_JUNCTION_LENGTH = 24f;
+    private const float EXIT_JUNCTION_LENGTH = 22f;
+    private const int JUNCTION_RINGS = 14;
     private const int JUNCTION_CIRC_SEGS = 16;
 
     public int PlayerBranch => _playerBranch;
@@ -65,10 +65,10 @@ public class PipeFork : MonoBehaviour
     }
 
     /// <summary>Set up a 2-branch fork at the given distance.</summary>
-    public void Setup(float distance, float pipeRadius, PipeGenerator pipeGen)
+    public void Setup(float distance, float pipeRadius, PipeGenerator pipeGen, Shader shader = null)
     {
         forkDistance = distance;
-        branchLength = Random.Range(50f, 80f);
+        branchLength = Random.Range(75f, 110f);
         rejoinDistance = forkDistance + branchLength;
 
         // Left branch (safe)
@@ -95,10 +95,17 @@ public class PipeFork : MonoBehaviour
         // Generate real branch paths
         GenerateBranchPaths(pipeGen);
 
-        // Build visual geometry
-        Shader toonLit = Shader.Find("Custom/ToonLit");
-        Shader shader = toonLit != null ? toonLit : Shader.Find("Universal Render Pipeline/Lit");
-        if (shader == null) shader = Shader.Find("Standard");
+        // Use passed shader (from PipeGenerator's cached reference) with fallback
+        if (shader == null)
+        {
+            shader = Shader.Find("Custom/ToonLit");
+            if (shader == null) shader = Shader.Find("Universal Render Pipeline/Lit");
+            if (shader == null) shader = Shader.Find("Standard");
+        }
+
+#if UNITY_EDITOR
+        Debug.Log($"[FORK] Setup shader={shader?.name ?? "NULL"} for fork at {distance:F0}m");
+#endif
 
         BuildBranchTubes(shader);
         BuildYJunction(pipeGen, pipeRadius, shader, true);  // entry
@@ -127,8 +134,9 @@ public class PipeFork : MonoBehaviour
             Vector3 center, fwd, right, up;
             pipeGen.GetPathFrame(dist, out center, out fwd, out right, out up);
 
-            // Separation curve: sin(t * PI) gives smooth diverge → peak → converge
-            float separation = Mathf.Sin(t * Mathf.PI) * maxSeparation;
+            // Separation curve: sqrt(sin(t*PI)) diverges FAST then holds wide, converges fast
+            // Much more dramatic than plain sin — branches fly apart immediately
+            float separation = Mathf.Sqrt(Mathf.Sin(t * Mathf.PI)) * maxSeparation;
 
             for (int b = 0; b < 2; b++)
             {
@@ -611,7 +619,7 @@ public class PipeFork : MonoBehaviour
             // Get branch center: lerp laterally based on the separation curve
             float tInFork = (dist - forkDistance) / branchLength;
             tInFork = Mathf.Clamp01(tInFork);
-            float separation = Mathf.Sin(tInFork * Mathf.PI) * maxSeparation;
+            float separation = Mathf.Sqrt(Mathf.Sin(tInFork * Mathf.PI)) * maxSeparation;
             Vector3 branchCenter = mainCenter + mainRight * (lateralSign * separation);
 
             // Interpolate center position
@@ -705,7 +713,7 @@ public class PipeFork : MonoBehaviour
 
             float tInFork = (dist - forkDistance) / branchLength;
             tInFork = Mathf.Clamp01(tInFork);
-            float separation = Mathf.Sin(tInFork * Mathf.PI) * maxSeparation;
+            float separation = Mathf.Sqrt(Mathf.Sin(tInFork * Mathf.PI)) * maxSeparation;
 
             // Septum height scales with blend
             float septumHeight = Mathf.Lerp(0f, branchPipeRadius * 0.8f, blend);

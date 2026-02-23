@@ -79,6 +79,40 @@ public static class SkinData
         new Skin("ElTurdo", "El Turdo", 500,
             new Color(0.35f, 0.18f, 0.08f),     // dark fierce brown
             new Color(1f, 0.2f, 0f) * 0.4f, 0.45f, 0.2f),
+
+        // === HOLIDAY PACK ===
+        new Skin("SantaPoop", "Santa Poop", 300,
+            new Color(0.7f, 0.1f, 0.08f),        // Christmas red
+            new Color(1f, 1f, 1f) * 0.25f, 0.35f, 0f),
+
+        new Skin("PumpkinPoop", "Pumpkin Poop", 250,
+            new Color(0.85f, 0.45f, 0.08f),       // pumpkin orange
+            new Color(0.1f, 0.6f, 0.1f) * 0.3f, 0.3f, 0f),
+
+        new Skin("BunnyPoop", "Bunny Poop", 200,
+            new Color(0.9f, 0.7f, 0.75f),         // pastel pink
+            new Color(1f, 0.8f, 0.85f) * 0.15f, 0.2f, 0f),
+
+        new Skin("FireworkPoop", "Firework Poop", 500,
+            new Color(0.08f, 0.05f, 0.2f),        // midnight blue
+            Color.white * 0.5f, 0.5f, 0.3f),
+
+        // === POP CULTURE PACK ===
+        new Skin("NinjaTurd", "Ninja Turd", 350,
+            new Color(0.06f, 0.06f, 0.08f),       // near-black
+            new Color(0.8f, 0.1f, 0.05f) * 0.3f, 0.4f, 0.1f),
+
+        new Skin("PirateTurd", "Pirate Turd", 300,
+            new Color(0.4f, 0.28f, 0.15f),        // weathered brown
+            new Color(0.8f, 0.6f, 0.1f) * 0.15f, 0.35f, 0.4f),
+
+        new Skin("AstronautTurd", "Astronaut Turd", 600,
+            new Color(0.92f, 0.92f, 0.95f),       // space white
+            new Color(0.6f, 0.8f, 1f) * 0.2f, 0.85f, 0.6f),
+
+        new Skin("ZombieTurd", "Zombie Turd", 400,
+            new Color(0.3f, 0.5f, 0.2f),          // undead green
+            new Color(0.2f, 0.8f, 0.1f) * 0.35f, 0.3f, 0.05f),
     };
 
     public static Skin GetSkin(string id)

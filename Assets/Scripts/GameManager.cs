@@ -163,6 +163,14 @@ public class GameManager : MonoBehaviour
         if (AnalyticsManager.Instance != null)
             AnalyticsManager.Instance.LogRunStart();
 
+        // Ghost racer: start playback of best run + begin recording this run
+        if (GhostRecorder.Instance != null)
+        {
+            GhostRecorder.Instance.StartPlayback();
+            if (player != null)
+                GhostRecorder.Instance.StartRecording(player.transform);
+        }
+
         // Show pause button during gameplay
         if (PauseMenu.Instance != null)
             PauseMenu.Instance.ShowPauseButton();
@@ -265,6 +273,10 @@ public class GameManager : MonoBehaviour
                 if (ProceduralAudio.Instance != null)
                     ProceduralAudio.Instance.PlayForkWarning();
                 HapticManager.LightTap();
+
+                // Tutorial hint on first fork
+                if (TutorialOverlay.Instance != null)
+                    TutorialOverlay.Instance.OnFirstFork();
 
                 // Poop crew branch preview hint
                 if (CheerOverlay.Instance != null)
@@ -468,8 +480,25 @@ public class GameManager : MonoBehaviour
         distanceTraveled = player.DistanceTraveled;
         int finalScore = score + Mathf.FloorToInt(distanceTraveled * scorePerMeter);
 
-        // Record run in persistent data
-        PlayerData.RecordRun(_runCoins, distanceTraveled, finalScore, _runNearMisses, _runBestCombo);
+        // Record run in persistent data (mode-specific)
+        if (RaceManager.Instance != null && RaceManager.Instance.RaceState != RaceManager.State.PreRace)
+        {
+            float raceTime = RaceManager.Instance.RaceTime;
+            int finishPlace = RaceManager.Instance.GetPlayerFinishPlace();
+            PlayerData.RecordRaceRun(_runCoins, distanceTraveled, finalScore, _runNearMisses, _runBestCombo, raceTime, finishPlace);
+        }
+        else
+        {
+            PlayerData.RecordEndlessRun(_runCoins, distanceTraveled, finalScore, _runNearMisses, _runBestCombo);
+        }
+
+        // Ghost racer: stop recording, save if this was a high score
+        bool isNewHighScore = finalScore > PlayerData.HighScore;
+        if (GhostRecorder.Instance != null)
+        {
+            GhostRecorder.Instance.StopRecording(isNewHighScore);
+            GhostRecorder.Instance.StopPlayback();
+        }
 
         // Check daily challenge
         if (ChallengeSystem.Instance != null)

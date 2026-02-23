@@ -200,6 +200,18 @@ public abstract class ObstacleBehavior : MonoBehaviour
     /// <summary>Called when player actually hits this obstacle. Play unique hit animation/sound.</summary>
     public virtual void OnPlayerHit(Transform player) { }
 
+    /// <summary>Called when this obstacle is returned to the pool. Reset all state for reuse.</summary>
+    public virtual void OnPoolReset()
+    {
+        _playerNearby = false;
+        _playerApproaching = false;
+        _hasReacted = false;
+        _reactTime = -1f;
+        _isBlinking = false;
+        _lastSoundTime = -10f;
+        StopAllCoroutines();
+    }
+
     /// <summary>Called when player stomps this obstacle from a jump. Squash it!</summary>
     public virtual void OnStomped(Transform player)
     {

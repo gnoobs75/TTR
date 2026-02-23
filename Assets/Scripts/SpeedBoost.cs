@@ -105,6 +105,10 @@ public class SpeedBoost : MonoBehaviour
             tc.ApplySpeedBoost(speedMultiplier, duration);
             _used = true;
 
+            // Tutorial hint on first speed boost
+            if (TutorialOverlay.Instance != null)
+                TutorialOverlay.Instance.OnFirstSpeedBoost();
+
             // Score popup
             if (ScorePopup.Instance != null)
                 ScorePopup.Instance.ShowMilestone(transform.position + Vector3.up * 1.5f, "SPEED BOOST!");

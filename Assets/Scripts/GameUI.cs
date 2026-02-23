@@ -1192,17 +1192,17 @@ public class GameUI : MonoBehaviour
                 }
             }
 
-            // Sticker buttons gentle wobble (SHOP / GALLERY)
+            // Wall-sign buttons gentle wobble (SHOP / GALLERY on side walls)
             Transform shopBtn = startPanel.transform.Find("ShopButton");
             Transform galleryBtn = startPanel.transform.Find("GalleryButton");
             if (shopBtn != null)
             {
-                float wobShop = -3f + Mathf.Sin(_startPulsePhase * 1.1f) * 2f;
+                float wobShop = -5f + Mathf.Sin(_startPulsePhase * 0.8f) * 1.5f;
                 shopBtn.localRotation = Quaternion.Euler(0f, 0f, wobShop);
             }
             if (galleryBtn != null)
             {
-                float wobGal = 2f + Mathf.Sin(_startPulsePhase * 0.9f + 2f) * 2f;
+                float wobGal = 5f + Mathf.Sin(_startPulsePhase * 0.7f + 2f) * 1.5f;
                 galleryBtn.localRotation = Quaternion.Euler(0f, 0f, wobGal);
             }
 

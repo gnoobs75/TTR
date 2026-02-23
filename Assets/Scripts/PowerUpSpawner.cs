@@ -81,6 +81,9 @@ public class PowerUpSpawner : MonoBehaviour
 
     void SpawnAtDistance(float dist)
     {
+        // Skip fork zones: power-ups on the main path center would float between branches
+        if (_pipeGen.GetForkAtDistance(dist) != null) return;
+
         Vector3 center, forward, right, up;
         _pipeGen.GetPathFrame(dist, out center, out forward, out right, out up);
 

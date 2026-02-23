@@ -69,6 +69,8 @@ public class SlowMoPickup : MonoBehaviour
 #if UNITY_EDITOR
             Debug.Log($"[BOOST] SlowMoPickup collected at dist={tc.DistanceTraveled:F0}");
 #endif
+            if (TutorialOverlay.Instance != null)
+                TutorialOverlay.Instance.OnFirstPowerUp();
             tc.ActivateSlowMo(duration, timeScale);
             _used = true;
 

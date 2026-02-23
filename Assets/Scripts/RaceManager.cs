@@ -51,6 +51,11 @@ public class RaceManager : MonoBehaviour
     private float _autoFinishTimer;
     private const float AUTO_FINISH_TIMEOUT = 15f;
 
+    // Pre-race lineup
+    private const float PRE_RACE_DURATION = 4f;
+    private GameObject _preRacePanel;
+    private CanvasGroup _preRaceCanvasGroup;
+
     // === RACE MUSIC ===
     [Header("Music")]
     public AudioClip[] raceSongs;
@@ -562,9 +567,9 @@ public class RaceManager : MonoBehaviour
     void StartCountdown()
     {
         _state = State.Countdown;
-        _countdownTimer = countdownDuration;
+        _countdownTimer = countdownDuration + PRE_RACE_DURATION; // extend for pre-race
 #if UNITY_EDITOR
-        Debug.Log($"[RACE] === COUNTDOWN START === distance={raceDistance:F0} racers={aiRacers?.Length ?? 0}");
+        Debug.Log($"[RACE] === PRE-RACE LINEUP === distance={raceDistance:F0} racers={aiRacers?.Length ?? 0}");
 #endif
 
         if (aiRacers != null)
@@ -575,6 +580,181 @@ public class RaceManager : MonoBehaviour
                     aiRacers[i].SetStartOffset(-3f - i * 2f);
             }
         }
+
+        // Show pre-race lineup panel
+        ShowPreRaceLineup();
+    }
+
+    void ShowPreRaceLineup()
+    {
+        Canvas canvas = FindOverlayCanvas();
+        if (canvas == null) return;
+
+        Font font = Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
+        if (font == null) font = Font.CreateDynamicFontFromOSFont("Arial", 14);
+
+        // Semi-transparent panel covering center of screen
+        _preRacePanel = new GameObject("PreRaceLineup");
+        RectTransform panelRt = _preRacePanel.AddComponent<RectTransform>();
+        panelRt.SetParent(canvas.transform, false);
+        panelRt.anchorMin = new Vector2(0.1f, 0.15f);
+        panelRt.anchorMax = new Vector2(0.9f, 0.85f);
+        panelRt.offsetMin = Vector2.zero;
+        panelRt.offsetMax = Vector2.zero;
+
+        Image panelBg = _preRacePanel.AddComponent<Image>();
+        panelBg.color = new Color(0.04f, 0.03f, 0.02f, 0.88f);
+
+        _preRaceCanvasGroup = _preRacePanel.AddComponent<CanvasGroup>();
+        _preRaceCanvasGroup.alpha = 0f;
+
+        // Title: "BROWN TOWN GRAND PRIX"
+        GameObject titleObj = new GameObject("Title");
+        RectTransform titleRt = titleObj.AddComponent<RectTransform>();
+        titleRt.SetParent(panelRt, false);
+        titleRt.anchorMin = new Vector2(0.05f, 0.82f);
+        titleRt.anchorMax = new Vector2(0.95f, 0.98f);
+        titleRt.offsetMin = Vector2.zero;
+        titleRt.offsetMax = Vector2.zero;
+
+        Text titleText = titleObj.AddComponent<Text>();
+        titleText.font = font;
+        titleText.fontSize = 36;
+        titleText.fontStyle = FontStyle.Bold;
+        titleText.alignment = TextAnchor.MiddleCenter;
+        titleText.color = new Color(1f, 0.85f, 0.1f);
+        titleText.text = "BROWN TOWN GRAND PRIX";
+        titleText.horizontalOverflow = HorizontalWrapMode.Overflow;
+
+        Outline titleOutline = titleObj.AddComponent<Outline>();
+        titleOutline.effectColor = new Color(0.3f, 0.15f, 0f);
+        titleOutline.effectDistance = new Vector2(3, -3);
+
+        // Racer entries
+        float entryHeight = 0.16f;
+        float startY = 0.72f;
+        for (int i = 0; i < _entries.Count; i++)
+        {
+            var entry = _entries[i];
+            float yMin = startY - i * entryHeight;
+            float yMax = yMin + entryHeight - 0.02f;
+
+            // Row background
+            GameObject rowObj = new GameObject($"Racer_{i}");
+            RectTransform rowRt = rowObj.AddComponent<RectTransform>();
+            rowRt.SetParent(panelRt, false);
+            rowRt.anchorMin = new Vector2(0.05f, yMin);
+            rowRt.anchorMax = new Vector2(0.95f, yMax);
+            rowRt.offsetMin = Vector2.zero;
+            rowRt.offsetMax = Vector2.zero;
+
+            Image rowBg = rowObj.AddComponent<Image>();
+            rowBg.color = entry.isPlayer
+                ? new Color(0.15f, 0.12f, 0.05f, 0.6f)
+                : new Color(0.08f, 0.06f, 0.04f, 0.4f);
+
+            // Colored circle avatar
+            GameObject circleObj = new GameObject("Avatar");
+            RectTransform circleRt = circleObj.AddComponent<RectTransform>();
+            circleRt.SetParent(rowRt, false);
+            circleRt.anchorMin = new Vector2(0.02f, 0.1f);
+            circleRt.anchorMax = new Vector2(0.1f, 0.9f);
+            circleRt.offsetMin = Vector2.zero;
+            circleRt.offsetMax = Vector2.zero;
+
+            Image circleImg = circleObj.AddComponent<Image>();
+            circleImg.color = entry.isPlayer
+                ? SkinData.GetSkin(PlayerData.SelectedSkin).baseColor
+                : entry.color;
+
+            // Name (bold)
+            GameObject nameObj = new GameObject("Name");
+            RectTransform nameRt = nameObj.AddComponent<RectTransform>();
+            nameRt.SetParent(rowRt, false);
+            nameRt.anchorMin = new Vector2(0.12f, 0.4f);
+            nameRt.anchorMax = new Vector2(0.55f, 0.95f);
+            nameRt.offsetMin = Vector2.zero;
+            nameRt.offsetMax = Vector2.zero;
+
+            Text nameText = nameObj.AddComponent<Text>();
+            nameText.font = font;
+            nameText.fontSize = 24;
+            nameText.fontStyle = FontStyle.Bold;
+            nameText.alignment = TextAnchor.MiddleLeft;
+            nameText.color = entry.isPlayer ? new Color(1f, 0.92f, 0.3f) : Color.white;
+            nameText.text = entry.isPlayer ? "YOU!" : entry.name;
+            nameText.horizontalOverflow = HorizontalWrapMode.Overflow;
+
+            // Personality trait flavor text
+            GameObject traitObj = new GameObject("Trait");
+            RectTransform traitRt = traitObj.AddComponent<RectTransform>();
+            traitRt.SetParent(rowRt, false);
+            traitRt.anchorMin = new Vector2(0.12f, 0.05f);
+            traitRt.anchorMax = new Vector2(0.95f, 0.45f);
+            traitRt.offsetMin = Vector2.zero;
+            traitRt.offsetMax = Vector2.zero;
+
+            Text traitText = traitObj.AddComponent<Text>();
+            traitText.font = font;
+            traitText.fontSize = 16;
+            traitText.fontStyle = FontStyle.Italic;
+            traitText.alignment = TextAnchor.MiddleLeft;
+            traitText.color = new Color(0.6f, 0.55f, 0.45f);
+            traitText.text = entry.isPlayer
+                ? "The chosen one."
+                : GetRacerTrait(entry.ai);
+            traitText.horizontalOverflow = HorizontalWrapMode.Overflow;
+        }
+
+        // Fade in
+        StartCoroutine(FadePreRacePanel());
+    }
+
+    string GetRacerTrait(RacerAI ai)
+    {
+        if (ai == null) return "Mystery racer.";
+
+        if (ai.consistency > 0.7f) return "Steady as a rock.";
+        if (ai.aggression > 0.7f) return "Reckless and fast.";
+        if (ai.stumbleChance < 0.01f) return "Smooth operator.";
+        if (ai.maxSpeed > 14f) return "Built for speed.";
+        if (ai.consistency < 0.3f) return "Wildcard. Anything can happen.";
+        if (ai.aggression < 0.3f) return "Plays it safe.";
+        if (ai.catchUpMultiplier > 1.3f) return "Never gives up.";
+        return "Solid all-rounder.";
+    }
+
+    System.Collections.IEnumerator FadePreRacePanel()
+    {
+        if (_preRaceCanvasGroup == null) yield break;
+
+        // Fade in over 0.5s
+        float elapsed = 0f;
+        while (elapsed < 0.5f)
+        {
+            elapsed += Time.deltaTime;
+            if (_preRaceCanvasGroup != null)
+                _preRaceCanvasGroup.alpha = elapsed / 0.5f;
+            yield return null;
+        }
+        if (_preRaceCanvasGroup != null)
+            _preRaceCanvasGroup.alpha = 1f;
+
+        // Hold for PRE_RACE_DURATION minus fade times
+        yield return new WaitForSeconds(PRE_RACE_DURATION - 1.5f);
+
+        // Fade out over 0.5s
+        elapsed = 0f;
+        while (elapsed < 0.5f)
+        {
+            elapsed += Time.deltaTime;
+            if (_preRaceCanvasGroup != null)
+                _preRaceCanvasGroup.alpha = 1f - (elapsed / 0.5f);
+            yield return null;
+        }
+
+        if (_preRacePanel != null)
+            Destroy(_preRacePanel);
     }
 
     void UpdateCountdown()
@@ -940,6 +1120,10 @@ public class RaceManager : MonoBehaviour
 
         if (ProceduralAudio.Instance != null)
             ProceduralAudio.Instance.PlayCelebration();
+
+        // Report race result to leaderboards
+        if (GameCenterManager.Instance != null)
+            GameCenterManager.Instance.ReportRaceResult(time, place);
 
         HapticManager.HeavyTap();
     }

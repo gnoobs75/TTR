@@ -65,6 +65,7 @@ public class PipeGenerator : MonoBehaviour
     private Material _conduitMat;
     private Material _chainMat;
     private Material _rivetMat;
+    private Shader _toonShader; // cached shader for fork geometry
 
     void Awake()
     {
@@ -72,6 +73,8 @@ public class PipeGenerator : MonoBehaviour
         Shader toonLit = Shader.Find("Custom/ToonLit");
         Shader urpLit = toonLit != null ? toonLit : Shader.Find("Universal Render Pipeline/Lit");
         if (urpLit == null) urpLit = Shader.Find("Standard");
+
+        _toonShader = urpLit; // cache for fork geometry
 
         _defaultMat = new Material(urpLit);
         _defaultMat.SetColor("_BaseColor", new Color(0.32f, 0.27f, 0.2f));
@@ -1024,10 +1027,10 @@ public class PipeGenerator : MonoBehaviour
     void SpawnFork(float distance)
     {
         // CRITICAL: Ensure path nodes extend far enough for the entire fork zone.
-        // Branches can be up to 80m long, so we need path data to distance + 85.
+        // Branches can be up to 110m long, so we need path data to distance + 115.
         // Without this, GetPathFrame clamps to the last node and branch geometry
         // collapses to a single degenerate point.
-        float requiredDist = distance + 85f;
+        float requiredDist = distance + 115f;
         int nodesNeeded = Mathf.CeilToInt(requiredDist / nodeSpacing) + 2;
         while (_positions.Count < nodesNeeded)
             AddPathNode();
@@ -1035,7 +1038,7 @@ public class PipeGenerator : MonoBehaviour
         GameObject forkObj = new GameObject($"PipeFork_{distance:F0}m");
         forkObj.transform.SetParent(transform);
         PipeFork fork = forkObj.AddComponent<PipeFork>();
-        fork.Setup(distance, pipeRadius, this);
+        fork.Setup(distance, pipeRadius, this, _toonShader);
         _forks.Add(fork);
         Debug.Log($"TTR: Spawned pipe fork at {distance:F0}m (branches rejoin at {fork.rejoinDistance:F0}m, path nodes={_positions.Count})");
     }

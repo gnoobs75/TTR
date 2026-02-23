@@ -51,8 +51,10 @@ public class SkinManager : MonoBehaviour
 
     void Update()
     {
+        if (_playerRenderers == null) return;
+
         // Rainbow skin: cycle colors over time
-        if (_currentSkinId == "RainbowCorny" && _playerRenderers != null)
+        if (_currentSkinId == "RainbowCorny")
         {
             float hue = (Time.time * 0.3f) % 1f;
             Color rainbow = Color.HSVToRGB(hue, 0.8f, 1f);
@@ -66,6 +68,28 @@ public class SkinManager : MonoBehaviour
                     m.SetColor("_EmissionColor", rainbow * 0.3f);
                     if (m.HasProperty("_ShadowColor"))
                         m.SetColor("_ShadowColor", rainbowShadow);
+                }
+            }
+        }
+        // Firework skin: animated sparkle emission via Perlin noise
+        else if (_currentSkinId == "FireworkPoop")
+        {
+            float t = Time.time;
+            // Perlin noise creates twinkling sparkle effect
+            float sparkle = Mathf.PerlinNoise(t * 3f, 0f);
+            float sparkle2 = Mathf.PerlinNoise(0f, t * 4f);
+            float sparkle3 = Mathf.PerlinNoise(t * 2.5f, t * 1.5f);
+            Color emissionColor = new Color(
+                sparkle * 1.2f,
+                sparkle2 * 0.8f,
+                sparkle3 * 1.5f) * 0.6f;
+            foreach (var r in _playerRenderers)
+            {
+                if (r == null) continue;
+                foreach (var m in r.materials)
+                {
+                    m.EnableKeyword("_EMISSION");
+                    m.SetColor("_EmissionColor", emissionColor);
                 }
             }
         }
