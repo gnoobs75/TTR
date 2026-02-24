@@ -268,17 +268,16 @@ public class ObstacleSpawner : MonoBehaviour
         return pool[idx];
     }
 
-    /// <summary>Check if a distance is inside any fork zone. Push dist past the fork if so.</summary>
-    bool IsInForkZone(float dist)
+    /// <summary>Check if a distance is inside any lane zone.</summary>
+    bool IsInLaneZone(float dist)
     {
-        return _pipeGen != null && _pipeGen.GetForkAtDistance(dist) != null;
+        return _pipeGen != null && _pipeGen.GetLaneZoneAtDistance(dist) != null;
     }
 
-    float PushPastFork(float dist)
+    /// <summary>Get lane zone at a distance (or null).</summary>
+    PipeLaneZone GetLaneZone(float dist)
     {
-        if (_pipeGen == null) return dist;
-        PipeFork fork = _pipeGen.GetForkAtDistance(dist);
-        return fork != null ? fork.rejoinDistance + 10f : dist;
+        return _pipeGen != null ? _pipeGen.GetLaneZoneAtDistance(dist) : null;
     }
 
     void Update()
@@ -296,13 +295,11 @@ public class ObstacleSpawner : MonoBehaviour
             _nextSpawnDist += Random.Range(minSpacing, maxSpacing) * spacingMult;
         }
 
-        // Special events: big air ramps (every 300-500m) — skip in corridors AND forks
+        // Special events: big air ramps (every 300-500m) — skip in corridors
         if (bigAirRampPrefab != null && _nextBigAirDist < playerDist + spawnDistance)
         {
             if (IsSpeedCorridor(_nextBigAirDist))
                 _nextBigAirDist = GetCorridorEnd(_nextBigAirDist) + 20f;
-            else if (IsInForkZone(_nextBigAirDist))
-                _nextBigAirDist = PushPastFork(_nextBigAirDist);
             else
             {
                 SpawnBigAirRamp(_nextBigAirDist);
@@ -310,13 +307,11 @@ public class ObstacleSpawner : MonoBehaviour
             }
         }
 
-        // Special events: vertical drops (every 400-600m, starts after 200m) — skip in corridors AND forks
+        // Special events: vertical drops (every 400-600m, starts after 200m) — skip in corridors
         if (dropZonePrefab != null && _nextDropDist < playerDist + spawnDistance)
         {
             if (IsSpeedCorridor(_nextDropDist))
                 _nextDropDist = GetCorridorEnd(_nextDropDist) + 20f;
-            else if (IsInForkZone(_nextDropDist))
-                _nextDropDist = PushPastFork(_nextDropDist);
             else
             {
                 SpawnDropZone(_nextDropDist);
@@ -324,13 +319,11 @@ public class ObstacleSpawner : MonoBehaviour
             }
         }
 
-        // Grate obstacles (every 60-120m, starts after 80m) — skip in corridors AND forks
+        // Grate obstacles (every 60-120m, starts after 80m) — skip in corridors
         if (gratePrefab != null && _nextGrateDist < playerDist + spawnDistance)
         {
             if (IsSpeedCorridor(_nextGrateDist))
                 _nextGrateDist = GetCorridorEnd(_nextGrateDist) + 10f;
-            else if (IsInForkZone(_nextGrateDist))
-                _nextGrateDist = PushPastFork(_nextGrateDist);
             else
             {
                 SpawnGrate(_nextGrateDist);
@@ -382,36 +375,8 @@ public class ObstacleSpawner : MonoBehaviour
         if (spacingMult > 1f)
             currentChance *= (1f / spacingMult); // reduce obstacle chance near corridors
 
-        // Fork zone check: use the spawn DISTANCE to find forks, not the player's state.
-        // The player may not have entered the fork yet, but we're spawning ahead into it.
-        PipeFork forkAtDist = _pipeGen != null ? _pipeGen.GetForkAtDistance(dist) : null;
-
-        // If spawn point is inside a fork zone, skip obstacles entirely.
-        // Fork zones are short (50-80m) and the Y-junction geometry fills the space.
-        // Spawning on the main path center would place objects between diverging branches.
-        if (forkAtDist != null)
-        {
-            // Only spawn coins (on the player's branch if known, otherwise skip)
-            PipeFork playerFork = _tc != null ? _tc.CurrentFork : null;
-            int playerBranch = _tc != null ? _tc.ForkBranch : -1;
-            if (playerFork == forkAtDist && playerBranch >= 0 && coinPrefab != null)
-            {
-                float coinMult = forkAtDist.GetCoinMultiplier();
-                if (coinMult > 1.5f)
-                    SpawnCoinTrailAlongPath(dist);
-            }
-            return;
-        }
-
-        // Fork density modifier: if player is in a fork (for non-fork spawn distances)
-        float coinMult2 = 1f;
-        float obstacleMult = 1f;
-        if (_tc != null && _tc.CurrentFork != null)
-        {
-            coinMult2 = _tc.CurrentFork.GetCoinMultiplier();
-            obstacleMult = _tc.CurrentFork.GetObstacleMultiplier();
-            currentChance *= obstacleMult;
-        }
+        // Lane zone modifier: adjust obstacle chance based on which side we're spawning on
+        PipeLaneZone laneZone = GetLaneZone(dist);
 
         if (_pipeGen != null)
         {
@@ -424,10 +389,10 @@ public class ObstacleSpawner : MonoBehaviour
             }
             else if (coinPrefab != null)
             {
-                // In risky fork: spawn extra coin trails
                 SpawnCoinTrailAlongPath(dist);
-                if (coinMult2 > 1.5f && Random.value < 0.4f)
-                    SpawnCoinTrailAlongPath(dist + 5f); // bonus trail
+                // In lane zones, risky side gets extra coins
+                if (laneZone != null && Random.value < 0.4f)
+                    SpawnCoinTrailAlongPath(dist + 5f);
             }
         }
     }
@@ -478,70 +443,116 @@ public class ObstacleSpawner : MonoBehaviour
 
     void SpawnObstacle(float dist, Vector3 center, Vector3 forward, Vector3 right, Vector3 up)
     {
-        // Pick placement zone - obstacles can appear anywhere around the pipe
-        // 70% floor, 15% walls, 15% ceiling - forces player to navigate
-        float zonePick = Random.value;
-        float angleDeg;
-
-        if (zonePick < 0.70f)
-        {
-            // Floor (where player usually is) - spread across bottom
-            angleDeg = 270f + Random.Range(-45f, 45f);
-        }
-        else if (zonePick < 0.85f)
-        {
-            // Walls - left or right side
-            if (Random.value < 0.5f)
-                angleDeg = Random.Range(160f, 220f); // left wall
-            else
-                angleDeg = Random.Range(340f, 400f); // right wall (wraps)
-        }
-        else
-        {
-            // Ceiling - top of pipe
-            angleDeg = Random.Range(60f, 120f);
-        }
-
-        // Zone-themed obstacle selection
+        // Zone-themed obstacle selection (pick FIRST so we can customize placement)
         GameObject prefab = GetZoneObstacle(dist);
         if (prefab == null) return;
 
-        // Mines always float in the water at the pipe bottom
+        // Per-creature placement preferences
         bool isMine = prefab.GetComponent<SewerMineBehavior>() != null;
+        bool isSpider = prefab.GetComponent<SewerSpiderBehavior>() != null;
+        bool isJelly = prefab.GetComponent<SewerJellyfishBehavior>() != null;
+        bool isFrog = prefab.GetComponent<ToxicFrogBehavior>() != null;
+        bool isSnake = prefab.GetComponent<SewerSnakeBehavior>() != null;
+        bool isRat = prefab.GetComponent<SewerRatBehavior>() != null;
+
+        float angleDeg;
+        float radiusMin = 0.40f;
+        float radiusMax = 0.60f;
+
         if (isMine)
         {
-            angleDeg = 270f + Random.Range(-20f, 20f); // water level at bottom
+            // Mines float in the water at pipe bottom
+            angleDeg = 270f + Random.Range(-20f, 20f);
+            radiusMin = 0.78f; radiusMax = 0.85f;
+        }
+        else if (isSpider)
+        {
+            // Spiders hang from ceiling/upper walls
+            angleDeg = Random.Range(45f, 135f);
+            radiusMin = 0.70f; radiusMax = 0.85f;
+        }
+        else if (isJelly)
+        {
+            // Jellyfish float mid-pipe, visible from afar
+            float jPick = Random.value;
+            if (jPick < 0.5f)
+                angleDeg = Random.Range(150f, 210f); // walls
+            else
+                angleDeg = Random.Range(60f, 120f);  // upper area
+            radiusMin = 0.30f; radiusMax = 0.50f;
+        }
+        else if (isFrog)
+        {
+            // Frogs sit on lower walls, above the waterline
+            angleDeg = (Random.value < 0.5f)
+                ? Random.Range(210f, 250f)  // lower-left wall
+                : Random.Range(290f, 330f); // lower-right wall
+            radiusMin = 0.55f; radiusMax = 0.70f;
+        }
+        else if (isSnake)
+        {
+            // Snakes slither across the floor path, elevated so visible
+            angleDeg = 270f + Random.Range(-30f, 30f);
+            radiusMin = 0.30f; radiusMax = 0.50f;
+        }
+        else if (isRat)
+        {
+            // Rats orbit - spawn on floor/walls, visible height
+            float rPick = Random.value;
+            if (rPick < 0.6f)
+                angleDeg = 270f + Random.Range(-40f, 40f); // floor
+            else
+                angleDeg = (Random.value < 0.5f)
+                    ? Random.Range(170f, 220f) : Random.Range(320f, 370f); // walls
+            radiusMin = 0.45f; radiusMax = 0.60f;
+        }
+        else
+        {
+            // Default: 55% floor, 25% walls, 20% ceiling
+            float zonePick = Random.value;
+            if (zonePick < 0.55f)
+                angleDeg = 270f + Random.Range(-40f, 40f);
+            else if (zonePick < 0.80f)
+            {
+                if (Random.value < 0.5f)
+                    angleDeg = Random.Range(160f, 220f);
+                else
+                    angleDeg = Random.Range(340f, 400f);
+            }
+            else
+                angleDeg = Random.Range(60f, 120f);
+            radiusMin = 0.40f; radiusMax = 0.60f;
         }
 
         float angle = angleDeg * Mathf.Deg2Rad;
-        // Use smaller radius when in a fork branch
-        PipeFork fork = _tc != null ? _tc.CurrentFork : null;
-        int branch = _tc != null ? _tc.ForkBranch : -1;
         float effectivePipeRadius = pipeRadius;
-        if (fork != null && branch >= 0)
-            effectivePipeRadius = Mathf.Lerp(pipeRadius, fork.branchPipeRadius,
-                fork.GetBranchBlend(dist));
 
-        // Mines float near the water surface (closer to pipe wall = lower in water)
-        float spawnRadius = isMine
-            ? effectivePipeRadius * 0.82f
-            : effectivePipeRadius * Random.Range(0.55f, 0.75f);
+        // Lane zone: stretch horizontal positions for pill-shaped pipe
+        float laneWidth = _pipeGen != null ? _pipeGen.GetLaneWidthAt(dist) : 1f;
 
-        Vector3 pos = center + (right * Mathf.Cos(angle) + up * Mathf.Sin(angle)) * spawnRadius;
+        // Lane zone obstacle density: fewer on left (safe), more on right (risky)
+        PipeLaneZone spawnLane = GetLaneZone(dist);
+        if (spawnLane != null)
+        {
+            float obsMult = spawnLane.GetObstacleMultiplier(angleDeg);
+            // If obstacle mult is low (safe side), sometimes skip spawning
+            if (obsMult < 1f && Random.value > obsMult)
+                return;
+        }
 
-        // Orient obstacle: face forward along pipe, "up" points inward toward pipe center
-        // This makes obstacles sit naturally on any surface (floor, walls, ceiling)
-        // For mines: orient upright so fuse points up (toward pipe center)
+        float spawnRadius = effectivePipeRadius * Random.Range(radiusMin, radiusMax);
+
+        // Apply lane zone horizontal stretch to spawn position
+        Vector3 pos = center + (right * Mathf.Cos(angle) * laneWidth + up * Mathf.Sin(angle)) * spawnRadius;
+
+        // Orient obstacle: face TOWARD the player (backward along pipe)
+        // so the player sees their face/front as they approach
         Vector3 inward = (center - pos).normalized;
-        Quaternion rot;
-        if (isMine)
-            rot = Quaternion.LookRotation(forward, inward);
-        else
-            rot = Quaternion.LookRotation(forward, inward);
+        Quaternion rot = Quaternion.LookRotation(-forward, inward);
         GameObject obj = GetFromPool(prefab, pos, rot);
         _spawnedObjects.Add(obj);
 #if UNITY_EDITOR
-        Debug.Log($"[SPAWN] {prefab.name} at dist={dist:F0} angle={angleDeg:F0}° radius={spawnRadius:F1} fork={fork != null}");
+        Debug.Log($"[SPAWN] {prefab.name} at dist={dist:F0} angle={angleDeg:F0}° radius={spawnRadius:F1} lane={spawnLane != null}");
 #endif
 
         // Pass actual spawn distance to rat for accurate orbit
@@ -613,40 +624,15 @@ public class ObstacleSpawner : MonoBehaviour
     void SpawnCoinAtAngle(float dist, float angleDeg)
     {
         Vector3 center, forward, right, up;
-
-        // Branch-aware coin placement
-        PipeFork fork = _tc != null ? _tc.CurrentFork : null;
-        int branch = _tc != null ? _tc.ForkBranch : -1;
+        _pipeGen.GetPathFrame(dist, out center, out forward, out right, out up);
         float effectiveRadius = pipeRadius;
 
-        if (fork != null && branch >= 0)
-        {
-            Vector3 mainC, mainF, mainR, mainU;
-            _pipeGen.GetPathFrame(dist, out mainC, out mainF, out mainR, out mainU);
-
-            Vector3 bC, bF, bR, bU;
-            if (fork.GetBranchFrame(branch, dist, out bC, out bF, out bR, out bU))
-            {
-                float blend = fork.GetBranchBlend(dist);
-                center = Vector3.Lerp(mainC, bC, blend);
-                forward = Vector3.Slerp(mainF, bF, blend).normalized;
-                right = Vector3.Slerp(mainR, bR, blend).normalized;
-                up = Vector3.Slerp(mainU, bU, blend).normalized;
-                effectiveRadius = Mathf.Lerp(pipeRadius, fork.branchPipeRadius, blend);
-            }
-            else
-            {
-                _pipeGen.GetPathFrame(dist, out center, out forward, out right, out up);
-            }
-        }
-        else
-        {
-            _pipeGen.GetPathFrame(dist, out center, out forward, out right, out up);
-        }
+        // Lane zone: stretch coin positions horizontally
+        float laneWidth = _pipeGen.GetLaneWidthAt(dist);
 
         float rad = angleDeg * Mathf.Deg2Rad;
         float spawnRadius = effectiveRadius * 0.92f;
-        Vector3 pos = center + (right * Mathf.Cos(rad) + up * Mathf.Sin(rad)) * spawnRadius;
+        Vector3 pos = center + (right * Mathf.Cos(rad) * laneWidth + up * Mathf.Sin(rad)) * spawnRadius;
 
         // Orient coin: inward is "up" for the coin so it sits on the pipe surface
         Vector3 inward = (center - pos).normalized;

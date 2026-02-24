@@ -40,6 +40,7 @@ public class SceneBootstrapper
         _urpLit = _toonLit != null ? _toonLit : Shader.Find("Universal Render Pipeline/Lit");
         if (_urpLit == null)
             _urpLit = Shader.Find("Standard"); // final fallback
+        Debug.Log($"TTR: Shader setup — ToonLit={((_toonLit != null) ? "FOUND" : "NULL")}, urpLit={((_urpLit != null) ? _urpLit.name : "NULL")}");
         _matCounter = 0;
 
         // Clean old generated materials
@@ -513,7 +514,7 @@ public class SceneBootstrapper
 
         PipeCamera pipeCam = camObj.AddComponent<PipeCamera>();
         pipeCam.target = player;
-        pipeCam.followDistance = 3.5f;       // behind the turd on the pipe path
+        pipeCam.followDistance = 2.75f;      // behind the turd on the pipe path
         pipeCam.lookAhead = 6f;              // look ahead of the turd
         pipeCam.pipeRadius = 3.5f;
         pipeCam.centerPull = 0.45f;          // 45% from player toward pipe center (above/behind)

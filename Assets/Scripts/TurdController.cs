@@ -115,9 +115,12 @@ public class TurdController : MonoBehaviour
     private float _dropExitBoostDur = 3f;
     private Vector2 _dropOffset = Vector2.zero; // 2D offset from pipe center
 
-    // Fork tracking
+    // Fork tracking (legacy — replaced by lane zones)
     private PipeFork _currentFork;
     private int _forkBranch = -1;
+
+    // Lane zone tracking
+    private PipeLaneZone _currentLaneZone;
 
     public float DistanceTraveled => _distanceAlongPath;
     public float CurrentSpeed => _currentSpeed;
@@ -127,6 +130,7 @@ public class TurdController : MonoBehaviour
     public float HitPhaseProgress => _hitPhaseDuration > 0f ? Mathf.Clamp01(_hitPhaseTimer / _hitPhaseDuration) : 0f;
     public int ForkBranch => _forkBranch;
     public PipeFork CurrentFork => _currentFork;
+    public PipeLaneZone CurrentLaneZone => _currentLaneZone;
     public bool IsInvincible => _hitState == HitState.Invincible || _hitState == HitState.Stunned;
     public bool IsStunned => _hitState == HitState.Stunned;
     public bool IsJumping => _isJumping;
@@ -328,29 +332,23 @@ public class TurdController : MonoBehaviour
             ProceduralAudio.Instance?.UpdateDriftGrind(0f);
         }
 
-        // === FORK CHECK (visual only - tracks branch for spawn density) ===
+        // === LANE ZONE CHECK (tracks whether we're in a wide section) ===
         if (pipeGen != null)
         {
-            PipeFork fork = pipeGen.GetForkAtDistance(_distanceAlongPath);
-            if (fork != null && _currentFork != fork)
+            PipeLaneZone lane = pipeGen.GetLaneZoneAtDistance(_distanceAlongPath);
+            if (lane != null && _currentLaneZone != lane)
             {
-                // Entering a new fork - assign branch based on which side of pipe we're on
-                _currentFork = fork;
-                fork.AssignPlayer(_currentAngle);
-                _forkBranch = fork.PlayerBranch;
+                _currentLaneZone = lane;
 #if UNITY_EDITOR
-                Debug.Log($"[FORK] Entered fork at dist={_distanceAlongPath:F1} angle={_currentAngle:F0}° → branch={_forkBranch} forkDist={fork.forkDistance:F0} rejoin={fork.rejoinDistance:F0}");
+                Debug.Log($"[LANE] Entered lane zone at dist={_distanceAlongPath:F1} width={lane.GetWidthMultiplier(_distanceAlongPath):F2}x range={lane.startDistance:F0}-{lane.endDistance:F0}");
 #endif
             }
-            else if (fork == null && _currentFork != null)
+            else if (lane == null && _currentLaneZone != null)
             {
-                // Exited fork zone
 #if UNITY_EDITOR
-                Debug.Log($"[FORK] Exited fork at dist={_distanceAlongPath:F1}");
+                Debug.Log($"[LANE] Exited lane zone at dist={_distanceAlongPath:F1}");
 #endif
-                _currentFork.ResetPlayerBranch();
-                _currentFork = null;
-                _forkBranch = -1;
+                _currentLaneZone = null;
             }
         }
 
@@ -359,29 +357,15 @@ public class TurdController : MonoBehaviour
         {
             Vector3 center, forward, right, up;
 
-            // Always use main path orientation (forward/right/up) for stable camera.
-            // Only blend the CENTER position laterally into the chosen branch.
             pipeGen.GetPathFrame(_distanceAlongPath, out center, out forward, out right, out up);
 
-            if (_currentFork != null && _forkBranch >= 0)
-            {
-                Vector3 branchCenter, branchFwd, branchRight, branchUp;
-                if (_currentFork.GetBranchFrame(_forkBranch, _distanceAlongPath,
-                    out branchCenter, out branchFwd, out branchRight, out branchUp))
-                {
-                    float blend = _currentFork.GetBranchBlend(_distanceAlongPath);
-                    center = Vector3.Lerp(center, branchCenter, blend);
-                }
-            }
+            float activeRadius = pipeRadius;
 
-            // Use smaller radius when in a branch tube
-            float activeRadius = (_currentFork != null && _forkBranch >= 0)
-                ? Mathf.Lerp(pipeRadius, _currentFork.branchPipeRadius,
-                    _currentFork.GetBranchBlend(_distanceAlongPath))
-                : pipeRadius;
+            // Lane zone: stretch horizontal offset for pill-shaped pipe
+            float laneWidth = pipeGen.GetLaneWidthAt(_distanceAlongPath);
 
             float rad = _currentAngle * Mathf.Deg2Rad;
-            Vector3 offset = (right * Mathf.Cos(rad) + up * Mathf.Sin(rad)) * activeRadius;
+            Vector3 offset = (right * Mathf.Cos(rad) * laneWidth + up * Mathf.Sin(rad)) * activeRadius;
             Vector3 targetPos = center + offset;
 
             // Jump: smooth parabolic arc above the pipe surface

@@ -69,7 +69,7 @@ public class RacerAI : MonoBehaviour
     // Slither animation
     private TurdSlither _slither;
 
-    // Fork tracking
+    // Fork tracking (legacy — replaced by lane zones)
     private PipeFork _currentFork;
     private int _forkBranch = -1;
 
@@ -228,54 +228,25 @@ public class RacerAI : MonoBehaviour
         _currentSpeed = Mathf.Lerp(_currentSpeed, targetSpeed, dt * acceleration);
         _distanceAlongPath += _currentSpeed * dt;
 
-        // === FORK CHECK (visual only - density tracking) ===
-        PipeFork fork = pipeGen.GetForkAtDistance(_distanceAlongPath);
-        if (fork != null && _currentFork != fork)
-        {
-            _currentFork = fork;
-            _forkBranch = fork.GetAIBranch(aggression);
-        }
-        else if (fork == null && _currentFork != null)
-        {
-            _currentFork = null;
-            _forkBranch = -1;
-        }
-
-        // === POSITION ON PIPE (branch-aware) ===
+        // === POSITION ON PIPE (lane-zone aware) ===
         Vector3 center, forward, right, up;
+        pipeGen.GetPathFrame(_distanceAlongPath, out center, out forward, out right, out up);
 
-        if (_currentFork != null && _forkBranch >= 0)
+        float activeRadius = pipeRadius;
+
+        // Lane zone: stretch horizontal offset for pill-shaped pipe
+        float laneWidth = pipeGen.GetLaneWidthAt(_distanceAlongPath);
+
+        // Aggressive AI drifts toward risky (right) side in lane zones
+        if (laneWidth > 1.05f && aggression > 0.5f)
         {
-            Vector3 mainC, mainF, mainR, mainU;
-            pipeGen.GetPathFrame(_distanceAlongPath, out mainC, out mainF, out mainR, out mainU);
-
-            Vector3 bC, bF, bR, bU;
-            if (_currentFork.GetBranchFrame(_forkBranch, _distanceAlongPath,
-                out bC, out bF, out bR, out bU))
-            {
-                float blend = _currentFork.GetBranchBlend(_distanceAlongPath);
-                center = Vector3.Lerp(mainC, bC, blend);
-                forward = Vector3.Slerp(mainF, bF, blend).normalized;
-                right = Vector3.Slerp(mainR, bR, blend).normalized;
-                up = Vector3.Slerp(mainU, bU, blend).normalized;
-            }
-            else
-            {
-                center = mainC; forward = mainF; right = mainR; up = mainU;
-            }
+            float driftTarget = 270f + 50f; // drift right from bottom
+            float driftStrength = (laneWidth - 1f) * aggression * 0.3f;
+            _currentAngle += Mathf.DeltaAngle(_currentAngle, driftTarget) * driftStrength * dt;
         }
-        else
-        {
-            pipeGen.GetPathFrame(_distanceAlongPath, out center, out forward, out right, out up);
-        }
-
-        float activeRadius = (_currentFork != null && _forkBranch >= 0)
-            ? Mathf.Lerp(pipeRadius, _currentFork.branchPipeRadius,
-                _currentFork.GetBranchBlend(_distanceAlongPath))
-            : pipeRadius;
 
         float rad = _currentAngle * Mathf.Deg2Rad;
-        Vector3 offset = (right * Mathf.Cos(rad) + up * Mathf.Sin(rad)) * activeRadius;
+        Vector3 offset = (right * Mathf.Cos(rad) * laneWidth + up * Mathf.Sin(rad)) * activeRadius;
         Vector3 targetPos = center + offset;
 
         // Stumble wobble

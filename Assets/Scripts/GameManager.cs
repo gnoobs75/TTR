@@ -55,8 +55,8 @@ public class GameManager : MonoBehaviour
     // Freeze frame
     private float _freezeTimer = 0f;
 
-    // Fork approach warning
-    private PipeFork _warnedFork;
+    // Fork approach warning (disabled - replaced by lane zones)
+    // private PipeFork _warnedFork;
 
     // Near-miss streak (consecutive dodges without getting hit)
     private int _nearMissStreak;
@@ -259,42 +259,7 @@ public class GameManager : MonoBehaviour
             _nextMilestoneIdx++;
         }
 
-        // Fork approach warning (50m ahead) with branch preview hints
-        foreach (var fork in PipeFork.ActiveForks)
-        {
-            if (fork == null) continue;
-            float distToFork = fork.forkDistance - distanceTraveled;
-            if (distToFork > 0f && distToFork < 50f && _warnedFork != fork)
-            {
-                _warnedFork = fork;
-                if (ScorePopup.Instance != null && player != null)
-                    ScorePopup.Instance.ShowMilestone(
-                        player.transform.position + Vector3.up * 2.5f, "FORK AHEAD!");
-                if (ProceduralAudio.Instance != null)
-                    ProceduralAudio.Instance.PlayForkWarning();
-                HapticManager.LightTap();
-
-                // Tutorial hint on first fork
-                if (TutorialOverlay.Instance != null)
-                    TutorialOverlay.Instance.OnFirstFork();
-
-                // Poop crew branch preview hint
-                if (CheerOverlay.Instance != null)
-                {
-                    string[] hints = {
-                        "LEFT IS CHILL!",
-                        "RIGHT IS SPICY!",
-                        "LEFT = EASY PEASY!",
-                        "DARE YA GO RIGHT!",
-                        "LEFT FOR WIMPS!",
-                        "RIGHT FOR GLORY!"
-                    };
-                    string hint = hints[Random.Range(0, hints.Length)];
-                    CheerOverlay.Instance.ShowCheer(hint, new Color(1f, 0.85f, 0.3f), false);
-                }
-                break;
-            }
-        }
+        // Lane zone approach - no warning, just let the pipe widen naturally
 
         // Update atmospheric particles
         if (ParticleManager.Instance != null && player != null)

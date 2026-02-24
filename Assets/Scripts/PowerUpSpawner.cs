@@ -81,19 +81,32 @@ public class PowerUpSpawner : MonoBehaviour
 
     void SpawnAtDistance(float dist)
     {
-        // Skip fork zones: power-ups on the main path center would float between branches
-        if (_pipeGen.GetForkAtDistance(dist) != null) return;
-
         Vector3 center, forward, right, up;
         _pipeGen.GetPathFrame(dist, out center, out forward, out right, out up);
 
+        // Lane zone: stretch spawn positions + bias speed boosts to risky (right) side
+        float laneWidth = _pipeGen.GetLaneWidthAt(dist);
+        PipeLaneZone laneZone = _pipeGen.GetLaneZoneAtDistance(dist);
+        bool inLaneZone = laneZone != null;
+
         // Power-ups can appear ANYWHERE on the pipe - floor, walls, ceiling
         // In speed corridors: mostly floor for easy chain collection
-        // This rewards players who explore the full circumference
+        // In lane zones: speed boosts biased to right (risky) side
         float angleDeg;
         bool inCorridor = ObstacleSpawner.IsSpeedCorridor(dist);
         float zonePick = Random.value;
-        if (inCorridor)
+
+        if (inLaneZone)
+        {
+            // Lane zone: 60% right side (risky = speed boosts), 25% floor center, 15% left
+            if (zonePick < 0.60f)
+                angleDeg = Random.Range(300f, 370f); // right side (risky)
+            else if (zonePick < 0.85f)
+                angleDeg = 270f + Random.Range(-20f, 20f); // floor center
+            else
+                angleDeg = Random.Range(190f, 240f); // left side (safe)
+        }
+        else if (inCorridor)
         {
             // Speed corridors: 80% floor, 10% left, 10% right (easy to chain)
             if (zonePick < 0.8f)
@@ -126,7 +139,8 @@ public class PowerUpSpawner : MonoBehaviour
 
         float angle = angleDeg * Mathf.Deg2Rad;
         float spawnRadius = pipeRadius * 0.82f;
-        Vector3 pos = center + (right * Mathf.Cos(angle) + up * Mathf.Sin(angle)) * spawnRadius;
+        // Apply lane zone horizontal stretch
+        Vector3 pos = center + (right * Mathf.Cos(angle) * laneWidth + up * Mathf.Sin(angle)) * spawnRadius;
 
         // Check for special power-up spawn (Shield, Magnet, Slow-Mo)
         bool spawnedSpecial = false;

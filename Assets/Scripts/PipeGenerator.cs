@@ -45,15 +45,18 @@ public class PipeGenerator : MonoBehaviour
     private Material _waterMat;
     private Material _detailMat; // rust/slime overlay
 
-    // Pipe forks
-    [Header("Fork Settings")]
-    public float firstForkDistance = 500f;   // ~25% of 2000m race
-    public float secondForkDistance = 1000f; // ~50% of 2000m race
-    public float thirdForkDistance = 1500f;  // ~75% of 2000m race
-    private List<PipeFork> _forks = new List<PipeFork>();
-    private int _nextForkIdx = 0;
-    private float[] _forkDistances;
+    // Lane zones (replaces fork system: pipe widens into pill shape)
+    [Header("Lane Zone Settings")]
+    public float firstLaneDistance = 500f;
+    public float secondLaneDistance = 1000f;
+    public float thirdLaneDistance = 1500f;
+    private List<PipeLaneZone> _laneZones = new List<PipeLaneZone>();
+    private bool _laneZonesCreated;
 
+    public List<PipeLaneZone> LaneZones => _laneZones;
+
+    // Keep fork list empty for backward compat (spawners check it)
+    private List<PipeFork> _forks = new List<PipeFork>();
     public List<PipeFork> Forks => _forks;
 
     public float SegmentLength => nodesPerSegment * nodeSpacing;
@@ -120,11 +123,26 @@ public class PipeGenerator : MonoBehaviour
         if (player != null)
             _tc = player.GetComponent<TurdController>();
 
-        // Initialize fork distances
-        _forkDistances = new float[] { firstForkDistance, secondForkDistance, thirdForkDistance };
+        // Create lane zones (pipe widens into pill shape at these distances)
+        CreateLaneZones();
 
         for (int i = 0; i < visiblePipes + 2; i++)
             SpawnSegment();
+    }
+
+    void CreateLaneZones()
+    {
+        if (_laneZonesCreated) return;
+        _laneZonesCreated = true;
+
+        // Zone 1: gentle introduction (500m) — moderate widening
+        _laneZones.Add(new PipeLaneZone(firstLaneDistance, 35f, 50f, 35f, 1.8f));
+        // Zone 2: wider (1000m) — full pill shape
+        _laneZones.Add(new PipeLaneZone(secondLaneDistance, 30f, 65f, 30f, 2.0f));
+        // Zone 3: intense (1500m) — widest, longest hold
+        _laneZones.Add(new PipeLaneZone(thirdLaneDistance, 25f, 80f, 25f, 2.2f));
+
+        Debug.Log($"TTR: Created {_laneZones.Count} lane zones at {firstLaneDistance}/{secondLaneDistance}/{thirdLaneDistance}m");
     }
 
     void Update()
@@ -153,9 +171,6 @@ public class PipeGenerator : MonoBehaviour
             }
             else break;
         }
-
-        // Spawn forks ahead
-        SpawnForksAhead(dist);
 
         // Zone-based material updates
         UpdateZoneMaterials();
@@ -341,7 +356,8 @@ public class PipeGenerator : MonoBehaviour
 
             float angle = Random.Range(0f, 360f) * Mathf.Deg2Rad;
             float radius = pipeRadius * 0.90f; // safely inside pipe wall
-            Vector3 pos = center + (right * Mathf.Cos(angle) + up * Mathf.Sin(angle)) * radius;
+            float detailWidth = GetLaneWidthAt(nodeIdx * nodeSpacing);
+            Vector3 pos = center + (right * Mathf.Cos(angle) * detailWidth + up * Mathf.Sin(angle)) * radius;
             Vector3 inward = (center - pos).normalized;
 
             int detailType = Random.Range(0, 5);
@@ -464,11 +480,15 @@ public class PipeGenerator : MonoBehaviour
             else if (r % 4 == 0)
                 radius *= 1.03f;
 
+            // Lane zone: stretch horizontally for pill/oval shape
+            float widthMult = GetLaneWidthAt(nodeIdx * nodeSpacing);
+
             for (int s = 0; s <= circumSegments; s++)
             {
                 float angle = (float)s / circumSegments * Mathf.PI * 2f;
                 int idx = r * vpr + s;
-                verts[idx] = center + (right * Mathf.Cos(angle) + up * Mathf.Sin(angle)) * radius;
+                // Pill shape: stretch the right (horizontal) axis, keep up (vertical) axis normal
+                verts[idx] = center + (right * Mathf.Cos(angle) * widthMult + up * Mathf.Sin(angle)) * radius;
                 uvs[idx] = new Vector2((float)s / circumSegments, (float)r / (ringCount - 1) * 2f);
             }
         }
@@ -538,9 +558,12 @@ public class PipeGenerator : MonoBehaviour
             Vector3 right = Vector3.Cross(fwd, refUp).normalized;
             Vector3 up = Vector3.Cross(right, fwd).normalized;
 
+            // Lane zone: water plane stretches horizontally too
+            float widthMult = GetLaneWidthAt(nodeIdx * nodeSpacing);
+
             Vector3 waterCenter = center + up * waterHeight;
-            verts[r * 2] = waterCenter - right * waterWidth;
-            verts[r * 2 + 1] = waterCenter + right * waterWidth;
+            verts[r * 2] = waterCenter - right * waterWidth * widthMult;
+            verts[r * 2 + 1] = waterCenter + right * waterWidth * widthMult;
             uvs[r * 2] = new Vector2(0, (float)r / (ringCount - 1));
             uvs[r * 2 + 1] = new Vector2(1, (float)r / (ringCount - 1));
         }
@@ -990,88 +1013,47 @@ public class PipeGenerator : MonoBehaviour
         }
     }
 
-    // ===== PIPE FORK SYSTEM =====
+    // ===== LANE ZONE SYSTEM (replaces forks) =====
 
-    void SpawnForksAhead(float playerDist)
+    /// <summary>
+    /// Get the horizontal width multiplier at a given distance along the pipe.
+    /// Returns 1.0 for normal circular pipe, >1.0 in lane zones (pill shape).
+    /// </summary>
+    public float GetLaneWidthAt(float distance)
     {
-        if (_forkDistances == null) return;
-
-        while (_nextForkIdx < _forkDistances.Length)
+        for (int i = 0; i < _laneZones.Count; i++)
         {
-            float forkDist = _forkDistances[_nextForkIdx];
-            // Spawn fork when player is within 200m
-            if (playerDist + 200f >= forkDist)
-            {
-                SpawnFork(forkDist);
-                _nextForkIdx++;
-            }
-            else break;
+            if (_laneZones[i].Contains(distance))
+                return _laneZones[i].GetWidthMultiplier(distance);
         }
-
-        // Clean up passed forks
-        for (int i = _forks.Count - 1; i >= 0; i--)
-        {
-            if (_forks[i] == null)
-            {
-                _forks.RemoveAt(i);
-                continue;
-            }
-            if (playerDist > _forks[i].rejoinDistance + 50f)
-            {
-                Destroy(_forks[i].gameObject);
-                _forks.RemoveAt(i);
-            }
-        }
-    }
-
-    void SpawnFork(float distance)
-    {
-        // CRITICAL: Ensure path nodes extend far enough for the entire fork zone.
-        // Branches can be up to 110m long, so we need path data to distance + 115.
-        // Without this, GetPathFrame clamps to the last node and branch geometry
-        // collapses to a single degenerate point.
-        float requiredDist = distance + 115f;
-        int nodesNeeded = Mathf.CeilToInt(requiredDist / nodeSpacing) + 2;
-        while (_positions.Count < nodesNeeded)
-            AddPathNode();
-
-        GameObject forkObj = new GameObject($"PipeFork_{distance:F0}m");
-        forkObj.transform.SetParent(transform);
-        PipeFork fork = forkObj.AddComponent<PipeFork>();
-        fork.Setup(distance, pipeRadius, this, _toonShader);
-        _forks.Add(fork);
-        Debug.Log($"TTR: Spawned pipe fork at {distance:F0}m (branches rejoin at {fork.rejoinDistance:F0}m, path nodes={_positions.Count})");
+        return 1f;
     }
 
     /// <summary>
-    /// Get path frame accounting for forks. If a racer is on a branch,
-    /// returns the branch path instead of the main pipe path.
+    /// Find the active lane zone (if any) at a given distance.
     /// </summary>
+    public PipeLaneZone GetLaneZoneAtDistance(float distance)
+    {
+        for (int i = 0; i < _laneZones.Count; i++)
+        {
+            if (_laneZones[i].Contains(distance))
+                return _laneZones[i];
+        }
+        return null;
+    }
+
+    // === BACKWARD COMPAT: Fork queries return null/empty ===
+
+    /// <summary>Fork system replaced by lane zones. Always returns null.</summary>
+    public PipeFork GetForkAtDistance(float distance)
+    {
+        return null;
+    }
+
+    /// <summary>Fork system replaced by lane zones. Falls through to main path.</summary>
     public void GetPathFrameForBranch(float distance, int branchIdx, PipeFork fork,
         out Vector3 position, out Vector3 forward, out Vector3 right, out Vector3 up)
     {
-        // If in a fork branch, use branch path
-        if (fork != null && branchIdx >= 0 &&
-            distance >= fork.forkDistance && distance <= fork.rejoinDistance)
-        {
-            if (fork.GetBranchFrame(branchIdx, distance, out position, out forward, out right, out up))
-                return;
-        }
-
-        // Default: main pipe path
         GetPathFrame(distance, out position, out forward, out right, out up);
-    }
-
-    /// <summary>
-    /// Find the active fork (if any) for a given distance.
-    /// </summary>
-    public PipeFork GetForkAtDistance(float distance)
-    {
-        foreach (var fork in _forks)
-        {
-            if (fork != null && distance >= fork.forkDistance - 5f && distance <= fork.rejoinDistance)
-                return fork;
-        }
-        return null;
     }
 }
