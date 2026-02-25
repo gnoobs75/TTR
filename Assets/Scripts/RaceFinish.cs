@@ -4,81 +4,86 @@ using System.Collections;
 using System.Collections.Generic;
 
 /// <summary>
-/// Sewage Treatment Plant finish line and Winners Poodium.
-/// Shows finish banner, plays fanfare, presents 1st/2nd/3rd on podium blocks.
+/// Race finish UI — single unified panel with 3 auto-cycling tabs:
+/// RESULTS (racer placements), STATS (player race stats), PODIUM (joke podium).
+/// Replaces the old multi-panel + 3D podium system.
 /// </summary>
 public class RaceFinish : MonoBehaviour
 {
     [Header("UI References")]
     public Canvas finishCanvas;
-    public RectTransform bannerRoot;
-    public RectTransform podiumRoot;
+    public RectTransform bannerRoot;   // kept for compat, unused
+    public RectTransform podiumRoot;   // kept for compat, unused
 
-    // Internal UI elements
-    private Text _bannerText;
-    private Text _placeText;
-    private Text _timeText;
-    private PodiumSlot[] _podiumSlots;
-    private CanvasGroup _bannerGroup;
-    private CanvasGroup _podiumGroup;
+    // Internal state
     private bool _initialized;
     private bool _podiumShown;
 
-    // 3D Podium
-    private GameObject _podium3D;
-    private ParticleSystem _confetti;
+    // Unified panel
+    private RectTransform _panelRoot;
+    private CanvasGroup _panelGroup;
+    private Text _headerPlaceText;
+    private Text _headerTimeText;
 
-    // Race results panel (all 5 racers)
-    private RectTransform _resultsRoot;
-    private CanvasGroup _resultsGroup;
+    // Tab bar
+    private Image[] _tabButtonImages = new Image[3];
+    private Text[] _tabButtonTexts = new Text[3];
+    private Button[] _tabButtons = new Button[3];
+
+    // Tab content pages
+    private RectTransform[] _tabPages = new RectTransform[3];
+    private CanvasGroup[] _tabPageGroups = new CanvasGroup[3];
+
+    // Tab 0: Results
     private ResultRow[] _resultRows;
     private int _nextResultRow;
+    private float _firstFinishTime;
+
+    // Tab 1: Stats
+    private Text[] _statValueTexts;
+    private float[] _statTargetValues;
+    private float[] _statCurrentValues;
+    private bool _statsAnimating;
+    private float _statsAnimTimer;
+
+    // Tab 2: Podium
+    private Text _podiumJokeTitle;
+    private Text _podiumAnnouncementText;
+    private Text[] _podiumNameTexts = new Text[3];
+    private Image[] _podiumSwatches = new Image[3];
+
+    // Tab cycling
+    private int _activeTab = -1;
+    private float _autoTabTimer;
+    private const float AUTO_TAB_INTERVAL = 5f;
+    private int _autoTabCount;
+    private bool _tabSwitching;
+
+    // Animation state
+    private float _headerPulsePhase;
+    private Color _placeBaseColor;
 
     struct ResultRow
     {
         public RectTransform root;
+        public CanvasGroup group;
         public Image bg;
-        public Text placeText;
-        public Text nameText;
-        public Text timeText;
-    }
-
-    // Animation state
-    private float _bannerShowTime;
-    private Color _placeBaseColor;
-    private Text _poodiumTitle;
-    private float _podiumTitlePhase;
-
-    struct PodiumSlot
-    {
-        public RectTransform root;
-        public Image pedestal;
         public Image colorSwatch;
-        public Text nameText;
         public Text placeText;
+        public Text nameText;
         public Text timeText;
     }
 
-    // Podium dimensions — #2 is tallest because YOU'RE NUMBER TWO! (it's a poop joke)
-    const float PODIUM_WIDTH = 120f;
-    const float PODIUM_SPACING = 10f;
-    const float FIRST_HEIGHT = 80f;   // 1st place
-    const float SECOND_HEIGHT = 110f; // 2nd place — TALLEST (the winner is #2!)
-    const float THIRD_HEIGHT = 50f;   // 3rd place
-
-    // Race stats UI
-    private RectTransform _statsRoot;
-    private CanvasGroup _statsGroup;
-    private Text[] _statTexts;
-
-    // Menu buttons (shown after podium reveal)
-    private CanvasGroup _menuButtonsGroup;
-
+    // Colors
     static readonly Color GoldColor = new Color(1f, 0.85f, 0.1f);
     static readonly Color SilverColor = new Color(0.75f, 0.75f, 0.82f);
     static readonly Color BronzeColor = new Color(0.72f, 0.45f, 0.2f);
-    static readonly Color SewageGreen = new Color(0.2f, 0.35f, 0.15f, 0.9f);
-    static readonly Color PipeGray = new Color(0.35f, 0.35f, 0.32f, 0.95f);
+    static readonly Color PanelBg = new Color(0.04f, 0.03f, 0.02f, 0.93f);
+    static readonly Color GoldBorder = new Color(0.7f, 0.55f, 0.1f, 0.8f);
+    static readonly Color TabActive = new Color(0.7f, 0.55f, 0.1f, 0.9f);
+    static readonly Color TabInactive = new Color(0.15f, 0.12f, 0.08f, 0.8f);
+    static readonly Color TabTextActive = new Color(1f, 0.92f, 0.3f);
+    static readonly Color TabTextInactive = new Color(0.5f, 0.48f, 0.4f);
 
     void Awake()
     {
@@ -88,23 +93,16 @@ public class RaceFinish : MonoBehaviour
 
     void Start()
     {
-        // Re-initialize at runtime — private fields (including _initialized) reset
-        // to defaults when entering Play mode since they aren't serialized.
-        // The editor-time Initialize() call in SceneBootstrapper sets up serialized
-        // public fields (finishCanvas) but private refs are lost.
         if (!_initialized && finishCanvas != null)
         {
-            // Clean up stale UI objects created during editor-time Setup
-            // (they exist in the scene but we lost all private references to them)
-            bannerRoot = null;
-            podiumRoot = null;
-            string[] staleNames = { "FinishBanner", "WinnersPoodium", "RaceResults", "RaceStats", "MenuButtons" };
+            // Clean up stale UI from editor-time Setup
+            string[] staleNames = { "FinishBanner", "WinnersPoodium", "RaceResults",
+                "RaceStats", "MenuButtons", "RaceFinishPanel" };
             foreach (string name in staleNames)
             {
                 Transform stale = finishCanvas.transform.Find(name);
                 if (stale != null) Destroy(stale.gameObject);
             }
-
             Initialize(finishCanvas);
         }
     }
@@ -115,379 +113,353 @@ public class RaceFinish : MonoBehaviour
         _initialized = true;
         finishCanvas = canvas;
 
-        CreateBanner();
-        CreatePodium();
-        CreateResultsPanel();
-        CreateStatsPanel();
-        CreateMenuButtons();
+        CreateUnifiedPanel();
 
-        // Hide everything initially
-        _bannerGroup.alpha = 0f;
-        _podiumGroup.alpha = 0f;
-        _resultsGroup.alpha = 0f;
-        _statsGroup.alpha = 0f;
-        if (_menuButtonsGroup != null) _menuButtonsGroup.alpha = 0f;
-        podiumRoot.gameObject.SetActive(false);
-        _resultsRoot.gameObject.SetActive(false);
-        _statsRoot.gameObject.SetActive(false);
-        if (_menuButtonsGroup != null) _menuButtonsGroup.gameObject.SetActive(false);
+        // Hide panel initially
+        _panelGroup.alpha = 0f;
+        _panelRoot.gameObject.SetActive(false);
     }
 
-    void CreateBanner()
+    // ================================================================
+    // PANEL CONSTRUCTION
+    // ================================================================
+
+    void CreateUnifiedPanel()
     {
-        // Banner container (top center)
-        GameObject bannerObj = new GameObject("FinishBanner");
-        bannerRoot = bannerObj.AddComponent<RectTransform>();
-        bannerRoot.SetParent(finishCanvas.transform, false);
-        bannerRoot.anchorMin = new Vector2(0.2f, 0.7f);
-        bannerRoot.anchorMax = new Vector2(0.8f, 0.95f);
-        bannerRoot.offsetMin = Vector2.zero;
-        bannerRoot.offsetMax = Vector2.zero;
+        Font font = GetFont();
 
-        _bannerGroup = bannerObj.AddComponent<CanvasGroup>();
+        // Main panel — large center with clean margins
+        GameObject panelObj = new GameObject("RaceFinishPanel");
+        _panelRoot = panelObj.AddComponent<RectTransform>();
+        _panelRoot.SetParent(finishCanvas.transform, false);
+        _panelRoot.anchorMin = new Vector2(0.12f, 0.08f);
+        _panelRoot.anchorMax = new Vector2(0.88f, 0.92f);
+        _panelRoot.offsetMin = Vector2.zero;
+        _panelRoot.offsetMax = Vector2.zero;
 
-        // Banner background - sewage pipe look
-        Image bannerBg = bannerObj.AddComponent<Image>();
-        bannerBg.color = PipeGray;
+        _panelGroup = panelObj.AddComponent<CanvasGroup>();
 
-        // Inner border
-        GameObject borderObj = new GameObject("Border");
+        // Dark background
+        Image panelBg = panelObj.AddComponent<Image>();
+        panelBg.color = PanelBg;
+
+        // Thin gold border via inner outline rect
+        GameObject borderObj = new GameObject("GoldBorder");
         RectTransform borderRect = borderObj.AddComponent<RectTransform>();
-        borderRect.SetParent(bannerRoot, false);
-        borderRect.anchorMin = new Vector2(0.01f, 0.03f);
-        borderRect.anchorMax = new Vector2(0.99f, 0.97f);
+        borderRect.SetParent(_panelRoot, false);
+        borderRect.anchorMin = new Vector2(0.003f, 0.003f);
+        borderRect.anchorMax = new Vector2(0.997f, 0.997f);
         borderRect.offsetMin = Vector2.zero;
         borderRect.offsetMax = Vector2.zero;
         Image borderImg = borderObj.AddComponent<Image>();
-        borderImg.color = SewageGreen;
+        borderImg.color = new Color(0, 0, 0, 0); // transparent fill
+        borderImg.raycastTarget = false;
+        Outline borderOutline = borderObj.AddComponent<Outline>();
+        borderOutline.effectColor = GoldBorder;
+        borderOutline.effectDistance = new Vector2(2, -2);
 
-        // "FINISH" text
-        GameObject finishTextObj = new GameObject("FinishLabel");
-        RectTransform finishRect = finishTextObj.AddComponent<RectTransform>();
-        finishRect.SetParent(bannerRoot, false);
-        finishRect.anchorMin = new Vector2(0.05f, 0.55f);
-        finishRect.anchorMax = new Vector2(0.95f, 0.95f);
-        finishRect.offsetMin = Vector2.zero;
-        finishRect.offsetMax = Vector2.zero;
-        _bannerText = finishTextObj.AddComponent<Text>();
-        _bannerText.font = Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
-        if (_bannerText.font == null)
-            _bannerText.font = Resources.GetBuiltinResource<Font>("Arial.ttf");
-        _bannerText.fontSize = 36;
-        _bannerText.fontStyle = FontStyle.Bold;
-        _bannerText.alignment = TextAnchor.MiddleCenter;
-        _bannerText.color = GoldColor;
-        _bannerText.text = "BROWN TOWN SEWAGE PLANT";
-        Outline bannerOutline = finishTextObj.AddComponent<Outline>();
-        bannerOutline.effectColor = new Color(0, 0, 0, 0.95f);
-        bannerOutline.effectDistance = new Vector2(2, -2);
-
-        // Place text (e.g., "YOU FINISHED 1ST!")
-        GameObject placeObj = new GameObject("PlaceText");
-        RectTransform placeRect = placeObj.AddComponent<RectTransform>();
-        placeRect.SetParent(bannerRoot, false);
-        placeRect.anchorMin = new Vector2(0.05f, 0.15f);
-        placeRect.anchorMax = new Vector2(0.6f, 0.55f);
-        placeRect.offsetMin = Vector2.zero;
-        placeRect.offsetMax = Vector2.zero;
-        _placeText = placeObj.AddComponent<Text>();
-        _placeText.font = _bannerText.font;
-        _placeText.fontSize = 28;
-        _placeText.fontStyle = FontStyle.Bold;
-        _placeText.alignment = TextAnchor.MiddleCenter;
-        _placeText.color = Color.white;
-        Outline placeOutline = placeObj.AddComponent<Outline>();
-        placeOutline.effectColor = new Color(0, 0, 0, 0.9f);
-        placeOutline.effectDistance = new Vector2(1.5f, -1.5f);
-
-        // Time text
-        GameObject timeObj = new GameObject("TimeText");
-        RectTransform timeRect = timeObj.AddComponent<RectTransform>();
-        timeRect.SetParent(bannerRoot, false);
-        timeRect.anchorMin = new Vector2(0.6f, 0.15f);
-        timeRect.anchorMax = new Vector2(0.95f, 0.55f);
-        timeRect.offsetMin = Vector2.zero;
-        timeRect.offsetMax = Vector2.zero;
-        _timeText = timeObj.AddComponent<Text>();
-        _timeText.font = _bannerText.font;
-        _timeText.fontSize = 22;
-        _timeText.alignment = TextAnchor.MiddleCenter;
-        _timeText.color = new Color(0.8f, 0.8f, 0.75f);
-        Outline timeOutline = timeObj.AddComponent<Outline>();
-        timeOutline.effectColor = new Color(0, 0, 0, 0.85f);
-        timeOutline.effectDistance = new Vector2(1, -1);
+        CreateHeader(font);
+        CreateTabBar(font);
+        CreateTabPages(font);
+        CreateMenuButtons(font);
     }
 
-    void CreatePodium()
+    void CreateHeader(Font font)
     {
-        // Podium container (center of screen)
-        GameObject podObj = new GameObject("WinnersPoodium");
-        podiumRoot = podObj.AddComponent<RectTransform>();
-        podiumRoot.SetParent(finishCanvas.transform, false);
-        podiumRoot.anchorMin = new Vector2(0.15f, 0.15f);
-        podiumRoot.anchorMax = new Vector2(0.85f, 0.65f);
-        podiumRoot.offsetMin = Vector2.zero;
-        podiumRoot.offsetMax = Vector2.zero;
+        GameObject headerObj = new GameObject("Header");
+        RectTransform headerRect = headerObj.AddComponent<RectTransform>();
+        headerRect.SetParent(_panelRoot, false);
+        headerRect.anchorMin = new Vector2(0.03f, 0.88f);
+        headerRect.anchorMax = new Vector2(0.97f, 0.97f);
+        headerRect.offsetMin = Vector2.zero;
+        headerRect.offsetMax = Vector2.zero;
 
-        _podiumGroup = podObj.AddComponent<CanvasGroup>();
+        Image headerBg = headerObj.AddComponent<Image>();
+        headerBg.color = new Color(0.08f, 0.06f, 0.03f, 0.6f);
 
-        // Background panel
-        Image podBg = podObj.AddComponent<Image>();
-        podBg.color = new Color(0.1f, 0.08f, 0.05f, 0.85f);
+        // Place text (left side)
+        _headerPlaceText = CreateText(headerRect, "PlaceText",
+            new Vector2(0.02f, 0f), new Vector2(0.68f, 1f),
+            font, 26, FontStyle.Bold, TextAnchor.MiddleLeft, GoldColor, true);
+        _headerPlaceText.horizontalOverflow = HorizontalWrapMode.Overflow;
 
-        // "WINNERS POODIUM" title
-        GameObject titleObj = new GameObject("PoodiumTitle");
-        RectTransform titleRect = titleObj.AddComponent<RectTransform>();
-        titleRect.SetParent(podiumRoot, false);
-        titleRect.anchorMin = new Vector2(0.1f, 0.82f);
-        titleRect.anchorMax = new Vector2(0.9f, 0.98f);
-        titleRect.offsetMin = Vector2.zero;
-        titleRect.offsetMax = Vector2.zero;
-        Text titleText = titleObj.AddComponent<Text>();
-        titleText.font = Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
-        if (titleText.font == null)
-            titleText.font = Resources.GetBuiltinResource<Font>("Arial.ttf");
-        titleText.fontSize = 26;
-        titleText.fontStyle = FontStyle.Bold;
-        titleText.alignment = TextAnchor.MiddleCenter;
-        titleText.color = GoldColor;
-        titleText.text = "YOU'RE NUMBER TWO!";
-        _poodiumTitle = titleText;
-        Outline titleOutline = titleObj.AddComponent<Outline>();
-        titleOutline.effectColor = new Color(0, 0, 0, 0.95f);
-        titleOutline.effectDistance = new Vector2(2, -2);
+        // Time text (right side)
+        _headerTimeText = CreateText(headerRect, "TimeText",
+            new Vector2(0.68f, 0f), new Vector2(0.98f, 1f),
+            font, 20, FontStyle.Normal, TextAnchor.MiddleRight, new Color(0.8f, 0.8f, 0.75f), true);
+    }
 
-        // Create 3 podium slots (2nd, 1st, 3rd order for visual layout)
-        _podiumSlots = new PodiumSlot[3];
-        float totalWidth = PODIUM_WIDTH * 3 + PODIUM_SPACING * 2;
+    void CreateTabBar(Font font)
+    {
+        GameObject tabBarObj = new GameObject("TabBar");
+        RectTransform tabBarRect = tabBarObj.AddComponent<RectTransform>();
+        tabBarRect.SetParent(_panelRoot, false);
+        tabBarRect.anchorMin = new Vector2(0.03f, 0.82f);
+        tabBarRect.anchorMax = new Vector2(0.97f, 0.87f);
+        tabBarRect.offsetMin = Vector2.zero;
+        tabBarRect.offsetMax = Vector2.zero;
 
-        // Layout: [2nd] [1st] [3rd] - 1st in center and tallest
-        float[] heights = { SECOND_HEIGHT, FIRST_HEIGHT, THIRD_HEIGHT };
-        Color[] colors = { SilverColor, GoldColor, BronzeColor };
-        string[] labels = { "2ND", "1ST", "3RD" };
-        int[] placeOrder = { 1, 0, 2 }; // maps visual position to _podiumSlots index
-
-        for (int vis = 0; vis < 3; vis++)
+        string[] tabNames = { "RESULTS", "STATS", "PODIUM" };
+        for (int i = 0; i < 3; i++)
         {
-            int slotIdx = placeOrder[vis];
-            _podiumSlots[slotIdx] = CreatePodiumSlot(
-                podiumRoot, vis, heights[vis], colors[vis], labels[vis], totalWidth);
+            float xMin = i / 3f;
+            float xMax = (i + 1) / 3f;
+
+            GameObject tabObj = new GameObject($"Tab_{tabNames[i]}");
+            RectTransform tabRect = tabObj.AddComponent<RectTransform>();
+            tabRect.SetParent(tabBarRect, false);
+            tabRect.anchorMin = new Vector2(xMin + 0.005f, 0f);
+            tabRect.anchorMax = new Vector2(xMax - 0.005f, 1f);
+            tabRect.offsetMin = Vector2.zero;
+            tabRect.offsetMax = Vector2.zero;
+
+            _tabButtonImages[i] = tabObj.AddComponent<Image>();
+            _tabButtonImages[i].color = TabInactive;
+
+            _tabButtons[i] = tabObj.AddComponent<Button>();
+            int tabIndex = i;
+            _tabButtons[i].onClick.AddListener(() => OnTabClicked(tabIndex));
+            // Remove default button color transition (we handle it manually)
+            var cb = _tabButtons[i].colors;
+            cb.normalColor = Color.white;
+            cb.highlightedColor = Color.white;
+            cb.pressedColor = new Color(0.8f, 0.8f, 0.8f);
+            _tabButtons[i].colors = cb;
+
+            _tabButtonTexts[i] = CreateText(tabRect, "Label",
+                Vector2.zero, Vector2.one,
+                font, 14, FontStyle.Bold, TextAnchor.MiddleCenter, TabTextInactive, false);
+            _tabButtonTexts[i].text = tabNames[i];
+            _tabButtonTexts[i].raycastTarget = false;
         }
     }
 
-    void CreateResultsPanel()
+    void CreateTabPages(Font font)
     {
-        // Full race results panel - right side, shows all 5 racers as they finish
-        GameObject resObj = new GameObject("RaceResults");
-        _resultsRoot = resObj.AddComponent<RectTransform>();
-        _resultsRoot.SetParent(finishCanvas.transform, false);
-        _resultsRoot.anchorMin = new Vector2(0.60f, 0.30f);
-        _resultsRoot.anchorMax = new Vector2(0.98f, 0.70f);
-        _resultsRoot.offsetMin = Vector2.zero;
-        _resultsRoot.offsetMax = Vector2.zero;
+        string[] pageNames = { "ResultsPage", "StatsPage", "PodiumPage" };
+        for (int i = 0; i < 3; i++)
+        {
+            GameObject pageObj = new GameObject(pageNames[i]);
+            _tabPages[i] = pageObj.AddComponent<RectTransform>();
+            _tabPages[i].SetParent(_panelRoot, false);
+            _tabPages[i].anchorMin = new Vector2(0.03f, 0.14f);
+            _tabPages[i].anchorMax = new Vector2(0.97f, 0.81f);
+            _tabPages[i].offsetMin = Vector2.zero;
+            _tabPages[i].offsetMax = Vector2.zero;
 
-        _resultsGroup = resObj.AddComponent<CanvasGroup>();
+            _tabPageGroups[i] = pageObj.AddComponent<CanvasGroup>();
+            _tabPageGroups[i].alpha = 0f;
+            pageObj.SetActive(false);
+        }
 
-        // Background
-        Image resBg = resObj.AddComponent<Image>();
-        resBg.color = new Color(0.06f, 0.05f, 0.03f, 0.88f);
+        CreateResultsTab(font);
+        CreateStatsTab(font);
+        CreatePodiumTab(font);
+    }
 
-        // Title: "RACE RESULTS"
-        GameObject resTitleObj = new GameObject("ResultsTitle");
-        RectTransform resTitleRect = resTitleObj.AddComponent<RectTransform>();
-        resTitleRect.SetParent(_resultsRoot, false);
-        resTitleRect.anchorMin = new Vector2(0.05f, 0.85f);
-        resTitleRect.anchorMax = new Vector2(0.95f, 0.98f);
-        resTitleRect.offsetMin = Vector2.zero;
-        resTitleRect.offsetMax = Vector2.zero;
-        Text resTitleText = resTitleObj.AddComponent<Text>();
-        resTitleText.font = Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
-        if (resTitleText.font == null) resTitleText.font = Resources.GetBuiltinResource<Font>("Arial.ttf");
-        resTitleText.fontSize = 18;
-        resTitleText.fontStyle = FontStyle.Bold;
-        resTitleText.alignment = TextAnchor.MiddleCenter;
-        resTitleText.color = GoldColor;
-        resTitleText.text = "RACE RESULTS";
-        Outline resTitleOutline = resTitleObj.AddComponent<Outline>();
-        resTitleOutline.effectColor = new Color(0, 0, 0, 0.9f);
-        resTitleOutline.effectDistance = new Vector2(1.5f, -1.5f);
+    // ---- Tab 0: RESULTS ----
 
-        // Create 5 result rows (one per racer)
+    void CreateResultsTab(Font font)
+    {
+        RectTransform page = _tabPages[0];
+        CreatePageTitle(page, font, "RACE RESULTS");
+
         _resultRows = new ResultRow[5];
         _nextResultRow = 0;
         for (int i = 0; i < 5; i++)
-        {
-            _resultRows[i] = CreateResultRow(_resultsRoot, i);
-        }
+            _resultRows[i] = CreateResultRow(page, font, i);
     }
 
-    ResultRow CreateResultRow(RectTransform parent, int index)
+    ResultRow CreateResultRow(RectTransform parent, Font font, int index)
     {
         ResultRow row = new ResultRow();
         float rowHeight = 0.15f;
-        float yTop = 0.82f - index * (rowHeight + 0.02f);
+        float yTop = 0.85f - index * (rowHeight + 0.02f);
 
         GameObject rowObj = new GameObject($"ResultRow_{index}");
         row.root = rowObj.AddComponent<RectTransform>();
         row.root.SetParent(parent, false);
-        row.root.anchorMin = new Vector2(0.03f, yTop - rowHeight);
-        row.root.anchorMax = new Vector2(0.97f, yTop);
+        row.root.anchorMin = new Vector2(0.02f, yTop - rowHeight);
+        row.root.anchorMax = new Vector2(0.98f, yTop);
         row.root.offsetMin = Vector2.zero;
         row.root.offsetMax = Vector2.zero;
 
-        row.bg = rowObj.AddComponent<Image>();
-        row.bg.color = new Color(0.12f, 0.10f, 0.07f, 0f); // hidden initially
+        row.group = rowObj.AddComponent<CanvasGroup>();
+        row.group.alpha = 0f;
 
-        Font font = Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
-        if (font == null) font = Resources.GetBuiltinResource<Font>("Arial.ttf");
+        row.bg = rowObj.AddComponent<Image>();
+        row.bg.color = new Color(0.12f, 0.10f, 0.07f, 0.6f);
+
+        // Color swatch (left edge)
+        GameObject swatchObj = new GameObject("Swatch");
+        RectTransform swatchRect = swatchObj.AddComponent<RectTransform>();
+        swatchRect.SetParent(row.root, false);
+        swatchRect.anchorMin = new Vector2(0f, 0.1f);
+        swatchRect.anchorMax = new Vector2(0.025f, 0.9f);
+        swatchRect.offsetMin = Vector2.zero;
+        swatchRect.offsetMax = Vector2.zero;
+        row.colorSwatch = swatchObj.AddComponent<Image>();
+        row.colorSwatch.color = Color.white;
 
         // Place number
-        GameObject plObj = new GameObject("Place");
-        RectTransform plRect = plObj.AddComponent<RectTransform>();
-        plRect.SetParent(row.root, false);
-        plRect.anchorMin = new Vector2(0f, 0f);
-        plRect.anchorMax = new Vector2(0.18f, 1f);
-        plRect.offsetMin = Vector2.zero;
-        plRect.offsetMax = Vector2.zero;
-        row.placeText = plObj.AddComponent<Text>();
-        row.placeText.font = font;
-        row.placeText.fontSize = 16;
-        row.placeText.fontStyle = FontStyle.Bold;
-        row.placeText.alignment = TextAnchor.MiddleCenter;
-        row.placeText.color = Color.clear;
+        row.placeText = CreateText(row.root, "Place",
+            new Vector2(0.04f, 0f), new Vector2(0.15f, 1f),
+            font, 18, FontStyle.Bold, TextAnchor.MiddleCenter, Color.white, false);
 
         // Racer name
-        GameObject nmObj = new GameObject("Name");
-        RectTransform nmRect = nmObj.AddComponent<RectTransform>();
-        nmRect.SetParent(row.root, false);
-        nmRect.anchorMin = new Vector2(0.20f, 0f);
-        nmRect.anchorMax = new Vector2(0.68f, 1f);
-        nmRect.offsetMin = Vector2.zero;
-        nmRect.offsetMax = Vector2.zero;
-        row.nameText = nmObj.AddComponent<Text>();
-        row.nameText.font = font;
-        row.nameText.fontSize = 14;
-        row.nameText.fontStyle = FontStyle.Bold;
-        row.nameText.alignment = TextAnchor.MiddleLeft;
-        row.nameText.color = Color.clear;
+        row.nameText = CreateText(row.root, "Name",
+            new Vector2(0.17f, 0f), new Vector2(0.70f, 1f),
+            font, 15, FontStyle.Bold, TextAnchor.MiddleLeft, Color.white, false);
+        row.nameText.horizontalOverflow = HorizontalWrapMode.Overflow;
 
         // Time
-        GameObject tmObj = new GameObject("Time");
-        RectTransform tmRect = tmObj.AddComponent<RectTransform>();
-        tmRect.SetParent(row.root, false);
-        tmRect.anchorMin = new Vector2(0.70f, 0f);
-        tmRect.anchorMax = new Vector2(1f, 1f);
-        tmRect.offsetMin = Vector2.zero;
-        tmRect.offsetMax = Vector2.zero;
-        row.timeText = tmObj.AddComponent<Text>();
-        row.timeText.font = font;
-        row.timeText.fontSize = 13;
-        row.timeText.alignment = TextAnchor.MiddleRight;
-        row.timeText.color = Color.clear;
+        row.timeText = CreateText(row.root, "Time",
+            new Vector2(0.72f, 0f), new Vector2(0.98f, 1f),
+            font, 14, FontStyle.Normal, TextAnchor.MiddleRight, new Color(0.75f, 0.75f, 0.7f), false);
 
         return row;
     }
 
-    void CreateStatsPanel()
+    // ---- Tab 1: STATS ----
+
+    void CreateStatsTab(Font font)
     {
-        // Race statistics panel — left side, shows player's race stats
-        GameObject statsObj = new GameObject("RaceStats");
-        _statsRoot = statsObj.AddComponent<RectTransform>();
-        _statsRoot.SetParent(finishCanvas.transform, false);
-        _statsRoot.anchorMin = new Vector2(0.02f, 0.15f);
-        _statsRoot.anchorMax = new Vector2(0.42f, 0.65f);
-        _statsRoot.offsetMin = Vector2.zero;
-        _statsRoot.offsetMax = Vector2.zero;
+        RectTransform page = _tabPages[1];
+        CreatePageTitle(page, font, "YOUR RACE STATS");
 
-        _statsGroup = statsObj.AddComponent<CanvasGroup>();
-
-        Image statsBg = statsObj.AddComponent<Image>();
-        statsBg.color = new Color(0.06f, 0.05f, 0.03f, 0.88f);
-
-        Font font = Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
-        if (font == null) font = Resources.GetBuiltinResource<Font>("Arial.ttf");
-
-        // Title
-        GameObject statsTitleObj = new GameObject("StatsTitle");
-        RectTransform statsTitleRect = statsTitleObj.AddComponent<RectTransform>();
-        statsTitleRect.SetParent(_statsRoot, false);
-        statsTitleRect.anchorMin = new Vector2(0.05f, 0.88f);
-        statsTitleRect.anchorMax = new Vector2(0.95f, 0.98f);
-        statsTitleRect.offsetMin = Vector2.zero;
-        statsTitleRect.offsetMax = Vector2.zero;
-        Text statsTitleText = statsTitleObj.AddComponent<Text>();
-        statsTitleText.font = font;
-        statsTitleText.fontSize = 18;
-        statsTitleText.fontStyle = FontStyle.Bold;
-        statsTitleText.alignment = TextAnchor.MiddleCenter;
-        statsTitleText.color = GoldColor;
-        statsTitleText.text = "RACE STATS";
-        Outline stOut = statsTitleObj.AddComponent<Outline>();
-        stOut.effectColor = new Color(0, 0, 0, 0.9f);
-        stOut.effectDistance = new Vector2(1.5f, -1.5f);
-
-        // 8 stat rows
         string[] statLabels = {
             "Coins Collected", "Max Speed", "Hits Taken", "Boosts Used",
             "Near Misses", "Best Combo", "Stomps", "Score"
         };
-        _statTexts = new Text[statLabels.Length];
+
+        _statValueTexts = new Text[statLabels.Length];
+        _statTargetValues = new float[statLabels.Length];
+        _statCurrentValues = new float[statLabels.Length];
         float rowH = 0.09f;
         float startY = 0.84f;
 
         for (int i = 0; i < statLabels.Length; i++)
         {
-            float yTop = startY - i * (rowH + 0.01f);
+            float yTop = startY - i * (rowH + 0.015f);
+
+            // Alternating row bg
+            GameObject rowBgObj = new GameObject($"StatRowBg_{i}");
+            RectTransform rowBgRect = rowBgObj.AddComponent<RectTransform>();
+            rowBgRect.SetParent(page, false);
+            rowBgRect.anchorMin = new Vector2(0.02f, yTop - rowH);
+            rowBgRect.anchorMax = new Vector2(0.98f, yTop);
+            rowBgRect.offsetMin = Vector2.zero;
+            rowBgRect.offsetMax = Vector2.zero;
+            Image rowBgImg = rowBgObj.AddComponent<Image>();
+            rowBgImg.color = i % 2 == 0
+                ? new Color(0.08f, 0.06f, 0.04f, 0.3f)
+                : new Color(0.06f, 0.05f, 0.03f, 0.15f);
+            rowBgImg.raycastTarget = false;
 
             // Label (left)
-            GameObject labelObj = new GameObject($"StatLabel_{i}");
-            RectTransform labelRect = labelObj.AddComponent<RectTransform>();
-            labelRect.SetParent(_statsRoot, false);
-            labelRect.anchorMin = new Vector2(0.05f, yTop - rowH);
-            labelRect.anchorMax = new Vector2(0.55f, yTop);
-            labelRect.offsetMin = Vector2.zero;
-            labelRect.offsetMax = Vector2.zero;
-            Text labelText = labelObj.AddComponent<Text>();
-            labelText.font = font;
-            labelText.fontSize = 13;
-            labelText.alignment = TextAnchor.MiddleLeft;
-            labelText.color = new Color(0.7f, 0.65f, 0.55f);
+            Text labelText = CreateText(page, $"StatLabel_{i}",
+                new Vector2(0.05f, yTop - rowH), new Vector2(0.55f, yTop),
+                font, 14, FontStyle.Normal, TextAnchor.MiddleLeft,
+                new Color(0.7f, 0.65f, 0.55f), false);
             labelText.text = statLabels[i];
 
             // Value (right)
-            GameObject valObj = new GameObject($"StatValue_{i}");
-            RectTransform valRect = valObj.AddComponent<RectTransform>();
-            valRect.SetParent(_statsRoot, false);
-            valRect.anchorMin = new Vector2(0.55f, yTop - rowH);
-            valRect.anchorMax = new Vector2(0.95f, yTop);
-            valRect.offsetMin = Vector2.zero;
-            valRect.offsetMax = Vector2.zero;
-            _statTexts[i] = valObj.AddComponent<Text>();
-            _statTexts[i].font = font;
-            _statTexts[i].fontSize = 14;
-            _statTexts[i].fontStyle = FontStyle.Bold;
-            _statTexts[i].alignment = TextAnchor.MiddleRight;
-            _statTexts[i].color = Color.white;
-            _statTexts[i].text = "-";
+            _statValueTexts[i] = CreateText(page, $"StatValue_{i}",
+                new Vector2(0.55f, yTop - rowH), new Vector2(0.95f, yTop),
+                font, 16, FontStyle.Bold, TextAnchor.MiddleRight, Color.white, false);
+            _statValueTexts[i].text = "-";
         }
     }
 
-    void CreateMenuButtons()
-    {
-        Font font = Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
-        if (font == null) font = Resources.GetBuiltinResource<Font>("Arial.ttf");
+    // ---- Tab 2: PODIUM ----
 
-        // Container at bottom center
+    void CreatePodiumTab(Font font)
+    {
+        RectTransform page = _tabPages[2];
+
+        // Joke title
+        _podiumJokeTitle = CreateText(page, "PodiumJokeTitle",
+            new Vector2(0.05f, 0.82f), new Vector2(0.95f, 0.97f),
+            font, 24, FontStyle.Bold, TextAnchor.MiddleCenter, GoldColor, true);
+        _podiumJokeTitle.text = "YOU'RE NUMBER TWO!";
+        _podiumJokeTitle.horizontalOverflow = HorizontalWrapMode.Overflow;
+
+        // Announcement sub-text
+        _podiumAnnouncementText = CreateText(page, "Announcement",
+            new Vector2(0.05f, 0.72f), new Vector2(0.95f, 0.82f),
+            font, 14, FontStyle.Italic, TextAnchor.MiddleCenter,
+            new Color(0.75f, 0.7f, 0.6f), false);
+        _podiumAnnouncementText.horizontalOverflow = HorizontalWrapMode.Overflow;
+
+        // 2D Podium blocks: visual layout [2ND] [1ST] [3RD]
+        // 2nd is TALLEST (poop joke)
+        float[] blockHeights = { 0.55f, 0.38f, 0.22f }; // 2nd, 1st, 3rd
+        float[] blockXMin = { 0.08f, 0.37f, 0.67f };
+        float[] blockXMax = { 0.33f, 0.63f, 0.92f };
+        Color[] blockColors = {
+            new Color(SilverColor.r * 0.4f, SilverColor.g * 0.4f, SilverColor.b * 0.4f, 0.9f),
+            new Color(GoldColor.r * 0.4f, GoldColor.g * 0.4f, GoldColor.b * 0.4f, 0.9f),
+            new Color(BronzeColor.r * 0.4f, BronzeColor.g * 0.4f, BronzeColor.b * 0.4f, 0.9f)
+        };
+        Color[] labelColors = { SilverColor, GoldColor, BronzeColor };
+        string[] placeLabels = { "2ND", "1ST", "3RD" };
+        int[] dataMap = { 1, 0, 2 }; // visual→data: vis0=2nd(slot 1), vis1=1st(slot 0), vis2=3rd(slot 2)
+
+        for (int vis = 0; vis < 3; vis++)
+        {
+            int slot = dataMap[vis];
+            float baseY = 0.05f;
+
+            // Pedestal block
+            GameObject blockObj = new GameObject($"PodiumBlock_{placeLabels[vis]}");
+            RectTransform blockRect = blockObj.AddComponent<RectTransform>();
+            blockRect.SetParent(page, false);
+            blockRect.anchorMin = new Vector2(blockXMin[vis], baseY);
+            blockRect.anchorMax = new Vector2(blockXMax[vis], baseY + blockHeights[vis]);
+            blockRect.offsetMin = Vector2.zero;
+            blockRect.offsetMax = Vector2.zero;
+            Image blockImg = blockObj.AddComponent<Image>();
+            blockImg.color = blockColors[vis];
+
+            // Place label on block
+            Text plLabel = CreateText(blockRect, "PlaceLabel",
+                new Vector2(0f, 0f), new Vector2(1f, 0.35f),
+                font, 20, FontStyle.Bold, TextAnchor.MiddleCenter, labelColors[vis], true);
+            plLabel.text = placeLabels[vis];
+
+            // Color swatch
+            GameObject swObj = new GameObject("Swatch");
+            RectTransform swRect = swObj.AddComponent<RectTransform>();
+            swRect.SetParent(blockRect, false);
+            swRect.anchorMin = new Vector2(0.3f, 0.6f);
+            swRect.anchorMax = new Vector2(0.7f, 0.75f);
+            swRect.offsetMin = Vector2.zero;
+            swRect.offsetMax = Vector2.zero;
+            _podiumSwatches[slot] = swObj.AddComponent<Image>();
+            _podiumSwatches[slot].color = Color.clear;
+
+            // Racer name above block
+            _podiumNameTexts[slot] = CreateText(blockRect, "RacerName",
+                new Vector2(-0.1f, 1f), new Vector2(1.1f, 1.3f),
+                font, 13, FontStyle.Bold, TextAnchor.MiddleCenter, Color.white, true);
+            _podiumNameTexts[slot].text = "";
+            _podiumNameTexts[slot].horizontalOverflow = HorizontalWrapMode.Overflow;
+        }
+    }
+
+    // ---- Menu Buttons (inside panel) ----
+
+    void CreateMenuButtons(Font font)
+    {
         GameObject container = new GameObject("MenuButtons");
         RectTransform containerRect = container.AddComponent<RectTransform>();
-        containerRect.SetParent(finishCanvas.transform, false);
-        containerRect.anchorMin = new Vector2(0.25f, 0.02f);
-        containerRect.anchorMax = new Vector2(0.75f, 0.12f);
+        containerRect.SetParent(_panelRoot, false);
+        containerRect.anchorMin = new Vector2(0.05f, 0.02f);
+        containerRect.anchorMax = new Vector2(0.95f, 0.12f);
         containerRect.offsetMin = Vector2.zero;
         containerRect.offsetMax = Vector2.zero;
-        _menuButtonsGroup = container.AddComponent<CanvasGroup>();
 
-        // "RACE AGAIN" button (left)
+        // "RACE AGAIN" (left)
         CreateFinishButton(containerRect, font, "RaceAgain", "RACE AGAIN",
             new Vector2(0.02f, 0.05f), new Vector2(0.48f, 0.95f),
             new Color(0.15f, 0.45f, 0.15f), () =>
@@ -497,7 +469,7 @@ public class RaceFinish : MonoBehaviour
                     GameManager.Instance.RestartGame();
             });
 
-        // "MAIN MENU" button (right)
+        // "MAIN MENU" (right)
         CreateFinishButton(containerRect, font, "MainMenu", "MAIN MENU",
             new Vector2(0.52f, 0.05f), new Vector2(0.98f, 0.95f),
             new Color(0.45f, 0.15f, 0.15f), () =>
@@ -529,222 +501,53 @@ public class RaceFinish : MonoBehaviour
         btn.colors = colors;
         btn.onClick.AddListener(onClick);
 
-        // Label
-        GameObject labelObj = new GameObject("Label");
-        RectTransform labelRect = labelObj.AddComponent<RectTransform>();
-        labelRect.SetParent(btnRect, false);
-        labelRect.anchorMin = Vector2.zero;
-        labelRect.anchorMax = Vector2.one;
-        labelRect.offsetMin = Vector2.zero;
-        labelRect.offsetMax = Vector2.zero;
-        Text labelText = labelObj.AddComponent<Text>();
-        labelText.font = font;
-        labelText.fontSize = 18;
-        labelText.fontStyle = FontStyle.Bold;
-        labelText.alignment = TextAnchor.MiddleCenter;
-        labelText.color = Color.white;
+        Text labelText = CreateText(btnRect, "Label",
+            Vector2.zero, Vector2.one,
+            font, 18, FontStyle.Bold, TextAnchor.MiddleCenter, Color.white, true);
         labelText.text = label;
-        Outline outline = labelObj.AddComponent<Outline>();
-        outline.effectColor = new Color(0, 0, 0, 0.9f);
-        outline.effectDistance = new Vector2(1.5f, -1.5f);
+        labelText.raycastTarget = false;
     }
 
-    void PopulateStats()
-    {
-        if (_statTexts == null || _statTexts.Length < 8) return;
+    // ================================================================
+    // PUBLIC API
+    // ================================================================
 
-        GameManager gm = GameManager.Instance;
-        if (gm == null) return;
-
-        _statTexts[0].text = gm.RunCoins.ToString();
-        _statTexts[0].color = GoldColor;
-
-        float maxSpd = gm.RunMaxSpeed;
-        _statTexts[1].text = $"{maxSpd:F1} SMPH";
-        _statTexts[1].color = maxSpd > 15f ? new Color(1f, 0.3f, 0.2f) :
-                              maxSpd > 10f ? new Color(1f, 0.7f, 0.2f) :
-                              new Color(0.3f, 1f, 0.4f);
-
-        _statTexts[2].text = gm.RunHitsTaken.ToString();
-        _statTexts[2].color = gm.RunHitsTaken == 0 ? new Color(0.3f, 1f, 0.4f) :
-                              gm.RunHitsTaken > 5 ? new Color(1f, 0.3f, 0.2f) : Color.white;
-
-        _statTexts[3].text = gm.RunBoostsUsed.ToString();
-        _statTexts[3].color = new Color(0.2f, 0.9f, 1f);
-
-        _statTexts[4].text = gm.RunNearMisses.ToString();
-        _statTexts[4].color = gm.RunNearMisses > 10 ? new Color(0.7f, 0.3f, 1f) : Color.white;
-
-        _statTexts[5].text = gm.RunBestCombo.ToString();
-        _statTexts[5].color = gm.RunBestCombo >= 10 ? GoldColor : Color.white;
-
-        _statTexts[6].text = gm.RunStomps.ToString();
-        _statTexts[6].color = gm.RunStomps > 0 ? new Color(0.3f, 1f, 0.4f) : Color.white;
-
-        _statTexts[7].text = gm.score.ToString("N0");
-        _statTexts[7].color = GoldColor;
-    }
-
-    /// <summary>Called when any racer finishes. Populates live results rows.</summary>
+    /// <summary>Called when any racer finishes. Populates results rows (hidden until animated).</summary>
     public void OnRacerFinished(string racerName, Color racerColor, int place, float time, bool isPlayer)
     {
         if (!_initialized && finishCanvas != null)
             Initialize(finishCanvas);
         if (!_initialized) return;
-
-        // Show results panel on first finish
-        if (!_resultsRoot.gameObject.activeSelf)
-        {
-            _resultsRoot.gameObject.SetActive(true);
-            _resultsGroup.alpha = 1f;
-        }
-
         if (_nextResultRow >= _resultRows.Length) return;
+
         var row = _resultRows[_nextResultRow];
 
-        // Place color
         Color placeColor = place == 1 ? GoldColor :
                            place == 2 ? SilverColor :
                            place == 3 ? BronzeColor : new Color(0.6f, 0.55f, 0.5f);
 
         row.placeText.text = $"{place}{GetOrdinal(place)}";
         row.placeText.color = placeColor;
+        row.colorSwatch.color = racerColor;
         row.nameText.text = racerName;
         row.nameText.color = isPlayer ? GoldColor : Color.white;
         row.bg.color = isPlayer
             ? new Color(0.3f, 0.28f, 0.05f, 0.5f)
             : new Color(0.12f, 0.10f, 0.07f, 0.6f);
 
-        // Show time gap from leader
         if (place == 1)
+        {
             row.timeText.text = $"{time:F1}s";
+            _firstFinishTime = time;
+        }
         else
         {
-            // Find leader time
-            float leaderTime = time;
-            for (int i = 0; i < _nextResultRow; i++)
-                if (_resultRows[i].placeText.text.StartsWith("1")) { leaderTime = 0; break; }
             row.timeText.text = $"+{time - _firstFinishTime:F1}s";
         }
         row.timeText.color = new Color(0.75f, 0.75f, 0.7f);
 
-        // Track leader time
-        if (place == 1) _firstFinishTime = time;
-
-        // Elastic punch animation
-        StartCoroutine(ResultRowPunchAnimation(row.root));
-
+        // Row stays hidden (alpha=0) until animated in PodiumRevealSequence
         _nextResultRow++;
-    }
-
-    private float _firstFinishTime;
-
-    IEnumerator ResultRowPunchAnimation(RectTransform rect)
-    {
-        float duration = 0.5f;
-        float elapsed = 0f;
-        rect.localScale = new Vector3(1.3f, 1.3f, 1f);
-        while (elapsed < duration)
-        {
-            elapsed += Time.deltaTime;
-            float t = elapsed / duration;
-            float elastic = Mathf.Pow(2f, -8f * t) * Mathf.Sin((t - 0.1f) * Mathf.PI * 2f / 0.35f);
-            float scale = 1f + elastic * 0.2f;
-            rect.localScale = new Vector3(scale, scale, 1f);
-            yield return null;
-        }
-        rect.localScale = Vector3.one;
-    }
-
-    PodiumSlot CreatePodiumSlot(RectTransform parent, int visualIndex, float height, Color color, string label, float totalWidth)
-    {
-        PodiumSlot slot = new PodiumSlot();
-
-        float xStart = (visualIndex * (PODIUM_WIDTH + PODIUM_SPACING));
-        float xNorm = xStart / totalWidth;
-        float xEndNorm = (xStart + PODIUM_WIDTH) / totalWidth;
-        float yNormHeight = height / 200f; // normalize to container
-
-        // Slot root
-        GameObject slotObj = new GameObject($"Podium_{label}");
-        slot.root = slotObj.AddComponent<RectTransform>();
-        slot.root.SetParent(parent, false);
-        slot.root.anchorMin = new Vector2(Mathf.Lerp(0.05f, 0.95f, xNorm), 0.05f);
-        slot.root.anchorMax = new Vector2(Mathf.Lerp(0.05f, 0.95f, xEndNorm), 0.05f + yNormHeight);
-        slot.root.offsetMin = Vector2.zero;
-        slot.root.offsetMax = Vector2.zero;
-
-        // Pedestal block
-        slot.pedestal = slotObj.AddComponent<Image>();
-        slot.pedestal.color = new Color(color.r * 0.4f, color.g * 0.4f, color.b * 0.4f, 0.9f);
-
-        // Place label on pedestal
-        GameObject placeLabelObj = new GameObject("PlaceLabel");
-        RectTransform placeRect = placeLabelObj.AddComponent<RectTransform>();
-        placeRect.SetParent(slot.root, false);
-        placeRect.anchorMin = new Vector2(0, 0);
-        placeRect.anchorMax = new Vector2(1, 0.3f);
-        placeRect.offsetMin = Vector2.zero;
-        placeRect.offsetMax = Vector2.zero;
-        slot.placeText = placeLabelObj.AddComponent<Text>();
-        slot.placeText.font = Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
-        if (slot.placeText.font == null)
-            slot.placeText.font = Resources.GetBuiltinResource<Font>("Arial.ttf");
-        slot.placeText.fontSize = 20;
-        slot.placeText.fontStyle = FontStyle.Bold;
-        slot.placeText.alignment = TextAnchor.MiddleCenter;
-        slot.placeText.color = color;
-        slot.placeText.text = label;
-        Outline placeOutline = placeLabelObj.AddComponent<Outline>();
-        placeOutline.effectColor = new Color(0, 0, 0, 0.9f);
-        placeOutline.effectDistance = new Vector2(1, -1);
-
-        // Color swatch (racer color indicator)
-        GameObject swatchObj = new GameObject("ColorSwatch");
-        RectTransform swatchRect = swatchObj.AddComponent<RectTransform>();
-        swatchRect.SetParent(slot.root, false);
-        swatchRect.anchorMin = new Vector2(0.35f, 0.85f);
-        swatchRect.anchorMax = new Vector2(0.65f, 0.95f);
-        swatchRect.offsetMin = Vector2.zero;
-        swatchRect.offsetMax = Vector2.zero;
-        slot.colorSwatch = swatchObj.AddComponent<Image>();
-        slot.colorSwatch.color = Color.clear;
-
-        // Racer name
-        GameObject nameObj = new GameObject("RacerName");
-        RectTransform nameRect = nameObj.AddComponent<RectTransform>();
-        nameRect.SetParent(slot.root, false);
-        nameRect.anchorMin = new Vector2(0.02f, 0.5f);
-        nameRect.anchorMax = new Vector2(0.98f, 0.82f);
-        nameRect.offsetMin = Vector2.zero;
-        nameRect.offsetMax = Vector2.zero;
-        slot.nameText = nameObj.AddComponent<Text>();
-        slot.nameText.font = slot.placeText.font;
-        slot.nameText.fontSize = 14;
-        slot.nameText.fontStyle = FontStyle.Bold;
-        slot.nameText.alignment = TextAnchor.MiddleCenter;
-        slot.nameText.color = Color.white;
-        slot.nameText.text = "";
-        Outline nameOutline = nameObj.AddComponent<Outline>();
-        nameOutline.effectColor = new Color(0, 0, 0, 0.85f);
-        nameOutline.effectDistance = new Vector2(1, -1);
-
-        // Finish time
-        GameObject timeObj = new GameObject("Time");
-        RectTransform timeRect = timeObj.AddComponent<RectTransform>();
-        timeRect.SetParent(slot.root, false);
-        timeRect.anchorMin = new Vector2(0.05f, 0.3f);
-        timeRect.anchorMax = new Vector2(0.95f, 0.5f);
-        timeRect.offsetMin = Vector2.zero;
-        timeRect.offsetMax = Vector2.zero;
-        slot.timeText = timeObj.AddComponent<Text>();
-        slot.timeText.font = slot.placeText.font;
-        slot.timeText.fontSize = 12;
-        slot.timeText.alignment = TextAnchor.MiddleCenter;
-        slot.timeText.color = new Color(0.75f, 0.75f, 0.7f);
-        slot.timeText.text = "";
-
-        return slot;
     }
 
     /// <summary>Called when the player crosses the finish line.</summary>
@@ -754,15 +557,12 @@ public class RaceFinish : MonoBehaviour
             Initialize(finishCanvas);
         if (!_initialized) return;
 
-        _bannerGroup.alpha = 1f;
-        _bannerShowTime = Time.unscaledTime;
-
         string ordinal = GetOrdinal(place);
         Color placeColor = place == 1 ? GoldColor :
                            place == 2 ? SilverColor :
                            place == 3 ? BronzeColor : Color.white;
+        _placeBaseColor = placeColor;
 
-        // Funny placement quips — #2 is the joke winner
         string[] placeQuips = {
             "KING OF THE SEWER!",
             "THE ULTIMATE #2!",
@@ -771,31 +571,24 @@ public class RaceFinish : MonoBehaviour
             "LAST PLACE, BEST SMELL!"
         };
         string quip = placeQuips[Mathf.Clamp(place - 1, 0, placeQuips.Length - 1)];
-        _placeText.text = $"YOU FINISHED {place}{ordinal}!\n<size=16>{quip}</size>";
-        _placeText.color = placeColor;
-        _placeBaseColor = placeColor;
-        _timeText.text = $"Time: {time:F1}s";
+        _headerPlaceText.text = $"YOU FINISHED {place}{ordinal}! {quip}";
+        _headerPlaceText.color = placeColor;
+        _headerTimeText.text = $"{time:F1}s";
 
-        // Celebratory scale punch (elastic)
-        StartCoroutine(BannerPunchAnimation());
-
+        // Celebration effects (same as before, minus CheerOverlay — panel is the celebration)
         Vector3 playerPos = RaceManager.Instance != null && RaceManager.Instance.PlayerController != null
             ? RaceManager.Instance.PlayerController.transform.position
             : transform.position;
 
         if (place == 1)
         {
-            // 1ST PLACE - maximum celebration
             if (ProceduralAudio.Instance != null)
             {
                 ProceduralAudio.Instance.PlayVictoryFanfare();
                 ProceduralAudio.Instance.PlayCelebration();
             }
             if (ScreenEffects.Instance != null)
-            {
                 ScreenEffects.Instance.TriggerMilestoneFlash();
-                ScreenEffects.Instance.FlashSpeedStreaks(1.5f);
-            }
             if (PipeCamera.Instance != null)
             {
                 PipeCamera.Instance.Shake(0.4f);
@@ -804,17 +597,12 @@ public class RaceFinish : MonoBehaviour
             if (ParticleManager.Instance != null)
             {
                 ParticleManager.Instance.PlayCelebration(playerPos);
-                ParticleManager.Instance.PlayCelebration(playerPos + Vector3.up * 2f);
-                // Early confetti shower for immediate celebration
                 ParticleManager.Instance.PlayFinishConfetti(playerPos);
             }
-            if (CheerOverlay.Instance != null)
-                CheerOverlay.Instance.ShowCheer("1ST PLACE!", GoldColor, true);
             HapticManager.HeavyTap();
         }
         else if (place <= 3)
         {
-            // Podium finish - solid celebration
             if (ProceduralAudio.Instance != null)
                 ProceduralAudio.Instance.PlayCelebration();
             if (ScreenEffects.Instance != null)
@@ -824,516 +612,445 @@ public class RaceFinish : MonoBehaviour
             if (ParticleManager.Instance != null)
             {
                 ParticleManager.Instance.PlayCelebration(playerPos);
-                // Confetti for all podium finishes
                 ParticleManager.Instance.PlayFinishConfetti(playerPos);
             }
-            string[] podiumCheers = { "", "", "PODIUM!", "BRONZE!" };
-            if (CheerOverlay.Instance != null)
-                CheerOverlay.Instance.ShowCheer(podiumCheers[place], placeColor, false);
             HapticManager.MediumTap();
         }
         else
         {
-            // Back of the pack - sad trombone + sympathetic poop crew
             if (ProceduralAudio.Instance != null)
                 ProceduralAudio.Instance.PlaySadTrombone();
             if (ScreenEffects.Instance != null)
-            {
-                ScreenEffects.Instance.TriggerHitFlash(new Color(0.3f, 0.3f, 0.4f)); // desaturated gray flash
-                ScreenEffects.Instance.UpdateZoneVignette(new Color(0.15f, 0.1f, 0.08f), 0.3f); // somber vignette
-            }
+                ScreenEffects.Instance.TriggerHitFlash(new Color(0.3f, 0.3f, 0.4f));
             if (PipeCamera.Instance != null)
-            {
                 PipeCamera.Instance.Shake(0.1f);
-                PipeCamera.Instance.PunchFOV(-4f); // deflated FOV dip
-            }
-            if (CheerOverlay.Instance != null)
-            {
-                string[] sadWords = { "OOPS", "YIKES", "OH NO", "DANG" };
-                CheerOverlay.Instance.ShowCheer(
-                    sadWords[Random.Range(0, sadWords.Length)],
-                    new Color(0.5f, 0.5f, 0.6f), false);
-            }
             HapticManager.MediumTap();
         }
     }
 
-    IEnumerator BannerPunchAnimation()
-    {
-        // Elastic ease-out: starts big (1.6x), bounces down to 1.0x with overshoot
-        float duration = 0.7f;
-        float elapsed = 0f;
-        bannerRoot.localScale = Vector3.one * 1.8f;
-        while (elapsed < duration)
-        {
-            elapsed += Time.unscaledDeltaTime;
-            float t = elapsed / duration;
-            float elastic = Mathf.Pow(2f, -10f * t) * Mathf.Sin((t - 0.075f) * (2f * Mathf.PI) / 0.3f) + 1f;
-            float scale = Mathf.Lerp(1.8f, 1f, elastic);
-            bannerRoot.localScale = new Vector3(scale, scale, 1f);
-            yield return null;
-        }
-        bannerRoot.localScale = Vector3.one;
-    }
-
-    /// <summary>Show the Winners Poodium with top 3 finishers.</summary>
+    /// <summary>Show the unified finish panel with all tabs. Called once all racers are done.</summary>
     public void ShowPodium(List<RaceManager.RacerEntry> entries)
     {
-        // Self-heal if Start() hasn't run yet
         if (!_initialized && finishCanvas != null)
             Initialize(finishCanvas);
-
-        Debug.Log($"TTR PODIUM: ShowPodium called! _initialized={_initialized} _podiumShown={_podiumShown} entries={entries?.Count ?? -1} canvas={finishCanvas != null}");
         if (!_initialized || _podiumShown) return;
         _podiumShown = true;
 
-        Debug.Log("TTR PODIUM: Starting PodiumRevealSequence coroutine");
-        StartCoroutine(PodiumRevealSequence(entries));
+        PopulateStats();
+        PopulatePodiumTab(entries);
+        StartCoroutine(PodiumRevealSequence());
     }
 
-    IEnumerator PodiumRevealSequence(List<RaceManager.RacerEntry> entries)
+    // ================================================================
+    // REVEAL SEQUENCE
+    // ================================================================
+
+    IEnumerator PodiumRevealSequence()
     {
-        // Sort by finish place
-        var sorted = new List<RaceManager.RacerEntry>(entries);
-        sorted.Sort((a, b) => a.finishPlace.CompareTo(b.finishPlace));
+        // Brief pause
+        yield return new WaitForSecondsRealtime(0.5f);
 
-        // Build 3D podium in world space (with #2 tallest!)
-        Debug.Log($"TTR PODIUM: Creating 3D podium with {sorted.Count} entries, timeScale={Time.timeScale}");
-        Create3DPodium(sorted);
+        // Show + slide panel up from below
+        _panelRoot.gameObject.SetActive(true);
+        _panelGroup.alpha = 1f;
 
-        yield return new WaitForSecondsRealtime(1.0f);
-        Debug.Log("TTR PODIUM: After 1s wait, showing stats panel");
+        Vector2 targetPos = _panelRoot.anchoredPosition;
+        // Estimate panel height from screen fraction
+        float screenH = Screen.height;
+        float slideOffset = screenH * 0.8f;
+        _panelRoot.anchoredPosition = targetPos + Vector2.down * slideOffset;
 
-        // Show stats panel first (slide in from left)
-        _statsRoot.gameObject.SetActive(true);
-        PopulateStats();
-        float fadeTime = 0.6f;
+        float slideDuration = 0.4f;
         float elapsed = 0f;
-        while (elapsed < fadeTime)
+        while (elapsed < slideDuration)
         {
             elapsed += Time.unscaledDeltaTime;
-            _statsGroup.alpha = elapsed / fadeTime;
+            float t = elapsed / slideDuration;
+            float ease = 1f - Mathf.Pow(1f - t, 3f); // ease-out cubic
+            _panelRoot.anchoredPosition = Vector2.Lerp(
+                targetPos + Vector2.down * slideOffset, targetPos, ease);
             yield return null;
         }
-        _statsGroup.alpha = 1f;
+        _panelRoot.anchoredPosition = targetPos;
 
-        yield return new WaitForSecondsRealtime(0.8f);
+        // Show Results tab with staggered row animation
+        SwitchTab(0, false);
+        yield return new WaitForSecondsRealtime(0.15f);
+        yield return StartCoroutine(AnimateResultRows());
 
-        // Now show podium
-        podiumRoot.gameObject.SetActive(true);
+        // Celebration sound on results reveal
+        if (ProceduralAudio.Instance != null)
+            ProceduralAudio.Instance.PlayCelebration();
 
-        fadeTime = 0.8f;
-        elapsed = 0f;
-        while (elapsed < fadeTime)
+        // Start auto-tab timer
+        _autoTabTimer = AUTO_TAB_INTERVAL;
+        _autoTabCount = 0;
+    }
+
+    IEnumerator AnimateResultRows()
+    {
+        for (int i = 0; i < _nextResultRow && i < _resultRows.Length; i++)
         {
-            elapsed += Time.unscaledDeltaTime;
-            _podiumGroup.alpha = elapsed / fadeTime;
-            yield return null;
-        }
-        _podiumGroup.alpha = 1f;
+            var row = _resultRows[i];
+            float duration = 0.3f;
+            float elapsed = 0f;
 
-        // Reveal in reverse order: 3rd, 2nd, 1st (builds suspense)
-        int[] revealOrder = { 2, 1, 0 };
-        for (int r = 0; r < 3 && r < sorted.Count; r++)
-        {
-            int i = revealOrder[r];
-            if (i >= sorted.Count) continue;
-            var entry = sorted[i];
-            var slot = _podiumSlots[i];
+            Vector2 origPos = row.root.anchoredPosition;
+            Vector2 startPos = origPos + Vector2.right * 50f;
+            row.root.anchoredPosition = startPos;
 
-            slot.nameText.text = entry.name;
-            slot.colorSwatch.color = entry.color;
-
-            if (i == 0)
-                slot.timeText.text = $"{entry.finishTime:F1}s";
-            else
-                slot.timeText.text = $"+{entry.finishTime - sorted[0].finishTime:F1}s";
-
-            // Highlight player's slot
-            if (entry.isPlayer)
+            while (elapsed < duration)
             {
-                slot.nameText.color = GoldColor;
-                slot.pedestal.color = new Color(0.4f, 0.35f, 0.05f, 0.9f);
-            }
-
-            // Punch animation per slot
-            StartCoroutine(SlotPunchAnimation(slot.root));
-
-            // Escalating screen effects per reveal (3rd→2nd→1st = bigger each time)
-            float revealIntensity = (r + 1) / 3f; // 0.33, 0.66, 1.0
-            if (ScreenEffects.Instance != null)
-            {
-                ScreenEffects.Instance.UpdateZoneVignette(
-                    new Color(0.1f, 0.08f, 0.03f), revealIntensity * 0.5f);
-            }
-
-            // Escalating effects: bigger for higher placement
-            if (i == 0)
-            {
-                // 1st place reveal: maximum fanfare
-                if (ProceduralAudio.Instance != null)
-                    ProceduralAudio.Instance.PlayCelebration();
-                if (PipeCamera.Instance != null)
-                {
-                    PipeCamera.Instance.Shake(0.3f);
-                    PipeCamera.Instance.PunchFOV(8f);
-                }
-                if (ScreenEffects.Instance != null)
-                {
-                    ScreenEffects.Instance.TriggerMilestoneFlash();
-                    ScreenEffects.Instance.FlashSpeedStreaks(1.2f);
-                }
-                HapticManager.HeavyTap();
-            }
-            else if (i == 1)
-            {
-                if (ProceduralAudio.Instance != null)
-                    ProceduralAudio.Instance.PlayCoinCollect();
-                if (PipeCamera.Instance != null)
-                    PipeCamera.Instance.Shake(0.12f);
-                if (ScreenEffects.Instance != null)
-                    ScreenEffects.Instance.TriggerPowerUpFlash();
-                HapticManager.MediumTap();
-            }
-            else
-            {
-                if (ProceduralAudio.Instance != null)
-                    ProceduralAudio.Instance.PlayCoinCollect();
-                if (PipeCamera.Instance != null)
-                    PipeCamera.Instance.Shake(0.06f);
-                HapticManager.LightTap();
-            }
-
-            // Longer pause before 1st place reveal for suspense
-            yield return new WaitForSecondsRealtime(r == 1 ? 1.2f : 0.8f);
-        }
-
-        // Start confetti after all revealed
-        if (_confetti != null)
-            _confetti.Play();
-
-        // Find player's place for the big announcement
-        int playerPlace = 0;
-        string playerRacerName = "";
-        foreach (var e in sorted)
-        {
-            if (e.isPlayer) { playerPlace = e.finishPlace; playerRacerName = e.name; break; }
-        }
-
-        // Comedy: "YOU'RE NUMBER TWO!" announcement (because it's a poop game)
-        string announcement = playerPlace == 2 ? "YOU'RE NUMBER TWO!"
-            : playerPlace == 1 ? "YOU'RE NUMBER ONE... BUT TWO IS TALLER!"
-            : $"YOU'RE NUMBER {playerPlace}!";
-
-        if (CheerOverlay.Instance != null)
-        {
-            CheerOverlay.Instance.ShowCheer(announcement, GoldColor, true);
-            CheerOverlay.Instance.StartPyramid();
-        }
-
-        // Pan camera to podium
-        StartCoroutine(PodiumCameraSequence());
-
-        // Show menu buttons after a brief pause
-        yield return new WaitForSecondsRealtime(2.0f);
-        if (_menuButtonsGroup != null)
-        {
-            _menuButtonsGroup.gameObject.SetActive(true);
-            float btnFade = 0.5f;
-            float btnElapsed = 0f;
-            while (btnElapsed < btnFade)
-            {
-                btnElapsed += Time.unscaledDeltaTime;
-                _menuButtonsGroup.alpha = btnElapsed / btnFade;
+                elapsed += Time.unscaledDeltaTime;
+                float t = elapsed / duration;
+                float ease = 1f - Mathf.Pow(1f - t, 3f);
+                row.group.alpha = ease;
+                row.root.anchoredPosition = Vector2.Lerp(startPos, origPos, ease);
                 yield return null;
             }
-            _menuButtonsGroup.alpha = 1f;
+            row.group.alpha = 1f;
+            row.root.anchoredPosition = origPos;
+
+            HapticManager.LightTap();
+            yield return new WaitForSecondsRealtime(0.15f);
         }
     }
 
-    void Create3DPodium(List<RaceManager.RacerEntry> sorted)
+    // ================================================================
+    // TAB SWITCHING
+    // ================================================================
+
+    void OnTabClicked(int tabIndex)
     {
-        // Position podium ahead of the finish line (in open space)
-        Vector3 podiumPos = Vector3.zero;
-        if (RaceManager.Instance != null && RaceManager.Instance.PlayerController != null)
-            podiumPos = RaceManager.Instance.PlayerController.transform.position + Vector3.forward * 15f;
-
-        _podium3D = new GameObject("Podium3D");
-        _podium3D.transform.position = podiumPos;
-
-        Shader toonLit = Shader.Find("Custom/ToonLit");
-        Shader shader = toonLit != null ? toonLit : Shader.Find("Universal Render Pipeline/Lit");
-        if (shader == null) shader = Shader.Find("Standard");
-
-        // Platform heights: #2 is TALLEST (because you're number two — it's a poop game!)
-        // Layout: 1st center, 2nd left (tallest!), 3rd right
-        float[] heights = { 2.0f, 3.0f, 1.2f };
-        float[] xOffsets = { 0f, -2.5f, 2.5f };
-        Color[] pedestalColors = { GoldColor * 0.5f, SilverColor * 0.5f, BronzeColor * 0.5f };
-        string[] labels = { "1ST", "2ND", "3RD" };
-
-        for (int i = 0; i < 3 && i < sorted.Count; i++)
-        {
-            // Pedestal block
-            GameObject pedestal = GameObject.CreatePrimitive(PrimitiveType.Cube);
-            pedestal.name = $"Pedestal_{labels[i]}";
-            pedestal.transform.SetParent(_podium3D.transform);
-            pedestal.transform.localPosition = new Vector3(xOffsets[i], heights[i] * 0.5f, 0);
-            pedestal.transform.localScale = new Vector3(2f, heights[i], 2f);
-
-            Material pedMat = new Material(shader);
-            pedMat.SetColor("_BaseColor", pedestalColors[i]);
-            pedMat.EnableKeyword("_EMISSION");
-            pedMat.SetColor("_EmissionColor", pedestalColors[i] * 0.3f);
-            pedestal.GetComponent<Renderer>().material = pedMat;
-
-            // Place label on front of pedestal
-            GameObject labelObj = new GameObject($"Label_{labels[i]}");
-            labelObj.transform.SetParent(pedestal.transform);
-            labelObj.transform.localPosition = new Vector3(0, 0.3f, 0.51f);
-            labelObj.transform.localScale = new Vector3(0.5f / 2f, 1f / heights[i], 1f);
-            TextMesh tm = labelObj.AddComponent<TextMesh>();
-            tm.text = labels[i];
-            tm.fontSize = 64;
-            tm.characterSize = 0.08f;
-            tm.alignment = TextAlignment.Center;
-            tm.anchor = TextAnchor.MiddleCenter;
-            Color labelColor = i == 0 ? GoldColor : (i == 1 ? SilverColor : BronzeColor);
-            tm.color = labelColor;
-            tm.fontStyle = FontStyle.Bold;
-
-            // Move racer model onto podium
-            var entry = sorted[i];
-            if (entry.transform != null)
-            {
-                entry.transform.position = podiumPos + new Vector3(xOffsets[i], heights[i] + 0.5f, 0);
-                entry.transform.rotation = Quaternion.LookRotation(Vector3.back); // face camera
-            }
-        }
-
-        // Confetti particle system
-        GameObject confettiObj = new GameObject("Confetti");
-        confettiObj.transform.SetParent(_podium3D.transform);
-        confettiObj.transform.localPosition = new Vector3(0, 5f, 0);
-
-        _confetti = confettiObj.AddComponent<ParticleSystem>();
-        var main = _confetti.main;
-        main.startLifetime = new ParticleSystem.MinMaxCurve(2.5f, 4f);
-        main.startSpeed = new ParticleSystem.MinMaxCurve(1.5f, 3f);
-        main.startSize = new ParticleSystem.MinMaxCurve(0.08f, 0.2f);
-        main.maxParticles = 300;
-        main.loop = true;
-        main.startColor = new ParticleSystem.MinMaxGradient(GoldColor, new Color(0.2f, 0.8f, 0.3f));
-        main.gravityModifier = 0.4f;
-        main.simulationSpace = ParticleSystemSimulationSpace.World;
-        main.startRotation = new ParticleSystem.MinMaxCurve(0f, 360f * Mathf.Deg2Rad);
-
-        var emission = _confetti.emission;
-        emission.rateOverTime = 70f;
-
-        var shape = _confetti.shape;
-        shape.shapeType = ParticleSystemShapeType.Box;
-        shape.scale = new Vector3(10f, 0.1f, 5f);
-
-        // Rotation over lifetime for tumbling confetti
-        var rotation = _confetti.rotationOverLifetime;
-        rotation.enabled = true;
-        rotation.z = new ParticleSystem.MinMaxCurve(-180f * Mathf.Deg2Rad, 180f * Mathf.Deg2Rad);
-
-        // Velocity noise for fluttering
-        var noise = _confetti.noise;
-        noise.enabled = true;
-        noise.strength = 0.5f;
-        noise.frequency = 2f;
-        noise.scrollSpeed = 0.5f;
-
-        var colorOverLife = _confetti.colorOverLifetime;
-        colorOverLife.enabled = true;
-        Gradient grad1 = new Gradient();
-        grad1.SetKeys(
-            new GradientColorKey[] {
-                new GradientColorKey(Color.white, 0f),
-                new GradientColorKey(GoldColor, 0.4f),
-                new GradientColorKey(new Color(0.8f, 0.2f, 0.2f), 1f)
-            },
-            new GradientAlphaKey[] {
-                new GradientAlphaKey(1f, 0f),
-                new GradientAlphaKey(1f, 0.6f),
-                new GradientAlphaKey(0f, 1f)
-            }
-        );
-        Gradient grad2 = new Gradient();
-        grad2.SetKeys(
-            new GradientColorKey[] {
-                new GradientColorKey(Color.white, 0f),
-                new GradientColorKey(new Color(0.3f, 1f, 0.4f), 0.4f),
-                new GradientColorKey(new Color(0.2f, 0.4f, 1f), 1f)
-            },
-            new GradientAlphaKey[] {
-                new GradientAlphaKey(1f, 0f),
-                new GradientAlphaKey(1f, 0.6f),
-                new GradientAlphaKey(0f, 1f)
-            }
-        );
-        colorOverLife.color = new ParticleSystem.MinMaxGradient(grad1, grad2);
-
-        // Use default particle material
-        ParticleSystemRenderer psr = confettiObj.GetComponent<ParticleSystemRenderer>();
-        Material confettiMat = new Material(Shader.Find("Particles/Standard Unlit"));
-        if (confettiMat != null)
-        {
-            confettiMat.SetColor("_Color", Color.white);
-            psr.material = confettiMat;
-        }
-
-        _confetti.Stop(); // Will start after reveal
-    }
-
-    IEnumerator PodiumCameraSequence()
-    {
-        if (_podium3D == null) yield break;
-
-        Camera cam = Camera.main;
-        if (cam == null) yield break;
-
-        // Disable PipeCamera
-        PipeCamera pipeCam = cam.GetComponent<PipeCamera>();
-        if (pipeCam != null)
-            pipeCam.enabled = false;
-
-        // Audio sync: celebratory fanfare at orbit start
+        if (_tabSwitching) return;
+        _autoTabCount = 99; // stop auto-cycling on manual tap
+        SwitchTab(tabIndex, true);
         if (ProceduralAudio.Instance != null)
-            ProceduralAudio.Instance.PlayVictoryFanfare();
-
-        Vector3 podiumCenter = _podium3D.transform.position + Vector3.up * 2f;
-        float camDist = 8f;
-        float elapsed = 0f;
-        float duration = 8f;
-
-        while (elapsed < duration)
-        {
-            elapsed += Time.unscaledDeltaTime;
-            float angle = (elapsed / duration) * 180f * Mathf.Deg2Rad; // half orbit
-            float height = 2f + Mathf.Sin(elapsed * 0.3f) * 1f;
-
-            Vector3 camPos = podiumCenter + new Vector3(
-                Mathf.Cos(angle) * camDist,
-                height,
-                Mathf.Sin(angle) * camDist
-            );
-
-            cam.transform.position = Vector3.Lerp(cam.transform.position, camPos, Time.unscaledDeltaTime * 2f);
-            cam.transform.LookAt(podiumCenter);
-
-            // Audio sync: celebration burst at halfway point of orbit
-            if (elapsed > duration * 0.5f && elapsed - Time.unscaledDeltaTime <= duration * 0.5f)
-            {
-                if (ProceduralAudio.Instance != null)
-                    ProceduralAudio.Instance.PlayCelebration();
-                if (PipeCamera.Instance != null)
-                    PipeCamera.Instance.PunchFOV(5f);
-                HapticManager.MediumTap();
-            }
-
-            yield return null;
-        }
-
-        // Stop finish confetti when podium orbit ends
-        if (ParticleManager.Instance != null)
-            ParticleManager.Instance.StopFinishConfetti();
+            ProceduralAudio.Instance.PlayUIClick();
+        HapticManager.LightTap();
     }
 
-    IEnumerator SlotPunchAnimation(RectTransform rect)
+    void SwitchTab(int tabIndex, bool animate)
     {
-        // Elastic ease-out: starts at 1.5x, settles to 1.0 with spring bounce
-        float duration = 0.6f;
+        if (tabIndex == _activeTab) return;
+
+        if (animate && _activeTab >= 0)
+            StartCoroutine(CrossfadeTabs(_activeTab, tabIndex));
+        else
+        {
+            // Instant switch
+            for (int i = 0; i < 3; i++)
+            {
+                _tabPages[i].gameObject.SetActive(i == tabIndex);
+                _tabPageGroups[i].alpha = i == tabIndex ? 1f : 0f;
+            }
+        }
+
+        _activeTab = tabIndex;
+        UpdateTabBarVisuals();
+
+        if (tabIndex == 1)
+            StartStatCountUp();
+    }
+
+    IEnumerator CrossfadeTabs(int fromTab, int toTab)
+    {
+        _tabSwitching = true;
+        float duration = 0.3f;
         float elapsed = 0f;
-        rect.localScale = Vector3.one * 1.5f;
+
+        _tabPages[toTab].gameObject.SetActive(true);
+        _tabPageGroups[toTab].alpha = 0f;
+
         while (elapsed < duration)
         {
             elapsed += Time.unscaledDeltaTime;
             float t = elapsed / duration;
-            float elastic = Mathf.Pow(2f, -8f * t) * Mathf.Sin((t - 0.1f) * Mathf.PI * 2f / 0.35f);
-            float scale = 1f + elastic * 0.3f;
-            rect.localScale = new Vector3(scale, scale, 1f);
+            _tabPageGroups[fromTab].alpha = 1f - t;
+            _tabPageGroups[toTab].alpha = t;
             yield return null;
         }
-        rect.localScale = Vector3.one;
+
+        _tabPageGroups[fromTab].alpha = 0f;
+        _tabPageGroups[toTab].alpha = 1f;
+        _tabPages[fromTab].gameObject.SetActive(false);
+
+        _tabSwitching = false;
     }
+
+    void UpdateTabBarVisuals()
+    {
+        for (int i = 0; i < 3; i++)
+        {
+            bool active = (i == _activeTab);
+            _tabButtonImages[i].color = active ? TabActive : TabInactive;
+            _tabButtonTexts[i].color = active ? TabTextActive : TabTextInactive;
+        }
+    }
+
+    // ================================================================
+    // STAT COUNT-UP ANIMATION
+    // ================================================================
+
+    void StartStatCountUp()
+    {
+        _statsAnimating = true;
+        _statsAnimTimer = 0f;
+        for (int i = 0; i < _statCurrentValues.Length; i++)
+            _statCurrentValues[i] = 0f;
+    }
+
+    void UpdateStatCountUp()
+    {
+        if (!_statsAnimating) return;
+        _statsAnimTimer += Time.unscaledDeltaTime;
+
+        float countUpDuration = 1.2f;
+        float t = Mathf.Clamp01(_statsAnimTimer / countUpDuration);
+        float ease = 1f - Mathf.Pow(1f - t, 3f);
+
+        for (int i = 0; i < _statTargetValues.Length && i < _statValueTexts.Length; i++)
+        {
+            _statCurrentValues[i] = _statTargetValues[i] * ease;
+            FormatStatDisplay(i);
+        }
+
+        if (t >= 1f)
+            _statsAnimating = false;
+    }
+
+    void FormatStatDisplay(int index)
+    {
+        if (_statValueTexts == null || index >= _statValueTexts.Length) return;
+        float val = _statCurrentValues[index];
+        switch (index)
+        {
+            case 1: // Max Speed
+                _statValueTexts[index].text = $"{val:F1} SMPH";
+                break;
+            case 7: // Score
+                _statValueTexts[index].text = Mathf.RoundToInt(val).ToString("N0");
+                break;
+            default:
+                _statValueTexts[index].text = Mathf.RoundToInt(val).ToString();
+                break;
+        }
+    }
+
+    // ================================================================
+    // DATA POPULATION
+    // ================================================================
+
+    void PopulateStats()
+    {
+        if (_statValueTexts == null || _statValueTexts.Length < 8) return;
+        GameManager gm = GameManager.Instance;
+        if (gm == null) return;
+
+        _statTargetValues[0] = gm.RunCoins;
+        _statTargetValues[1] = gm.RunMaxSpeed;
+        _statTargetValues[2] = gm.RunHitsTaken;
+        _statTargetValues[3] = gm.RunBoostsUsed;
+        _statTargetValues[4] = gm.RunNearMisses;
+        _statTargetValues[5] = gm.RunBestCombo;
+        _statTargetValues[6] = gm.RunStomps;
+        _statTargetValues[7] = gm.score;
+
+        // Color-coding
+        _statValueTexts[0].color = GoldColor;
+
+        float maxSpd = gm.RunMaxSpeed;
+        _statValueTexts[1].color = maxSpd > 15f ? new Color(1f, 0.3f, 0.2f) :
+                                   maxSpd > 10f ? new Color(1f, 0.7f, 0.2f) :
+                                   new Color(0.3f, 1f, 0.4f);
+
+        _statValueTexts[2].color = gm.RunHitsTaken == 0 ? new Color(0.3f, 1f, 0.4f) :
+                                   gm.RunHitsTaken > 5 ? new Color(1f, 0.3f, 0.2f) : Color.white;
+
+        _statValueTexts[3].color = new Color(0.2f, 0.9f, 1f);
+        _statValueTexts[4].color = gm.RunNearMisses > 10 ? new Color(0.7f, 0.3f, 1f) : Color.white;
+        _statValueTexts[5].color = gm.RunBestCombo >= 10 ? GoldColor : Color.white;
+        _statValueTexts[6].color = gm.RunStomps > 0 ? new Color(0.3f, 1f, 0.4f) : Color.white;
+        _statValueTexts[7].color = GoldColor;
+
+        for (int i = 0; i < _statValueTexts.Length; i++)
+            _statValueTexts[i].text = "-";
+    }
+
+    void PopulatePodiumTab(List<RaceManager.RacerEntry> entries)
+    {
+        var sorted = new List<RaceManager.RacerEntry>(entries);
+        sorted.Sort((a, b) => a.finishPlace.CompareTo(b.finishPlace));
+
+        int playerPlace = 0;
+        foreach (var e in sorted)
+            if (e.isPlayer) { playerPlace = e.finishPlace; break; }
+
+        // Comedy title
+        _podiumJokeTitle.text = playerPlace == 2 ? "YOU'RE NUMBER TWO!"
+            : playerPlace == 1 ? "YOU'RE NUMBER ONE!\n...BUT TWO IS TALLER!"
+            : $"YOU'RE NUMBER {playerPlace}!";
+
+        string[] announcements = {
+            "Winner winner chicken dinner! But look at that #2 pedestal...",
+            "The Ultimate #2! The pedestal of champions... of poop.",
+            "Bronze is just fancy rust. But hey, you made it!",
+            "At least you showed up. That counts for something. Maybe.",
+            "Dead last but hey... everyone poops."
+        };
+        _podiumAnnouncementText.text = announcements[Mathf.Clamp(playerPlace - 1, 0, announcements.Length - 1)];
+
+        // Populate podium names + swatches (top 3)
+        for (int i = 0; i < 3 && i < sorted.Count; i++)
+        {
+            var entry = sorted[i];
+            _podiumNameTexts[i].text = entry.name;
+            _podiumNameTexts[i].color = entry.isPlayer ? GoldColor : Color.white;
+            _podiumSwatches[i].color = entry.color;
+        }
+    }
+
+    // ================================================================
+    // UPDATE
+    // ================================================================
 
     void Update()
     {
-        // Animate banner place text with color shimmer after showing
-        if (_bannerGroup != null && _bannerGroup.alpha > 0.5f && _placeText != null)
+        if (!_podiumShown || _panelGroup == null) return;
+
+        // Auto-tab cycling (stops after reaching PODIUM)
+        if (_autoTabCount < 2 && _activeTab >= 0 && !_tabSwitching)
         {
-            float sinceShow = Time.unscaledTime - _bannerShowTime;
-            if (sinceShow > 0.8f && sinceShow < 6f)
+            _autoTabTimer -= Time.unscaledDeltaTime;
+            if (_autoTabTimer <= 0f)
             {
-                // Gentle shimmer on the place text (uses stored base color)
-                float shimmer = Mathf.Sin(sinceShow * 3f) * 0.15f;
-                _placeText.color = new Color(
-                    Mathf.Clamp01(_placeBaseColor.r + shimmer),
-                    Mathf.Clamp01(_placeBaseColor.g + shimmer * 0.5f),
-                    Mathf.Clamp01(_placeBaseColor.b),
-                    1f);
+                _autoTabTimer = AUTO_TAB_INTERVAL;
+                int nextTab = _activeTab + 1;
+                if (nextTab < 3)
+                {
+                    SwitchTab(nextTab, true);
+                    _autoTabCount++;
+                }
             }
         }
 
-        // Podium title gold pulse
-        if (_poodiumTitle != null && _podiumGroup != null && _podiumGroup.alpha > 0.5f)
+        // Stat count-up
+        UpdateStatCountUp();
+
+        // Header gold pulse
+        if (_headerPlaceText != null)
         {
-            _podiumTitlePhase += Time.unscaledDeltaTime;
-            float pulse = 0.8f + Mathf.Sin(_podiumTitlePhase * 2.5f) * 0.2f;
-            _poodiumTitle.color = new Color(GoldColor.r * pulse, GoldColor.g * pulse, GoldColor.b * 0.1f);
+            _headerPulsePhase += Time.unscaledDeltaTime;
+            float shimmer = Mathf.Sin(_headerPulsePhase * 3f) * 0.15f;
+            _headerPlaceText.color = new Color(
+                Mathf.Clamp01(_placeBaseColor.r + shimmer),
+                Mathf.Clamp01(_placeBaseColor.g + shimmer * 0.5f),
+                Mathf.Clamp01(_placeBaseColor.b),
+                1f);
+        }
+
+        // Podium joke title pulse (only when on podium tab)
+        if (_podiumJokeTitle != null && _activeTab == 2)
+        {
+            float pulse = 0.8f + Mathf.Sin(Time.unscaledTime * 2.5f) * 0.2f;
+            _podiumJokeTitle.color = new Color(GoldColor.r * pulse, GoldColor.g * pulse, GoldColor.b * 0.1f);
         }
     }
 
-    /// <summary>Hide all finish UI (for race restart).</summary>
+    // ================================================================
+    // RESET
+    // ================================================================
+
     public void Reset()
     {
         if (!_initialized) return;
         _podiumShown = false;
-        _bannerGroup.alpha = 0f;
-        _podiumGroup.alpha = 0f;
-        podiumRoot.gameObject.SetActive(false);
-        bannerRoot.localScale = Vector3.one;
+        _activeTab = -1;
+        _autoTabCount = 0;
+        _statsAnimating = false;
+        _nextResultRow = 0;
+        _firstFinishTime = 0f;
+
+        if (_panelRoot != null)
+        {
+            _panelGroup.alpha = 0f;
+            _panelRoot.gameObject.SetActive(false);
+        }
+
+        if (_resultRows != null)
+        {
+            for (int i = 0; i < _resultRows.Length; i++)
+                if (_resultRows[i].group != null)
+                    _resultRows[i].group.alpha = 0f;
+        }
 
         for (int i = 0; i < 3; i++)
         {
-            _podiumSlots[i].nameText.text = "";
-            _podiumSlots[i].timeText.text = "";
-            _podiumSlots[i].colorSwatch.color = Color.clear;
-        }
-
-        // Reset results panel
-        _nextResultRow = 0;
-        _firstFinishTime = 0f;
-        if (_resultsRoot != null)
-        {
-            _resultsGroup.alpha = 0f;
-            _resultsRoot.gameObject.SetActive(false);
-            for (int i = 0; i < _resultRows.Length; i++)
+            if (_tabPages[i] != null)
             {
-                _resultRows[i].placeText.color = Color.clear;
-                _resultRows[i].nameText.color = Color.clear;
-                _resultRows[i].timeText.color = Color.clear;
-                _resultRows[i].bg.color = new Color(0.12f, 0.10f, 0.07f, 0f);
+                _tabPageGroups[i].alpha = 0f;
+                _tabPages[i].gameObject.SetActive(false);
             }
         }
 
-        // Reset stats panel
-        if (_statsRoot != null)
+        if (_statValueTexts != null)
+            for (int i = 0; i < _statValueTexts.Length; i++)
+                if (_statValueTexts[i] != null)
+                    _statValueTexts[i].text = "-";
+
+        if (ParticleManager.Instance != null)
+            ParticleManager.Instance.StopFinishConfetti();
+    }
+
+    // ================================================================
+    // HELPERS
+    // ================================================================
+
+    /// <summary>Create a Text element with standard setup.</summary>
+    Text CreateText(RectTransform parent, string name,
+        Vector2 anchorMin, Vector2 anchorMax,
+        Font font, int fontSize, FontStyle style, TextAnchor alignment,
+        Color color, bool outline)
+    {
+        GameObject obj = new GameObject(name);
+        RectTransform rect = obj.AddComponent<RectTransform>();
+        rect.SetParent(parent, false);
+        rect.anchorMin = anchorMin;
+        rect.anchorMax = anchorMax;
+        rect.offsetMin = Vector2.zero;
+        rect.offsetMax = Vector2.zero;
+
+        Text text = obj.AddComponent<Text>();
+        text.font = font;
+        text.fontSize = fontSize;
+        text.fontStyle = style;
+        text.alignment = alignment;
+        text.color = color;
+
+        if (outline)
         {
-            _statsGroup.alpha = 0f;
-            _statsRoot.gameObject.SetActive(false);
+            Outline ol = obj.AddComponent<Outline>();
+            ol.effectColor = new Color(0, 0, 0, 0.9f);
+            ol.effectDistance = new Vector2(1.5f, -1.5f);
         }
 
-        // Reset menu buttons
-        if (_menuButtonsGroup != null)
-        {
-            _menuButtonsGroup.alpha = 0f;
-            _menuButtonsGroup.gameObject.SetActive(false);
-        }
+        return text;
+    }
+
+    void CreatePageTitle(RectTransform page, Font font, string title)
+    {
+        Text t = CreateText(page, "PageTitle",
+            new Vector2(0.05f, 0.90f), new Vector2(0.95f, 0.99f),
+            font, 16, FontStyle.Bold, TextAnchor.MiddleCenter,
+            new Color(0.6f, 0.55f, 0.45f), false);
+        t.text = title;
+    }
+
+    static Font GetFont()
+    {
+        Font font = Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
+        if (font == null) font = Resources.GetBuiltinResource<Font>("Arial.ttf");
+        return font;
     }
 
     static string GetOrdinal(int n)

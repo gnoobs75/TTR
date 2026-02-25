@@ -1194,7 +1194,7 @@ public class RaceManager : MonoBehaviour
         Time.timeScale = 1f;
         Time.fixedDeltaTime = 0.02f;
 
-        // Hide race HUD (position + timer + progress + arrow) since the finish banner takes over
+        // Hide race HUD (position + timer + progress + arrow)
         if (_positionHudText != null)
             _positionHudText.transform.parent.gameObject.SetActive(false);
         if (_raceTimerText != null)
@@ -1203,6 +1203,23 @@ public class RaceManager : MonoBehaviour
             _progressBarBg.gameObject.SetActive(false);
         if (_posChangeArrow != null)
             _posChangeArrow.gameObject.SetActive(false);
+
+        // === HIDE EVERYTHING for clean finish screen ===
+        // Hide RaceLeaderboard
+        if (leaderboard != null && leaderboard.panelRoot != null)
+            leaderboard.panelRoot.gameObject.SetActive(false);
+
+        // Hide CheerOverlay (poop crew — too cluttered, let the panel breathe)
+        if (CheerOverlay.Instance != null)
+            CheerOverlay.Instance.gameObject.SetActive(false);
+
+        // Hide GameUI HUD elements (score, distance, coins, speed, boost bar, etc.)
+        if (GameManager.Instance != null && GameManager.Instance.gameUI != null)
+            GameManager.Instance.gameUI.HideAllHUD();
+
+        // Hide PauseMenu button
+        if (PauseMenu.Instance != null)
+            PauseMenu.Instance.gameObject.SetActive(false);
 
         // Fade out race music
         _musicFading = true;

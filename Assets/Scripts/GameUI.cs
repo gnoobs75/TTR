@@ -403,6 +403,28 @@ public class GameUI : MonoBehaviour
         UpdateWallet();
     }
 
+    /// <summary>Hide all HUD elements for race finish screen (clean background for results panel).</summary>
+    public void HideAllHUD()
+    {
+        // Core HUD texts
+        if (scoreText != null) scoreText.gameObject.SetActive(false);
+        if (distanceText != null) distanceText.gameObject.SetActive(false);
+        if (comboText != null) comboText.gameObject.SetActive(false);
+        if (walletText != null) walletText.gameObject.SetActive(false);
+        if (multiplierText != null) multiplierText.gameObject.SetActive(false);
+        if (coinCountText != null) coinCountText.gameObject.SetActive(false);
+        if (speedText != null) speedText.gameObject.SetActive(false);
+
+        // Dynamic indicators
+        if (_boostBarBg != null) _boostBarBg.gameObject.SetActive(false);
+        if (_stunIndicatorBg != null) _stunIndicatorBg.gameObject.SetActive(false);
+        if (_magnetIndicator != null) _magnetIndicator.gameObject.SetActive(false);
+        if (_shieldIndicator != null) _shieldIndicator.gameObject.SetActive(false);
+        if (_slowMoIndicator != null) _slowMoIndicator.gameObject.SetActive(false);
+        if (_racePositionText != null) _racePositionText.gameObject.SetActive(false);
+        if (_forkArrowRoot != null) _forkArrowRoot.gameObject.SetActive(false);
+    }
+
     private int _displayedScore;
     private float _scorePunchTime;
     private float _distPunchTime;
