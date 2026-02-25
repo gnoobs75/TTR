@@ -71,6 +71,9 @@ public class RaceFinish : MonoBehaviour
     private CanvasGroup _statsGroup;
     private Text[] _statTexts;
 
+    // Menu buttons (shown after podium reveal)
+    private CanvasGroup _menuButtonsGroup;
+
     static readonly Color GoldColor = new Color(1f, 0.85f, 0.1f);
     static readonly Color SilverColor = new Color(0.75f, 0.75f, 0.82f);
     static readonly Color BronzeColor = new Color(0.72f, 0.45f, 0.2f);
@@ -83,6 +86,29 @@ public class RaceFinish : MonoBehaviour
             finishCanvas = GetComponentInParent<Canvas>();
     }
 
+    void Start()
+    {
+        // Re-initialize at runtime — private fields (including _initialized) reset
+        // to defaults when entering Play mode since they aren't serialized.
+        // The editor-time Initialize() call in SceneBootstrapper sets up serialized
+        // public fields (finishCanvas) but private refs are lost.
+        if (!_initialized && finishCanvas != null)
+        {
+            // Clean up stale UI objects created during editor-time Setup
+            // (they exist in the scene but we lost all private references to them)
+            bannerRoot = null;
+            podiumRoot = null;
+            string[] staleNames = { "FinishBanner", "WinnersPoodium", "RaceResults", "RaceStats", "MenuButtons" };
+            foreach (string name in staleNames)
+            {
+                Transform stale = finishCanvas.transform.Find(name);
+                if (stale != null) Destroy(stale.gameObject);
+            }
+
+            Initialize(finishCanvas);
+        }
+    }
+
     public void Initialize(Canvas canvas)
     {
         if (_initialized) return;
@@ -93,15 +119,18 @@ public class RaceFinish : MonoBehaviour
         CreatePodium();
         CreateResultsPanel();
         CreateStatsPanel();
+        CreateMenuButtons();
 
         // Hide everything initially
         _bannerGroup.alpha = 0f;
         _podiumGroup.alpha = 0f;
         _resultsGroup.alpha = 0f;
         _statsGroup.alpha = 0f;
+        if (_menuButtonsGroup != null) _menuButtonsGroup.alpha = 0f;
         podiumRoot.gameObject.SetActive(false);
         _resultsRoot.gameObject.SetActive(false);
         _statsRoot.gameObject.SetActive(false);
+        if (_menuButtonsGroup != null) _menuButtonsGroup.gameObject.SetActive(false);
     }
 
     void CreateBanner()
@@ -443,6 +472,83 @@ public class RaceFinish : MonoBehaviour
         }
     }
 
+    void CreateMenuButtons()
+    {
+        Font font = Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
+        if (font == null) font = Resources.GetBuiltinResource<Font>("Arial.ttf");
+
+        // Container at bottom center
+        GameObject container = new GameObject("MenuButtons");
+        RectTransform containerRect = container.AddComponent<RectTransform>();
+        containerRect.SetParent(finishCanvas.transform, false);
+        containerRect.anchorMin = new Vector2(0.25f, 0.02f);
+        containerRect.anchorMax = new Vector2(0.75f, 0.12f);
+        containerRect.offsetMin = Vector2.zero;
+        containerRect.offsetMax = Vector2.zero;
+        _menuButtonsGroup = container.AddComponent<CanvasGroup>();
+
+        // "RACE AGAIN" button (left)
+        CreateFinishButton(containerRect, font, "RaceAgain", "RACE AGAIN",
+            new Vector2(0.02f, 0.05f), new Vector2(0.48f, 0.95f),
+            new Color(0.15f, 0.45f, 0.15f), () =>
+            {
+                Time.timeScale = 1f;
+                if (GameManager.Instance != null)
+                    GameManager.Instance.RestartGame();
+            });
+
+        // "MAIN MENU" button (right)
+        CreateFinishButton(containerRect, font, "MainMenu", "MAIN MENU",
+            new Vector2(0.52f, 0.05f), new Vector2(0.98f, 0.95f),
+            new Color(0.45f, 0.15f, 0.15f), () =>
+            {
+                Time.timeScale = 1f;
+                if (GameManager.Instance != null)
+                    GameManager.Instance.RestartGame();
+            });
+    }
+
+    void CreateFinishButton(RectTransform parent, Font font, string name, string label,
+        Vector2 anchorMin, Vector2 anchorMax, Color bgColor, UnityEngine.Events.UnityAction onClick)
+    {
+        GameObject btnObj = new GameObject(name);
+        RectTransform btnRect = btnObj.AddComponent<RectTransform>();
+        btnRect.SetParent(parent, false);
+        btnRect.anchorMin = anchorMin;
+        btnRect.anchorMax = anchorMax;
+        btnRect.offsetMin = Vector2.zero;
+        btnRect.offsetMax = Vector2.zero;
+
+        Image btnBg = btnObj.AddComponent<Image>();
+        btnBg.color = bgColor;
+
+        Button btn = btnObj.AddComponent<Button>();
+        var colors = btn.colors;
+        colors.highlightedColor = new Color(bgColor.r * 1.3f, bgColor.g * 1.3f, bgColor.b * 1.3f);
+        colors.pressedColor = new Color(bgColor.r * 0.7f, bgColor.g * 0.7f, bgColor.b * 0.7f);
+        btn.colors = colors;
+        btn.onClick.AddListener(onClick);
+
+        // Label
+        GameObject labelObj = new GameObject("Label");
+        RectTransform labelRect = labelObj.AddComponent<RectTransform>();
+        labelRect.SetParent(btnRect, false);
+        labelRect.anchorMin = Vector2.zero;
+        labelRect.anchorMax = Vector2.one;
+        labelRect.offsetMin = Vector2.zero;
+        labelRect.offsetMax = Vector2.zero;
+        Text labelText = labelObj.AddComponent<Text>();
+        labelText.font = font;
+        labelText.fontSize = 18;
+        labelText.fontStyle = FontStyle.Bold;
+        labelText.alignment = TextAnchor.MiddleCenter;
+        labelText.color = Color.white;
+        labelText.text = label;
+        Outline outline = labelObj.AddComponent<Outline>();
+        outline.effectColor = new Color(0, 0, 0, 0.9f);
+        outline.effectDistance = new Vector2(1.5f, -1.5f);
+    }
+
     void PopulateStats()
     {
         if (_statTexts == null || _statTexts.Length < 8) return;
@@ -482,6 +588,8 @@ public class RaceFinish : MonoBehaviour
     /// <summary>Called when any racer finishes. Populates live results rows.</summary>
     public void OnRacerFinished(string racerName, Color racerColor, int place, float time, bool isPlayer)
     {
+        if (!_initialized && finishCanvas != null)
+            Initialize(finishCanvas);
         if (!_initialized) return;
 
         // Show results panel on first finish
@@ -642,6 +750,8 @@ public class RaceFinish : MonoBehaviour
     /// <summary>Called when the player crosses the finish line.</summary>
     public void OnPlayerFinished(int place, float time)
     {
+        if (!_initialized && finishCanvas != null)
+            Initialize(finishCanvas);
         if (!_initialized) return;
 
         _bannerGroup.alpha = 1f;
@@ -756,7 +866,7 @@ public class RaceFinish : MonoBehaviour
         bannerRoot.localScale = Vector3.one * 1.8f;
         while (elapsed < duration)
         {
-            elapsed += Time.deltaTime;
+            elapsed += Time.unscaledDeltaTime;
             float t = elapsed / duration;
             float elastic = Mathf.Pow(2f, -10f * t) * Mathf.Sin((t - 0.075f) * (2f * Mathf.PI) / 0.3f) + 1f;
             float scale = Mathf.Lerp(1.8f, 1f, elastic);
@@ -769,9 +879,15 @@ public class RaceFinish : MonoBehaviour
     /// <summary>Show the Winners Poodium with top 3 finishers.</summary>
     public void ShowPodium(List<RaceManager.RacerEntry> entries)
     {
+        // Self-heal if Start() hasn't run yet
+        if (!_initialized && finishCanvas != null)
+            Initialize(finishCanvas);
+
+        Debug.Log($"TTR PODIUM: ShowPodium called! _initialized={_initialized} _podiumShown={_podiumShown} entries={entries?.Count ?? -1} canvas={finishCanvas != null}");
         if (!_initialized || _podiumShown) return;
         _podiumShown = true;
 
+        Debug.Log("TTR PODIUM: Starting PodiumRevealSequence coroutine");
         StartCoroutine(PodiumRevealSequence(entries));
     }
 
@@ -782,9 +898,11 @@ public class RaceFinish : MonoBehaviour
         sorted.Sort((a, b) => a.finishPlace.CompareTo(b.finishPlace));
 
         // Build 3D podium in world space (with #2 tallest!)
+        Debug.Log($"TTR PODIUM: Creating 3D podium with {sorted.Count} entries, timeScale={Time.timeScale}");
         Create3DPodium(sorted);
 
-        yield return new WaitForSeconds(1.0f);
+        yield return new WaitForSecondsRealtime(1.0f);
+        Debug.Log("TTR PODIUM: After 1s wait, showing stats panel");
 
         // Show stats panel first (slide in from left)
         _statsRoot.gameObject.SetActive(true);
@@ -793,13 +911,13 @@ public class RaceFinish : MonoBehaviour
         float elapsed = 0f;
         while (elapsed < fadeTime)
         {
-            elapsed += Time.deltaTime;
+            elapsed += Time.unscaledDeltaTime;
             _statsGroup.alpha = elapsed / fadeTime;
             yield return null;
         }
         _statsGroup.alpha = 1f;
 
-        yield return new WaitForSeconds(0.8f);
+        yield return new WaitForSecondsRealtime(0.8f);
 
         // Now show podium
         podiumRoot.gameObject.SetActive(true);
@@ -808,7 +926,7 @@ public class RaceFinish : MonoBehaviour
         elapsed = 0f;
         while (elapsed < fadeTime)
         {
-            elapsed += Time.deltaTime;
+            elapsed += Time.unscaledDeltaTime;
             _podiumGroup.alpha = elapsed / fadeTime;
             yield return null;
         }
@@ -887,7 +1005,7 @@ public class RaceFinish : MonoBehaviour
             }
 
             // Longer pause before 1st place reveal for suspense
-            yield return new WaitForSeconds(r == 1 ? 1.2f : 0.8f);
+            yield return new WaitForSecondsRealtime(r == 1 ? 1.2f : 0.8f);
         }
 
         // Start confetti after all revealed
@@ -915,6 +1033,22 @@ public class RaceFinish : MonoBehaviour
 
         // Pan camera to podium
         StartCoroutine(PodiumCameraSequence());
+
+        // Show menu buttons after a brief pause
+        yield return new WaitForSecondsRealtime(2.0f);
+        if (_menuButtonsGroup != null)
+        {
+            _menuButtonsGroup.gameObject.SetActive(true);
+            float btnFade = 0.5f;
+            float btnElapsed = 0f;
+            while (btnElapsed < btnFade)
+            {
+                btnElapsed += Time.unscaledDeltaTime;
+                _menuButtonsGroup.alpha = btnElapsed / btnFade;
+                yield return null;
+            }
+            _menuButtonsGroup.alpha = 1f;
+        }
     }
 
     void Create3DPodium(List<RaceManager.RacerEntry> sorted)
@@ -1078,7 +1212,7 @@ public class RaceFinish : MonoBehaviour
 
         while (elapsed < duration)
         {
-            elapsed += Time.deltaTime;
+            elapsed += Time.unscaledDeltaTime;
             float angle = (elapsed / duration) * 180f * Mathf.Deg2Rad; // half orbit
             float height = 2f + Mathf.Sin(elapsed * 0.3f) * 1f;
 
@@ -1088,11 +1222,11 @@ public class RaceFinish : MonoBehaviour
                 Mathf.Sin(angle) * camDist
             );
 
-            cam.transform.position = Vector3.Lerp(cam.transform.position, camPos, Time.deltaTime * 2f);
+            cam.transform.position = Vector3.Lerp(cam.transform.position, camPos, Time.unscaledDeltaTime * 2f);
             cam.transform.LookAt(podiumCenter);
 
             // Audio sync: celebration burst at halfway point of orbit
-            if (elapsed > duration * 0.5f && elapsed - Time.deltaTime <= duration * 0.5f)
+            if (elapsed > duration * 0.5f && elapsed - Time.unscaledDeltaTime <= duration * 0.5f)
             {
                 if (ProceduralAudio.Instance != null)
                     ProceduralAudio.Instance.PlayCelebration();
@@ -1117,7 +1251,7 @@ public class RaceFinish : MonoBehaviour
         rect.localScale = Vector3.one * 1.5f;
         while (elapsed < duration)
         {
-            elapsed += Time.deltaTime;
+            elapsed += Time.unscaledDeltaTime;
             float t = elapsed / duration;
             float elastic = Mathf.Pow(2f, -8f * t) * Mathf.Sin((t - 0.1f) * Mathf.PI * 2f / 0.35f);
             float scale = 1f + elastic * 0.3f;
@@ -1148,7 +1282,7 @@ public class RaceFinish : MonoBehaviour
         // Podium title gold pulse
         if (_poodiumTitle != null && _podiumGroup != null && _podiumGroup.alpha > 0.5f)
         {
-            _podiumTitlePhase += Time.deltaTime;
+            _podiumTitlePhase += Time.unscaledDeltaTime;
             float pulse = 0.8f + Mathf.Sin(_podiumTitlePhase * 2.5f) * 0.2f;
             _poodiumTitle.color = new Color(GoldColor.r * pulse, GoldColor.g * pulse, GoldColor.b * 0.1f);
         }
@@ -1192,6 +1326,13 @@ public class RaceFinish : MonoBehaviour
         {
             _statsGroup.alpha = 0f;
             _statsRoot.gameObject.SetActive(false);
+        }
+
+        // Reset menu buttons
+        if (_menuButtonsGroup != null)
+        {
+            _menuButtonsGroup.alpha = 0f;
+            _menuButtonsGroup.gameObject.SetActive(false);
         }
     }
 

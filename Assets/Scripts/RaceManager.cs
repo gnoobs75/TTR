@@ -1030,6 +1030,10 @@ public class RaceManager : MonoBehaviour
 
                 if (e.isPlayer)
                 {
+                    // Write back BEFORE calling OnPlayerFinished, because it calls
+                    // InstantFinishAllRacers which iterates _entries and needs
+                    // this entry to already be marked as finished
+                    _entries[i] = e;
                     OnPlayerFinished(e.finishPlace, raceTime);
                 }
             }
@@ -1184,6 +1188,12 @@ public class RaceManager : MonoBehaviour
         if (GameManager.Instance != null)
             GameManager.Instance.isPlaying = false;
 
+        // CRITICAL: Restore timeScale so podium coroutines don't crawl
+        // (GameManager freeze-frame may have left it at 0.05f, and isPlaying=false
+        //  prevents Update() from restoring it)
+        Time.timeScale = 1f;
+        Time.fixedDeltaTime = 0.02f;
+
         // Hide race HUD (position + timer + progress + arrow) since the finish banner takes over
         if (_positionHudText != null)
             _positionHudText.transform.parent.gameObject.SetActive(false);
@@ -1310,10 +1320,12 @@ public class RaceManager : MonoBehaviour
     void OnRaceComplete()
     {
         _state = State.Finished;
-        Debug.Log("TTR Race: All racers finished! Race complete.");
+        Debug.Log($"TTR Race: All racers finished! Race complete. finishLine={finishLine != null} timeScale={Time.timeScale}");
 
         if (finishLine != null)
             finishLine.ShowPodium(_entries);
+        else
+            Debug.LogError("TTR Race: finishLine is NULL! Cannot show podium!");
     }
 
     // === RACE MUSIC ===

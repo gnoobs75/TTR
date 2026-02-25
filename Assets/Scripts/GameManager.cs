@@ -233,7 +233,12 @@ public class GameManager : MonoBehaviour
         bool spacePressed = Keyboard.current != null && Keyboard.current.spaceKey.wasPressedThisFrame;
         if (spacePressed)
         {
-            if (!isPlaying && !_isGameOver)
+            // Don't restart during race finish (podium showing)
+            bool raceFinished = RaceManager.Instance != null &&
+                (RaceManager.Instance.RaceState == RaceManager.State.PlayerFinished ||
+                 RaceManager.Instance.RaceState == RaceManager.State.Finished);
+
+            if (!isPlaying && !_isGameOver && !raceFinished)
             {
                 StartGame();
                 return;
