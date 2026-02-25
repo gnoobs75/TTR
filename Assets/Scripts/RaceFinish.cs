@@ -752,9 +752,12 @@ public class RaceFinish : MonoBehaviour
         if (_confetti != null)
             _confetti.Play();
 
-        // Poop crew goes wild
+        // Poop crew goes wild — form the cheerleading pyramid!
         if (CheerOverlay.Instance != null)
+        {
             CheerOverlay.Instance.ShowCheer("POODIUM!", GoldColor, true);
+            CheerOverlay.Instance.StartPyramid();
+        }
 
         // Pan camera to podium
         StartCoroutine(PodiumCameraSequence());

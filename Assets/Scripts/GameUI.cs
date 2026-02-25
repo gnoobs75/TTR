@@ -1,4 +1,6 @@
+using System.Collections;
 using UnityEngine;
+using UnityEngine.SceneManagement;
 using UnityEngine.UI;
 
 /// <summary>
@@ -39,6 +41,14 @@ public class GameUI : MonoBehaviour
     public GameObject shopPanel;
     public Transform shopContent;
     public Button shopCloseButton;
+
+    [Header("Controls Panel")]
+    public Button controlsButton;
+    public GameObject controlsPanel;
+    public Button controlsCloseButton;
+
+    [Header("Game Over Extra")]
+    public Button returnToBowlButton;
 
     [Header("Volume")]
     public Slider musicVolumeSlider;
@@ -98,6 +108,22 @@ public class GameUI : MonoBehaviour
 
         if (shopCloseButton != null)
             shopCloseButton.onClick.AddListener(OnShopCloseClicked);
+
+        if (controlsPanel != null)
+        {
+            controlsPanel.SetActive(false);
+            _controlsCanvasGroup = controlsPanel.GetComponent<CanvasGroup>();
+            if (_controlsCanvasGroup == null) _controlsCanvasGroup = controlsPanel.AddComponent<CanvasGroup>();
+        }
+
+        if (controlsButton != null)
+            controlsButton.onClick.AddListener(OnControlsClicked);
+
+        if (controlsCloseButton != null)
+            controlsCloseButton.onClick.AddListener(OnControlsCloseClicked);
+
+        if (returnToBowlButton != null)
+            returnToBowlButton.onClick.AddListener(OnReturnToBowlClicked);
 
         if (galleryButton != null)
             galleryButton.onClick.AddListener(OnGalleryClicked);
@@ -178,9 +204,65 @@ public class GameUI : MonoBehaviour
 
     void OnTourClicked()
     {
-        StopSplashMusic();
-        if (GameManager.Instance != null)
-            GameManager.Instance.StartSewerTour();
+        HapticManager.LightTap();
+        if (ProceduralAudio.Instance != null) ProceduralAudio.Instance.PlayUIClick();
+        // Show "coming soon" popup on the splash screen
+        StartCoroutine(ShowComingSoonPopup());
+    }
+
+    private IEnumerator ShowComingSoonPopup()
+    {
+        // Create temporary popup text over the start panel
+        if (startPanel == null) yield break;
+        GameObject popGo = new GameObject("ComingSoonPopup");
+        popGo.transform.SetParent(startPanel.transform, false);
+        RectTransform rt = popGo.AddComponent<RectTransform>();
+        rt.anchorMin = new Vector2(0.1f, 0.55f);
+        rt.anchorMax = new Vector2(0.9f, 0.75f);
+        rt.offsetMin = Vector2.zero;
+        rt.offsetMax = Vector2.zero;
+
+        Image bg = popGo.AddComponent<Image>();
+        bg.color = new Color(0.15f, 0.08f, 0.03f, 0.92f);
+
+        GameObject txtGo = new GameObject("Text");
+        txtGo.transform.SetParent(popGo.transform, false);
+        RectTransform txtRt = txtGo.AddComponent<RectTransform>();
+        txtRt.anchorMin = Vector2.zero;
+        txtRt.anchorMax = Vector2.one;
+        txtRt.offsetMin = Vector2.zero;
+        txtRt.offsetMax = Vector2.zero;
+
+        Text txt = txtGo.AddComponent<Text>();
+        txt.text = "MULTI-POOPER\nCOMING SOON!";
+        txt.font = Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
+        txt.fontSize = 32;
+        txt.alignment = TextAnchor.MiddleCenter;
+        txt.color = new Color(1f, 0.85f, 0.2f);
+        Outline o = txtGo.AddComponent<Outline>();
+        o.effectColor = new Color(0, 0, 0, 0.9f);
+        o.effectDistance = new Vector2(2, -2);
+
+        // Animate in, hold, fade out
+        float showDuration = 2.5f;
+        float fadeIn = 0.3f;
+        float fadeOut = 0.5f;
+        float timer = 0f;
+        while (timer < showDuration)
+        {
+            timer += Time.deltaTime;
+            float alpha = 1f;
+            if (timer < fadeIn) alpha = timer / fadeIn;
+            else if (timer > showDuration - fadeOut) alpha = (showDuration - timer) / fadeOut;
+            bg.color = new Color(0.15f, 0.08f, 0.03f, 0.92f * alpha);
+            txt.color = new Color(1f, 0.85f, 0.2f, alpha);
+
+            // Gentle scale bounce
+            float scale = timer < fadeIn ? Mathf.Lerp(0.8f, 1.05f, timer / fadeIn) : Mathf.Lerp(1.05f, 1f, (timer - fadeIn) * 2f);
+            popGo.transform.localScale = Vector3.one * Mathf.Max(scale, 0.95f);
+            yield return null;
+        }
+        Destroy(popGo);
     }
 
     void StopSplashMusic()
@@ -220,6 +302,39 @@ public class GameUI : MonoBehaviour
         _shopFadingIn = false;
         _shopFadeTimer = 0f;
         UpdateWallet();
+    }
+
+    void OnControlsClicked()
+    {
+        HapticManager.LightTap();
+        if (ProceduralAudio.Instance != null) ProceduralAudio.Instance.PlayUIClick();
+        if (controlsPanel != null)
+        {
+            controlsPanel.SetActive(true);
+            if (_controlsCanvasGroup != null) _controlsCanvasGroup.alpha = 0f;
+            controlsPanel.transform.localScale = Vector3.one * 0.92f;
+            _controlsFadingIn = true;
+            _controlsFadingOut = false;
+            _controlsFadeTimer = 0f;
+        }
+        if (startPanel != null)
+            startPanel.SetActive(false);
+    }
+
+    void OnControlsCloseClicked()
+    {
+        HapticManager.LightTap();
+        if (ProceduralAudio.Instance != null) ProceduralAudio.Instance.PlayUIClick();
+        _controlsFadingOut = true;
+        _controlsFadingIn = false;
+        _controlsFadeTimer = 0f;
+    }
+
+    void OnReturnToBowlClicked()
+    {
+        HapticManager.MediumTap();
+        if (ProceduralAudio.Instance != null) ProceduralAudio.Instance.PlayUIClick();
+        SceneManager.LoadScene(SceneManager.GetActiveScene().buildIndex);
     }
 
     void OnMusicVolumeChanged(float val)
@@ -283,6 +398,8 @@ public class GameUI : MonoBehaviour
             startPanel.SetActive(false);
         if (shopPanel != null)
             shopPanel.SetActive(false);
+        if (controlsPanel != null)
+            controlsPanel.SetActive(false);
         UpdateWallet();
     }
 
@@ -304,6 +421,12 @@ public class GameUI : MonoBehaviour
     private float _shopFadeTimer;
     private bool _shopFadingIn;
     private bool _shopFadingOut;
+
+    // Controls panel animation
+    private CanvasGroup _controlsCanvasGroup;
+    private float _controlsFadeTimer;
+    private bool _controlsFadingIn;
+    private bool _controlsFadingOut;
 
     // Start screen animations
     private float _startPulsePhase;
@@ -1195,6 +1318,31 @@ public class GameUI : MonoBehaviour
                 shopPanel.SetActive(false);
                 _shopCanvasGroup.alpha = 1f;
                 shopPanel.transform.localScale = Vector3.one;
+                if (startPanel != null) startPanel.SetActive(true);
+            }
+        }
+
+        // Controls panel fade animation
+        if (_controlsFadingIn && _controlsCanvasGroup != null)
+        {
+            _controlsFadeTimer += Time.deltaTime;
+            float ct = Mathf.Clamp01(_controlsFadeTimer / 0.3f);
+            _controlsCanvasGroup.alpha = ct;
+            controlsPanel.transform.localScale = Vector3.one * Mathf.Lerp(0.92f, 1f, ct);
+            if (ct >= 1f) _controlsFadingIn = false;
+        }
+        if (_controlsFadingOut && _controlsCanvasGroup != null)
+        {
+            _controlsFadeTimer += Time.deltaTime;
+            float ct = Mathf.Clamp01(_controlsFadeTimer / 0.2f);
+            _controlsCanvasGroup.alpha = 1f - ct;
+            controlsPanel.transform.localScale = Vector3.one * Mathf.Lerp(1f, 0.92f, ct);
+            if (ct >= 1f)
+            {
+                _controlsFadingOut = false;
+                controlsPanel.SetActive(false);
+                _controlsCanvasGroup.alpha = 1f;
+                controlsPanel.transform.localScale = Vector3.one;
                 if (startPanel != null) startPanel.SetActive(true);
             }
         }

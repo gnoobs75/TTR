@@ -2552,12 +2552,12 @@ public class SceneBootstrapper
                 Vector3.one * bs, bubbleMat);
         }
 
-        // "DIVE!" warning text sign (faces player)
-        GameObject signObj = new GameObject("DiveSign");
+        // "FLUSH!!!" warning text sign (faces player)
+        GameObject signObj = new GameObject("FlushSign");
         signObj.transform.SetParent(root.transform, false);
         signObj.transform.localPosition = new Vector3(0, 1.5f, -2f);
         TextMesh tm = signObj.AddComponent<TextMesh>();
-        tm.text = "DIVE!";
+        tm.text = "FLUSH!!!";
         tm.fontSize = 48;
         tm.characterSize = 0.15f;
         tm.alignment = TextAlignment.Center;
@@ -3629,14 +3629,16 @@ public class SceneBootstrapper
         }
         if (!hasBounds) return;
 
-        // Corn kernel material - bright yellow with strong emission for visibility against brown body
-        Material kernelMat = MakeURPMat("CornKernel_Proc", cornYellow, 0.05f, 0.45f);
+        // Corn kernel material - rich golden with strong emission for visibility against brown body
+        Color richGold = new Color(0.95f, 0.82f, 0.12f); // warmer, more golden
+        Material kernelMat = MakeURPMat("CornKernel_Proc", richGold, 0.02f, 0.55f);
         kernelMat.EnableKeyword("_EMISSION");
-        kernelMat.SetColor("_EmissionColor", cornYellow * 0.35f);
+        kernelMat.SetColor("_EmissionColor", richGold * 0.5f); // stronger glow
         EditorUtility.SetDirty(kernelMat);
 
-        // Darker underside material for depth
-        Material kernelDarkMat = MakeURPMat("CornKernel_ProcShadow", cornShadow, 0.02f, 0.35f);
+        // Darker underside material for depth — warm amber shadow
+        Color warmShadow = new Color(0.75f, 0.55f, 0.08f);
+        Material kernelDarkMat = MakeURPMat("CornKernel_ProcShadow", warmShadow, 0.02f, 0.35f);
 
         // Place kernels at semi-random positions around the body surface
         // Use a fixed seed for reproducibility across rebuilds
@@ -3657,9 +3659,9 @@ public class SceneBootstrapper
             float phi = Random.Range(0.25f, 0.75f); // avoid top/bottom poles
             float heightT = Random.Range(-0.3f, 0.3f); // along body length
 
-            // Place kernels poking OUT of the body — 0.38x so they're clearly visible
-            float radiusX = extents.x * 0.38f;
-            float radiusZ = extents.z * 0.38f;
+            // Place kernels embedded in the body surface — 0.26x so they look attached
+            float radiusX = extents.x * 0.26f;
+            float radiusZ = extents.z * 0.26f;
 
             Vector3 localPos = center + new Vector3(
                 Mathf.Cos(theta) * radiusX * Mathf.Sin(phi * Mathf.PI),
@@ -3667,12 +3669,12 @@ public class SceneBootstrapper
                 Mathf.Sin(theta) * radiusZ * Mathf.Sin(phi * Mathf.PI)
             );
 
-            // Kernel size — each corn nugget pokes out clearly above the brown body
-            float baseSize = Random.Range(0.20f, 0.35f);
+            // Kernel size — chunky golden nuggets that look embedded in the body
+            float baseSize = Random.Range(0.30f, 0.50f);
             Vector3 kernelScale = new Vector3(
-                baseSize * Random.Range(0.8f, 1.2f),
-                baseSize * Random.Range(0.7f, 1.1f),
-                baseSize * Random.Range(0.8f, 1.2f)
+                baseSize * Random.Range(0.9f, 1.3f),  // wider
+                baseSize * Random.Range(0.6f, 0.9f),  // flatter (nugget shape)
+                baseSize * Random.Range(0.9f, 1.3f)   // wider
             );
 
             // Orient each kernel to point outward from the body center
@@ -6953,49 +6955,57 @@ public class SceneBootstrapper
         }
         tourBtnObj.AddComponent<ButtonPressEffect>();
 
-        // === SHOP & GALLERY on the stall columns ===
+        // === STALL POSTER BUTTONS ===
+        // Posters sit on the narrow stall wall partitions, NOT on the door cracks.
+        // Left wall: X 0.04-0.13, Right wall: X 0.87-0.96
 
-        // SHOP on left column
-        Button shopButton = MakeButton(startPanel.transform, "ShopButton", "SHOP",
-            24, new Color(0.65f, 0.50f, 0.12f, 0.85f), Color.white,
-            new Vector2(0.06f, 0.30f), new Vector2(0.18f, 0.48f));
-        shopButton.transform.localRotation = Quaternion.Euler(0, 0, -3f);
-        {
-            Outline shopOutline = shopButton.GetComponent<Image>().gameObject.AddComponent<Outline>();
-            shopOutline.effectColor = new Color(0.3f, 0.22f, 0.05f);
-            shopOutline.effectDistance = new Vector2(3, -3);
-        }
+        // --- SHOP poster: left stall wall, centered on the wall panel ---
+        Button shopButton = MakeStallPoster(startPanel.transform, "ShopButton",
+            "SHOP", new Color(0.85f, 0.65f, 0.15f),
+            new Vector2(0.04f, 0.42f), new Vector2(0.13f, 0.62f), -2f,
+            new Color(0.55f, 0.35f, 0.08f),
+            new Color(1f, 0.95f, 0.3f),
+            "corny");
 
-        // GALLERY on right column
-        Button galleryButton = MakeButton(startPanel.transform, "GalleryButton", "GALLERY",
-            20, new Color(0.15f, 0.42f, 0.58f, 0.85f), Color.white,
-            new Vector2(0.82f, 0.30f), new Vector2(0.94f, 0.48f));
-        galleryButton.transform.localRotation = Quaternion.Euler(0, 0, 3f);
-        {
-            Outline galOutline = galleryButton.GetComponent<Image>().gameObject.AddComponent<Outline>();
-            galOutline.effectColor = new Color(0.08f, 0.2f, 0.32f);
-            galOutline.effectDistance = new Vector2(3, -3);
-        }
+        // --- CONTROLS poster: right stall wall, upper ---
+        Button controlsButton = MakeStallPoster(startPanel.transform, "ControlsButton",
+            "HOW TO\nPOOP", new Color(0.75f, 0.55f, 0.25f),
+            new Vector2(0.87f, 0.50f), new Vector2(0.96f, 0.70f), 2f,
+            new Color(0.3f, 0.5f, 0.2f),
+            new Color(0.8f, 0.2f, 0.1f),
+            "roach");
 
-        // Wallet/Fartcoin count (above the door hotspots)
+        // --- GALLERY poster: right stall wall, lower ---
+        Button galleryButton = MakeStallPoster(startPanel.transform, "GalleryButton",
+            "GALLERY", new Color(0.35f, 0.55f, 0.75f),
+            new Vector2(0.87f, 0.30f), new Vector2(0.96f, 0.48f), 2.5f,
+            new Color(0.9f, 0.75f, 0.1f),
+            new Color(0.95f, 0.5f, 0.1f),
+            "duck");
+
+        // === TOP OF STALL INFO BAR (above the doors, clear space) ===
+        // Race tagline — big and bold in the top stall area
+        Text raceTagline = MakeStretchText(startPanel.transform, "RaceTagline", "RACE TO BROWN TOWN!",
+            36, TextAnchor.MiddleCenter, new Color(1f, 0.72f, 0.15f),
+            new Vector2(0.15f, 0.74f), new Vector2(0.85f, 0.82f), true);
+        Shadow tagShadow = raceTagline.gameObject.AddComponent<Shadow>();
+        tagShadow.effectColor = new Color(0.3f, 0.15f, 0f, 0.9f);
+        tagShadow.effectDistance = new Vector2(2, -2);
+
+        // Wallet/Fartcoin count — visible below the tagline
         Text startWalletText = MakeStretchText(startPanel.transform, "StartWallet", "0 Fartcoins",
-            20, TextAnchor.MiddleCenter, new Color(1f, 0.85f, 0.2f),
-            new Vector2(0.30f, 0.53f), new Vector2(0.70f, 0.57f), true);
+            28, TextAnchor.MiddleCenter, new Color(1f, 0.90f, 0.3f),
+            new Vector2(0.30f, 0.68f), new Vector2(0.70f, 0.74f), true);
 
-        // Daily challenge text (below the door, subtle on dark area)
+        // Daily challenge text
         Text challengeText = MakeStretchText(startPanel.transform, "ChallengeText", "DAILY: ...",
-            16, TextAnchor.MiddleCenter, new Color(1f, 0.85f, 0.3f, 0.7f),
-            new Vector2(0.15f, 0.27f), new Vector2(0.85f, 0.32f), true);
+            20, TextAnchor.MiddleCenter, new Color(1f, 0.85f, 0.3f, 0.8f),
+            new Vector2(0.20f, 0.27f), new Vector2(0.80f, 0.32f), true);
 
-        // Race tagline above the wallet
-        MakeStretchText(startPanel.transform, "RaceTagline", "RACE TO BROWN TOWN!",
-            24, TextAnchor.MiddleCenter, new Color(1f, 0.65f, 0.15f, 0.85f),
-            new Vector2(0.10f, 0.57f), new Vector2(0.90f, 0.62f), true);
-
-        // "or press SPACE" hint at very bottom
+        // "or press SPACE" hint — below the doors, bigger
         MakeStretchText(startPanel.transform, "HintText", "or press SPACE",
-            18, TextAnchor.MiddleCenter, new Color(0.7f, 0.7f, 0.65f, 0.5f),
-            new Vector2(0.25f, 0.01f), new Vector2(0.75f, 0.04f), false);
+            22, TextAnchor.MiddleCenter, new Color(0.75f, 0.75f, 0.7f, 0.7f),
+            new Vector2(0.30f, 0.22f), new Vector2(0.70f, 0.27f), true);
 
         // === CONTROL SCHEME PICKER ===
         GameObject ctrlRow = new GameObject("ControlRow");
@@ -7088,6 +7098,194 @@ public class SceneBootstrapper
         scrollRect.horizontal = false;
         scrollRect.vertical = true;
 
+        // Controls Panel — FULL SCREEN opaque poster (hidden by default)
+        GameObject controlsPanel = MakePanel(canvasObj.transform, "ControlsPanel",
+            new Color(0.08f, 0.05f, 0.02f, 1f),
+            Vector2.zero, Vector2.one);
+        controlsPanel.SetActive(false);
+
+        // Aged paper/poster inner background with warm border
+        GameObject posterBg = new GameObject("PosterBg");
+        posterBg.transform.SetParent(controlsPanel.transform, false);
+        RectTransform posterBgRt = posterBg.AddComponent<RectTransform>();
+        posterBgRt.anchorMin = new Vector2(0.03f, 0.03f);
+        posterBgRt.anchorMax = new Vector2(0.97f, 0.97f);
+        posterBgRt.offsetMin = Vector2.zero;
+        posterBgRt.offsetMax = Vector2.zero;
+        Image posterBgImg = posterBg.AddComponent<Image>();
+        posterBgImg.color = new Color(0.18f, 0.12f, 0.06f, 1f); // warm brown parchment
+        Outline posterBorder = posterBg.AddComponent<Outline>();
+        posterBorder.effectColor = new Color(0.45f, 0.32f, 0.12f, 0.8f);
+        posterBorder.effectDistance = new Vector2(4, -4);
+
+        // Decorative top stripe
+        GameObject topStripe = new GameObject("TopStripe");
+        topStripe.transform.SetParent(controlsPanel.transform, false);
+        RectTransform tsRt = topStripe.AddComponent<RectTransform>();
+        tsRt.anchorMin = new Vector2(0.03f, 0.90f);
+        tsRt.anchorMax = new Vector2(0.97f, 0.92f);
+        tsRt.offsetMin = Vector2.zero;
+        tsRt.offsetMax = Vector2.zero;
+        topStripe.AddComponent<Image>().color = new Color(0.65f, 0.45f, 0.12f, 0.7f);
+
+        // Title — big, bold, golden
+        Text ctrlTitle = MakeStretchText(controlsPanel.transform, "ControlsTitle",
+            "MR CORNY'S\nSEWER SURVIVAL GUIDE",
+            48, TextAnchor.MiddleCenter, new Color(1f, 0.85f, 0.1f),
+            new Vector2(0.08f, 0.92f), new Vector2(0.92f, 0.99f), true);
+        // Extra shadow for title
+        Shadow ctrlTitleShadow = ctrlTitle.gameObject.AddComponent<Shadow>();
+        ctrlTitleShadow.effectColor = new Color(0.4f, 0.25f, 0f, 0.9f);
+        ctrlTitleShadow.effectDistance = new Vector2(3, -3);
+
+        // BACK button — bottom center
+        Button controlsCloseButton = MakeButton(controlsPanel.transform, "ControlsCloseBtn", "BACK",
+            34, new Color(0.55f, 0.15f, 0.08f), Color.white,
+            new Vector2(0.30f, 0.035f), new Vector2(0.70f, 0.085f));
+
+        // Scroll area — fills most of the poster
+        GameObject ctrlScrollObj = new GameObject("ControlsScroll");
+        ctrlScrollObj.transform.SetParent(controlsPanel.transform, false);
+        RectTransform ctrlScrollRt = ctrlScrollObj.AddComponent<RectTransform>();
+        ctrlScrollRt.anchorMin = new Vector2(0.06f, 0.10f);
+        ctrlScrollRt.anchorMax = new Vector2(0.94f, 0.89f);
+        ctrlScrollRt.offsetMin = Vector2.zero;
+        ctrlScrollRt.offsetMax = Vector2.zero;
+
+        ScrollRect ctrlScrollRect = ctrlScrollObj.AddComponent<ScrollRect>();
+        ctrlScrollObj.AddComponent<Image>().color = new Color(0, 0, 0, 0.01f);
+        ctrlScrollObj.AddComponent<Mask>().showMaskGraphic = false;
+
+        // Content container
+        GameObject ctrlContentObj = new GameObject("ControlsContent");
+        ctrlContentObj.transform.SetParent(ctrlScrollObj.transform, false);
+        RectTransform ctrlContentRt = ctrlContentObj.AddComponent<RectTransform>();
+        ctrlContentRt.anchorMin = new Vector2(0, 1);
+        ctrlContentRt.anchorMax = new Vector2(1, 1);
+        ctrlContentRt.pivot = new Vector2(0.5f, 1f);
+        ctrlContentRt.sizeDelta = new Vector2(0, 1600);
+
+        VerticalLayoutGroup ctrlVlg = ctrlContentObj.AddComponent<VerticalLayoutGroup>();
+        ctrlVlg.spacing = 6;
+        ctrlVlg.padding = new RectOffset(20, 20, 10, 10);
+        ctrlVlg.childForceExpandWidth = true;
+        ctrlVlg.childForceExpandHeight = false;
+        ctrlVlg.childControlHeight = false;
+        ctrlVlg.childControlWidth = true;
+
+        ContentSizeFitter ctrlCsf = ctrlContentObj.AddComponent<ContentSizeFitter>();
+        ctrlCsf.verticalFit = ContentSizeFitter.FitMode.PreferredSize;
+
+        ctrlScrollRect.content = ctrlContentRt;
+        ctrlScrollRect.horizontal = false;
+        ctrlScrollRect.vertical = true;
+
+        // --- Helper: section header with decorative underline ---
+        System.Action<string, Color> AddHeader = (text, col) => {
+            // Header text
+            GameObject hGo = new GameObject("Header");
+            hGo.transform.SetParent(ctrlContentObj.transform, false);
+            hGo.AddComponent<RectTransform>().sizeDelta = new Vector2(0, 48);
+            LayoutElement hLe = hGo.AddComponent<LayoutElement>();
+            hLe.preferredHeight = 48;
+            Text hText = hGo.AddComponent<Text>();
+            hText.text = text;
+            hText.font = _font;
+            hText.fontSize = 38;
+            hText.fontStyle = FontStyle.Bold;
+            hText.alignment = TextAnchor.MiddleLeft;
+            hText.color = col;
+            hText.horizontalOverflow = HorizontalWrapMode.Wrap;
+            Outline hO = hGo.AddComponent<Outline>();
+            hO.effectColor = new Color(0, 0, 0, 0.95f);
+            hO.effectDistance = new Vector2(3, -3);
+            Shadow hS = hGo.AddComponent<Shadow>();
+            hS.effectColor = new Color(col.r * 0.3f, col.g * 0.3f, col.b * 0.3f, 0.6f);
+            hS.effectDistance = new Vector2(2, -2);
+
+            // Underline bar
+            GameObject lineGo = new GameObject("Underline");
+            lineGo.transform.SetParent(ctrlContentObj.transform, false);
+            lineGo.AddComponent<RectTransform>().sizeDelta = new Vector2(0, 3);
+            LayoutElement lineLe = lineGo.AddComponent<LayoutElement>();
+            lineLe.preferredHeight = 3;
+            Image lineImg = lineGo.AddComponent<Image>();
+            lineImg.color = new Color(col.r, col.g, col.b, 0.4f);
+        };
+
+        // --- Helper: body line with icon bullet ---
+        System.Action<string, string> AddLine = (icon, text) => {
+            GameObject bGo = new GameObject("Line");
+            bGo.transform.SetParent(ctrlContentObj.transform, false);
+            bGo.AddComponent<RectTransform>().sizeDelta = new Vector2(0, 32);
+            Text bText = bGo.AddComponent<Text>();
+            bText.text = icon + "  " + text;
+            bText.font = _font;
+            bText.fontSize = 26;
+            bText.alignment = TextAnchor.MiddleLeft;
+            bText.color = new Color(0.92f, 0.90f, 0.82f);
+            bText.horizontalOverflow = HorizontalWrapMode.Wrap;
+            bText.verticalOverflow = VerticalWrapMode.Overflow;
+            ContentSizeFitter bCsf = bGo.AddComponent<ContentSizeFitter>();
+            bCsf.verticalFit = ContentSizeFitter.FitMode.PreferredSize;
+            Outline bO = bGo.AddComponent<Outline>();
+            bO.effectColor = new Color(0, 0, 0, 0.7f);
+            bO.effectDistance = new Vector2(1, -1);
+        };
+
+        // --- Helper: spacer ---
+        System.Action<float> AddSpacer = (h) => {
+            GameObject sGo = new GameObject("Spacer");
+            sGo.transform.SetParent(ctrlContentObj.transform, false);
+            sGo.AddComponent<RectTransform>().sizeDelta = new Vector2(0, h);
+            LayoutElement sLe = sGo.AddComponent<LayoutElement>();
+            sLe.preferredHeight = h;
+        };
+
+        // ===== POSTER CONTENT =====
+        Color goldHeader = new Color(1f, 0.82f, 0.15f);
+        Color greenHeader = new Color(0.3f, 1f, 0.4f);
+        Color redHeader = new Color(1f, 0.4f, 0.3f);
+        Color blueHeader = new Color(0.4f, 0.8f, 1f);
+        Color purpleHeader = new Color(0.8f, 0.5f, 1f);
+
+        AddHeader("CONTROLS", goldHeader);
+        AddLine(">>", "LEFT / RIGHT  -  Steer through the pipe");
+        AddLine(">>", "UP  -  Speed Boost");
+        AddLine(">>", "DOWN  -  Brake");
+        AddLine(">>", "SPACE  -  Jump!");
+        AddLine(">>", "UP/DOWN mid-air  -  Tricks  (+200 pts per flip!)");
+        AddSpacer(12);
+
+        AddHeader("COLLECTIBLES", greenHeader);
+        AddLine("$", "Fartcoins  -  Points & shop currency");
+        AddLine("*", "Bonus Coins  -  Worth 5x!");
+        AddLine(">", "Speed Boosts  -  Blue arrows, go FAST");
+        AddLine("+", "Shield (cyan)  -  Absorbs one hit");
+        AddLine("+", "Magnet (red)  -  Attracts nearby coins");
+        AddLine("+", "Slow-Mo (purple)  -  Bullet time!");
+        AddSpacer(12);
+
+        AddHeader("DANGERS", redHeader);
+        AddLine("!", "Toxic Barrels, Sewer Mines, Creatures...");
+        AddLine("!", "Jump ON enemies to STOMP them!");
+        AddLine("~", "Near-misses = bonus points");
+        AddLine("~", "Getting hit = stun (not instant death!)");
+        AddSpacer(12);
+
+        AddHeader("SCORING", blueHeader);
+        AddLine("#", "Chain combos: coins + near-misses + stomps");
+        AddLine("x", "Multiplier grows over time (up to 5x!)");
+        AddLine("#", "Distance milestones = big bonuses");
+        AddSpacer(12);
+
+        AddHeader("ZONES", purpleHeader);
+        AddLine("1.", "Porcelain  -  Easy start, learn the ropes");
+        AddLine("2.", "Grimy  -  Hair wads and grime");
+        AddLine("3.", "Toxic  -  Frogs, jellyfish, mines!");
+        AddLine("4.", "Rusty  -  Rats, roaches, spiders");
+        AddLine("5.", "Hellsewer  -  EVERYTHING at once!");
+
         // Multiplier text — right column below speed
         Text multiplierText = MakeStretchText(hudParent, "MultiplierText", "x1.0",
             38, TextAnchor.MiddleRight, new Color(1f, 1f, 0.7f),
@@ -7152,11 +7350,11 @@ public class SceneBootstrapper
 
         Button restartButton = MakeButton(gameOverPanel.transform, "RestartButton",
             "FLUSH AGAIN", 42, new Color(0.55f, 0.12f, 0.08f), Color.white,
-            new Vector2(0.15f, 0.12f), new Vector2(0.85f, 0.3f));
+            new Vector2(0.15f, 0.20f), new Vector2(0.85f, 0.32f));
 
-        MakeStretchText(gameOverPanel.transform, "HintText2", "or press SPACE",
-            22, TextAnchor.MiddleCenter, new Color(0.45f, 0.45f, 0.4f),
-            new Vector2(0.25f, 0.03f), new Vector2(0.75f, 0.11f), false);
+        Button returnToBowlButton = MakeButton(gameOverPanel.transform, "ReturnToBowlButton",
+            "RETURN TO BOWL", 24, new Color(0.35f, 0.28f, 0.22f, 0.85f), new Color(0.85f, 0.82f, 0.75f),
+            new Vector2(0.25f, 0.06f), new Vector2(0.75f, 0.17f));
 
         GameUI ui = canvasObj.AddComponent<GameUI>();
         ui.scoreText = scoreText;
@@ -7173,11 +7371,15 @@ public class SceneBootstrapper
         ui.shopPanel = shopPanel;
         ui.shopContent = shopContentObj.transform;
         ui.shopCloseButton = shopCloseButton;
+        ui.controlsButton = controlsButton;
+        ui.controlsPanel = controlsPanel;
+        ui.controlsCloseButton = controlsCloseButton;
         ui.gameOverPanel = gameOverPanel;
         ui.finalScoreText = finalScoreText;
         ui.highScoreText = highScoreText;
         ui.runStatsText = runStatsText;
         ui.restartButton = restartButton;
+        ui.returnToBowlButton = returnToBowlButton;
         ui.multiplierText = multiplierText;
         ui.coinCountText = coinCountText;
         ui.speedText = speedText;
@@ -7337,6 +7539,275 @@ public class SceneBootstrapper
         img.color = bg;
 
         return go;
+    }
+
+    /// <summary>
+    /// Creates a bathroom stall poster button with character art, tape marks, and bold label.
+    /// Looks like a poster taped to the stall wall — tilted, with dropshadow and bright hover.
+    /// </summary>
+    static Button MakeStallPoster(Transform parent, string objName, string label,
+        Color posterColor, Vector2 anchorMin, Vector2 anchorMax, float tiltDeg,
+        Color charBodyColor, Color charAccentColor, string charType)
+    {
+        // Root container (invisible, holds the tilted poster)
+        GameObject root = new GameObject(objName);
+        root.transform.SetParent(parent, false);
+        RectTransform rootRt = root.AddComponent<RectTransform>();
+        rootRt.anchorMin = anchorMin;
+        rootRt.anchorMax = anchorMax;
+        rootRt.offsetMin = Vector2.zero;
+        rootRt.offsetMax = Vector2.zero;
+
+        // Dropshadow (dark offset behind poster)
+        GameObject shadow = new GameObject("Shadow");
+        shadow.transform.SetParent(root.transform, false);
+        RectTransform shRt = shadow.AddComponent<RectTransform>();
+        shRt.anchorMin = new Vector2(-0.04f, -0.04f);
+        shRt.anchorMax = new Vector2(1.04f, 1.04f);
+        shRt.offsetMin = Vector2.zero;
+        shRt.offsetMax = Vector2.zero;
+        shadow.AddComponent<Image>().color = new Color(0f, 0f, 0f, 0.5f);
+
+        // Paper background (the poster itself — clickable)
+        GameObject paper = new GameObject("Paper");
+        paper.transform.SetParent(root.transform, false);
+        RectTransform paperRt = paper.AddComponent<RectTransform>();
+        paperRt.anchorMin = Vector2.zero;
+        paperRt.anchorMax = Vector2.one;
+        paperRt.offsetMin = Vector2.zero;
+        paperRt.offsetMax = Vector2.zero;
+
+        Image paperImg = paper.AddComponent<Image>();
+        paperImg.color = posterColor;
+
+        Button btn = paper.AddComponent<Button>();
+        btn.targetGraphic = paperImg;
+        ColorBlock cb = btn.colors;
+        cb.normalColor = Color.white;
+        cb.highlightedColor = new Color(1.25f, 1.25f, 1.15f, 1f); // bright glow on hover
+        cb.pressedColor = new Color(0.75f, 0.75f, 0.7f, 1f);
+        cb.selectedColor = Color.white;
+        btn.colors = cb;
+
+        // Tilt the whole root
+        root.transform.localRotation = Quaternion.Euler(0, 0, tiltDeg);
+
+        // Tape strips at top (two small diagonal strips)
+        for (int t = 0; t < 2; t++)
+        {
+            GameObject tape = new GameObject("Tape" + t);
+            tape.transform.SetParent(paper.transform, false);
+            RectTransform tRt = tape.AddComponent<RectTransform>();
+            float tx = t == 0 ? 0.15f : 0.65f;
+            tRt.anchorMin = new Vector2(tx, 0.92f);
+            tRt.anchorMax = new Vector2(tx + 0.25f, 1.02f);
+            tRt.offsetMin = Vector2.zero;
+            tRt.offsetMax = Vector2.zero;
+            Image tapeImg = tape.AddComponent<Image>();
+            tapeImg.color = new Color(0.85f, 0.82f, 0.7f, 0.65f); // semi-transparent masking tape
+            tape.transform.localRotation = Quaternion.Euler(0, 0, t == 0 ? 8f : -5f);
+            tapeImg.raycastTarget = false;
+        }
+
+        // Character art area (upper portion of poster)
+        GameObject charArea = new GameObject("CharArt");
+        charArea.transform.SetParent(paper.transform, false);
+        RectTransform caRt = charArea.AddComponent<RectTransform>();
+        caRt.anchorMin = new Vector2(0.1f, 0.35f);
+        caRt.anchorMax = new Vector2(0.9f, 0.88f);
+        caRt.offsetMin = Vector2.zero;
+        caRt.offsetMax = Vector2.zero;
+
+        // Character silhouette built from UI images
+        if (charType == "corny")
+        {
+            // Mr Corny: turd body + corn kernels + googly eyes
+            GameObject body = new GameObject("Body");
+            body.transform.SetParent(charArea.transform, false);
+            RectTransform bRt = body.AddComponent<RectTransform>();
+            bRt.anchorMin = new Vector2(0.15f, 0.05f);
+            bRt.anchorMax = new Vector2(0.85f, 0.70f);
+            bRt.offsetMin = Vector2.zero; bRt.offsetMax = Vector2.zero;
+            body.AddComponent<Image>().color = charBodyColor;
+            body.GetComponent<Image>().raycastTarget = false;
+
+            // Eyes
+            for (int e = 0; e < 2; e++)
+            {
+                GameObject eye = new GameObject("Eye" + e);
+                eye.transform.SetParent(charArea.transform, false);
+                RectTransform eRt = eye.AddComponent<RectTransform>();
+                float ex = e == 0 ? 0.30f : 0.55f;
+                eRt.anchorMin = new Vector2(ex, 0.55f);
+                eRt.anchorMax = new Vector2(ex + 0.18f, 0.80f);
+                eRt.offsetMin = Vector2.zero; eRt.offsetMax = Vector2.zero;
+                eye.AddComponent<Image>().color = Color.white;
+                eye.GetComponent<Image>().raycastTarget = false;
+
+                // Pupil
+                GameObject pupil = new GameObject("Pupil");
+                pupil.transform.SetParent(eye.transform, false);
+                RectTransform pRt = pupil.AddComponent<RectTransform>();
+                pRt.anchorMin = new Vector2(0.3f, 0.2f);
+                pRt.anchorMax = new Vector2(0.7f, 0.6f);
+                pRt.offsetMin = Vector2.zero; pRt.offsetMax = Vector2.zero;
+                pupil.AddComponent<Image>().color = Color.black;
+                pupil.GetComponent<Image>().raycastTarget = false;
+            }
+
+            // Corn kernels (yellow dots)
+            float[] kx = { 0.20f, 0.60f, 0.40f, 0.25f, 0.65f };
+            float[] ky = { 0.15f, 0.25f, 0.08f, 0.38f, 0.42f };
+            for (int k = 0; k < kx.Length; k++)
+            {
+                GameObject kern = new GameObject("Kernel" + k);
+                kern.transform.SetParent(charArea.transform, false);
+                RectTransform kRt = kern.AddComponent<RectTransform>();
+                kRt.anchorMin = new Vector2(kx[k], ky[k]);
+                kRt.anchorMax = new Vector2(kx[k] + 0.10f, ky[k] + 0.12f);
+                kRt.offsetMin = Vector2.zero; kRt.offsetMax = Vector2.zero;
+                kern.AddComponent<Image>().color = charAccentColor;
+                kern.GetComponent<Image>().raycastTarget = false;
+            }
+        }
+        else if (charType == "roach")
+        {
+            // Cockroach: oval body + antennae lines + glowing eyes
+            GameObject body = new GameObject("Body");
+            body.transform.SetParent(charArea.transform, false);
+            RectTransform bRt = body.AddComponent<RectTransform>();
+            bRt.anchorMin = new Vector2(0.20f, 0.05f);
+            bRt.anchorMax = new Vector2(0.80f, 0.65f);
+            bRt.offsetMin = Vector2.zero; bRt.offsetMax = Vector2.zero;
+            body.AddComponent<Image>().color = charBodyColor;
+            body.GetComponent<Image>().raycastTarget = false;
+
+            // Head
+            GameObject head = new GameObject("Head");
+            head.transform.SetParent(charArea.transform, false);
+            RectTransform hRt = head.AddComponent<RectTransform>();
+            hRt.anchorMin = new Vector2(0.30f, 0.55f);
+            hRt.anchorMax = new Vector2(0.70f, 0.80f);
+            hRt.offsetMin = Vector2.zero; hRt.offsetMax = Vector2.zero;
+            head.AddComponent<Image>().color = new Color(charBodyColor.r * 0.8f, charBodyColor.g * 0.8f, charBodyColor.b * 0.8f);
+            head.GetComponent<Image>().raycastTarget = false;
+
+            // Glowing eyes
+            for (int e = 0; e < 2; e++)
+            {
+                GameObject eye = new GameObject("Eye" + e);
+                eye.transform.SetParent(charArea.transform, false);
+                RectTransform eRt = eye.AddComponent<RectTransform>();
+                float ex = e == 0 ? 0.33f : 0.55f;
+                eRt.anchorMin = new Vector2(ex, 0.62f);
+                eRt.anchorMax = new Vector2(ex + 0.14f, 0.76f);
+                eRt.offsetMin = Vector2.zero; eRt.offsetMax = Vector2.zero;
+                eye.AddComponent<Image>().color = charAccentColor; // red glowing
+                eye.GetComponent<Image>().raycastTarget = false;
+            }
+
+            // Antennae (thin lines)
+            for (int a = 0; a < 2; a++)
+            {
+                GameObject ant = new GameObject("Antenna" + a);
+                ant.transform.SetParent(charArea.transform, false);
+                RectTransform aRt = ant.AddComponent<RectTransform>();
+                float ax = a == 0 ? 0.25f : 0.60f;
+                aRt.anchorMin = new Vector2(ax, 0.78f);
+                aRt.anchorMax = new Vector2(ax + 0.06f, 0.98f);
+                aRt.offsetMin = Vector2.zero; aRt.offsetMax = Vector2.zero;
+                ant.AddComponent<Image>().color = charBodyColor;
+                ant.GetComponent<Image>().raycastTarget = false;
+                ant.transform.localRotation = Quaternion.Euler(0, 0, a == 0 ? 15f : -15f);
+            }
+
+            // Legs (small lines on sides)
+            for (int l = 0; l < 6; l++)
+            {
+                GameObject leg = new GameObject("Leg" + l);
+                leg.transform.SetParent(charArea.transform, false);
+                RectTransform lRt = leg.AddComponent<RectTransform>();
+                bool leftSide = l < 3;
+                float lx = leftSide ? 0.10f : 0.78f;
+                float ly = 0.10f + (l % 3) * 0.18f;
+                lRt.anchorMin = new Vector2(lx, ly);
+                lRt.anchorMax = new Vector2(lx + 0.14f, ly + 0.05f);
+                lRt.offsetMin = Vector2.zero; lRt.offsetMax = Vector2.zero;
+                leg.AddComponent<Image>().color = charBodyColor;
+                leg.GetComponent<Image>().raycastTarget = false;
+                leg.transform.localRotation = Quaternion.Euler(0, 0, leftSide ? 25f : -25f);
+            }
+        }
+        else if (charType == "duck")
+        {
+            // Rubber duck: round body + bill + eye
+            GameObject body = new GameObject("Body");
+            body.transform.SetParent(charArea.transform, false);
+            RectTransform bRt = body.AddComponent<RectTransform>();
+            bRt.anchorMin = new Vector2(0.15f, 0.0f);
+            bRt.anchorMax = new Vector2(0.85f, 0.65f);
+            bRt.offsetMin = Vector2.zero; bRt.offsetMax = Vector2.zero;
+            body.AddComponent<Image>().color = charBodyColor;
+            body.GetComponent<Image>().raycastTarget = false;
+
+            // Head
+            GameObject head = new GameObject("Head");
+            head.transform.SetParent(charArea.transform, false);
+            RectTransform hRt = head.AddComponent<RectTransform>();
+            hRt.anchorMin = new Vector2(0.25f, 0.50f);
+            hRt.anchorMax = new Vector2(0.75f, 0.90f);
+            hRt.offsetMin = Vector2.zero; hRt.offsetMax = Vector2.zero;
+            head.AddComponent<Image>().color = charBodyColor;
+            head.GetComponent<Image>().raycastTarget = false;
+
+            // Bill
+            GameObject bill = new GameObject("Bill");
+            bill.transform.SetParent(charArea.transform, false);
+            RectTransform biRt = bill.AddComponent<RectTransform>();
+            biRt.anchorMin = new Vector2(0.60f, 0.60f);
+            biRt.anchorMax = new Vector2(0.95f, 0.74f);
+            biRt.offsetMin = Vector2.zero; biRt.offsetMax = Vector2.zero;
+            bill.AddComponent<Image>().color = charAccentColor;
+            bill.GetComponent<Image>().raycastTarget = false;
+
+            // Eye
+            GameObject eye = new GameObject("Eye");
+            eye.transform.SetParent(charArea.transform, false);
+            RectTransform eRt = eye.AddComponent<RectTransform>();
+            eRt.anchorMin = new Vector2(0.48f, 0.70f);
+            eRt.anchorMax = new Vector2(0.60f, 0.85f);
+            eRt.offsetMin = Vector2.zero; eRt.offsetMax = Vector2.zero;
+            eye.AddComponent<Image>().color = Color.white;
+            eye.GetComponent<Image>().raycastTarget = false;
+
+            GameObject pupil = new GameObject("Pupil");
+            pupil.transform.SetParent(eye.transform, false);
+            RectTransform pRt = pupil.AddComponent<RectTransform>();
+            pRt.anchorMin = new Vector2(0.3f, 0.2f);
+            pRt.anchorMax = new Vector2(0.7f, 0.6f);
+            pRt.offsetMin = Vector2.zero; pRt.offsetMax = Vector2.zero;
+            pupil.AddComponent<Image>().color = Color.black;
+            pupil.GetComponent<Image>().raycastTarget = false;
+        }
+
+        // Label text (bottom of poster, bold, with heavy outline)
+        Text labelText = MakeStretchText(paper.transform, "Label", label,
+            18, TextAnchor.MiddleCenter, Color.white,
+            new Vector2(0.05f, 0.02f), new Vector2(0.95f, 0.34f), true);
+        labelText.fontStyle = FontStyle.Bold;
+        // Extra shadow for readability
+        Shadow labelShadow = labelText.gameObject.AddComponent<Shadow>();
+        labelShadow.effectColor = new Color(0, 0, 0, 0.9f);
+        labelShadow.effectDistance = new Vector2(2, -2);
+
+        // Worn edge effect (slightly darker border around poster)
+        Outline paperEdge = paper.AddComponent<Outline>();
+        paperEdge.effectColor = new Color(0, 0, 0, 0.4f);
+        paperEdge.effectDistance = new Vector2(2, -2);
+
+        paper.AddComponent<ButtonPressEffect>();
+
+        return btn;
     }
 
     static Button MakeButton(Transform parent, string name, string label, int fontSize,

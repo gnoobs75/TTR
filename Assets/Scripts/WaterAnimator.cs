@@ -9,6 +9,8 @@ using System.Collections.Generic;
 /// </summary>
 public class WaterAnimator : MonoBehaviour
 {
+    public static WaterAnimator Instance { get; private set; }
+
     [Header("Wave Settings")]
     public float waveSpeed = 1.2f;
     public float waveAmplitude = 0.06f;
@@ -130,6 +132,32 @@ public class WaterAnimator : MonoBehaviour
     private Material _poopEyeWhiteMat;
     private Material _poopPupilMat;
 
+    // Flush water rise: 0 = normal level, 1 = pipe completely filled
+    private float _flushFillLevel;
+    private float _flushFillTarget;
+    private bool _draining;
+    private float _drainTimer;
+
+    void Awake()
+    {
+        Instance = this;
+    }
+
+    /// <summary>Set the target fill level during flush (0-1). Called from TurdController.</summary>
+    public void SetFlushFillLevel(float level)
+    {
+        _flushFillTarget = Mathf.Clamp01(level);
+        _draining = false;
+    }
+
+    /// <summary>Start draining the 3D water back to normal after flush ends.</summary>
+    public void StartDrainAfterFlush()
+    {
+        _draining = true;
+        _drainTimer = 0f;
+        _flushFillTarget = 0f;
+    }
+
     void Start()
     {
         if (player != null) _tc = player.GetComponent<TurdController>();
@@ -180,6 +208,24 @@ public class WaterAnimator : MonoBehaviour
             _zoneWaveMult = Mathf.Lerp(_zoneWaveMult, targetWave, Time.deltaTime * 2f);
             _zoneBubbleMult = Mathf.Lerp(_zoneBubbleMult, targetBubble, Time.deltaTime * 2f);
             _zoneDebrisMult = Mathf.Lerp(_zoneDebrisMult, targetDebris, Time.deltaTime * 2f);
+        }
+
+        // Flush fill level: smooth rise/drain
+        if (_draining)
+        {
+            _drainTimer += Time.deltaTime;
+            float drainT = Mathf.Clamp01(_drainTimer / 3f);
+            _flushFillLevel = Mathf.Lerp(_flushFillLevel, 0f, drainT * drainT);
+            if (_flushFillLevel < 0.01f)
+            {
+                _flushFillLevel = 0f;
+                _flushFillTarget = 0f;
+                _draining = false;
+            }
+        }
+        else
+        {
+            _flushFillLevel = Mathf.Lerp(_flushFillLevel, _flushFillTarget, Time.deltaTime * 4f);
         }
 
         AnimateWaterMeshes();
@@ -263,6 +309,15 @@ public class WaterAnimator : MonoBehaviour
 
                 displaced[i] = verts[i];
                 displaced[i].y += wave1 + wave2 + wave3 + wave4;
+
+                // During flush: raise water level toward pipe center
+                if (_flushFillLevel > 0.01f)
+                {
+                    // Raise the water plane from bottom (-0.82*R) up toward +0.5*R (overflowing)
+                    float pipeR = _pipeGen != null ? _pipeGen.pipeRadius : 3.5f;
+                    float maxRise = pipeR * 1.3f; // from -0.82R to ~+0.48R
+                    displaced[i].y += maxRise * _flushFillLevel;
+                }
 
                 // UV scroll with slight lateral distortion for current feel
                 scrolledUVs[i] = origUVs[i];

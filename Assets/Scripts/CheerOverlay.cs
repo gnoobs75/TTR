@@ -33,6 +33,13 @@ public class CheerOverlay : MonoBehaviour
         public float blinkTimer, nextBlink;
         public Vector2 pupilTarget;
         public float pupilTimer;
+        // interaction & special animation state
+        public float interactTimer;
+        public int interactState;     // 0=none, 1=highFive, 2=fistBump, 3=hipBump
+        public int interactPartner;
+        public float interactT;
+        public float cartwheelT;
+        public float cartwheelDir;
     }
 
     Poop[] _p = new Poop[COUNT];
@@ -54,6 +61,13 @@ public class CheerOverlay : MonoBehaviour
     float _wordTimer;
     bool _flipping;
     float _flipT;
+
+    // Interaction & pyramid animation
+    bool _pyramidActive;
+    float _pyramidT;
+    // Pyramid target positions: bottom row (0,3,5), middle row (1,4), top (2=sunglasses)
+    static readonly float[] PYRAMID_X = { 0.30f, 0.40f, 0.50f, 0.50f, 0.60f, 0.70f };
+    static readonly float[] PYRAMID_Y = { -140f, -40f, 60f, -140f, -40f, -140f };
 
     Sprite _circle;
 
@@ -125,6 +139,9 @@ public class CheerOverlay : MonoBehaviour
         // Animate each poop
         for (int i = 0; i < COUNT; i++)
             Animate(i, dt);
+
+        if (_pyramidActive)
+            AnimatePyramid(dt);
     }
 
     // === PUBLIC API ===
@@ -147,6 +164,37 @@ public class CheerOverlay : MonoBehaviour
             FlipTo(HYPE_WORDS[Random.Range(0, HYPE_WORDS.Length)]);
 
         _wordTimer = Random.Range(4f, 8f);
+    }
+
+    /// <summary>Start cheerleading pyramid formation (race finish celebration)</summary>
+    public void StartPyramid()
+    {
+        _pyramidActive = true;
+        _pyramidT = 0f;
+        for (int i = 0; i < COUNT; i++)
+        {
+            var p = _p[i];
+            p.excitement = 1f;
+            p.interactState = 0;
+            p.cartwheelT = 0f;
+            _p[i] = p;
+        }
+        FlipTo(BIG_WORDS[Random.Range(0, BIG_WORDS.Length)]);
+    }
+
+    /// <summary>End pyramid, return to normal positions</summary>
+    public void StopPyramid()
+    {
+        _pyramidActive = false;
+        for (int i = 0; i < COUNT; i++)
+        {
+            var p = _p[i];
+            p.baseY = -140f;
+            p.root.anchorMin = new Vector2(POS_X[i], 0f);
+            p.root.anchorMax = new Vector2(POS_X[i], 0f);
+            p.root.localRotation = Quaternion.identity;
+            _p[i] = p;
+        }
     }
 
     // === ANIMATION ===
@@ -272,7 +320,151 @@ public class CheerOverlay : MonoBehaviour
             p.mouthRt.sizeDelta = new Vector2(mw, mh);
         }
 
+        // === INTERACTIONS (high fives, fist bumps, hip bumps between neighbors) ===
+        if (!_pyramidActive)
+        {
+            p.interactTimer -= dt;
+            if (p.interactTimer <= 0f && p.interactState == 0)
+            {
+                // Chance scales with excitement, but can happen during idle too
+                if (p.excitement > 0.15f || Random.value < 0.06f)
+                {
+                    int left = i - 1, right = i + 1;
+                    int neighbor = -1;
+                    if (left >= 0 && right < COUNT)
+                        neighbor = Random.value < 0.5f ? left : right;
+                    else if (left >= 0) neighbor = left;
+                    else if (right < COUNT) neighbor = right;
+
+                    if (neighbor >= 0 && _p[neighbor].interactState == 0 && _p[neighbor].cartwheelT <= 0f)
+                    {
+                        int type = Random.Range(1, 4); // 1=highFive, 2=fistBump, 3=hipBump
+                        p.interactState = type;
+                        p.interactPartner = neighbor;
+                        p.interactT = 0f;
+                        var n = _p[neighbor];
+                        n.interactState = type;
+                        n.interactPartner = i;
+                        n.interactT = 0f;
+                        _p[neighbor] = n;
+                    }
+                }
+                p.interactTimer = Random.Range(3f, 7f);
+            }
+
+            if (p.interactState > 0)
+            {
+                p.interactT += dt * 2.2f;
+                if (p.interactT >= 1f)
+                {
+                    p.interactState = 0;
+                    p.interactT = 0f;
+                }
+                else
+                {
+                    float reach = Mathf.Sin(p.interactT * Mathf.PI); // smooth 0->1->0 arc
+                    bool partnerRight = p.interactPartner > i;
+
+                    switch (p.interactState)
+                    {
+                        case 1: // High five — arm shoots up toward partner
+                        {
+                            float target = partnerRight ? -120f : 120f;
+                            float baseAngle = partnerRight ? -(armBase - armWave) : (armBase + armWave);
+                            RectTransform arm = partnerRight ? p.rightArm : p.leftArm;
+                            if (arm != null)
+                                arm.localRotation = Quaternion.Euler(0, 0, Mathf.Lerp(baseAngle, target, reach));
+                            break;
+                        }
+                        case 2: // Fist bump — arm extends horizontally toward partner
+                        {
+                            float target = partnerRight ? -5f : 5f;
+                            float baseAngle = partnerRight ? -(armBase - armWave) : (armBase + armWave);
+                            RectTransform arm = partnerRight ? p.rightArm : p.leftArm;
+                            if (arm != null)
+                                arm.localRotation = Quaternion.Euler(0, 0, Mathf.Lerp(baseAngle, target, reach));
+                            break;
+                        }
+                        case 3: // Hip bump — lean sideways toward partner
+                        {
+                            float lean = (partnerRight ? -10f : 10f) * reach;
+                            float xShift = (partnerRight ? 8f : -8f) * reach;
+                            p.root.localRotation = Quaternion.Euler(0, 0, lean);
+                            Vector2 pos = p.root.anchoredPosition;
+                            pos.x += xShift;
+                            p.root.anchoredPosition = pos;
+                            break;
+                        }
+                    }
+                }
+            }
+
+            // === CARTWHEEL (random during high excitement) ===
+            if (p.cartwheelT > 0f)
+            {
+                p.cartwheelT += dt * 1.5f;
+                if (p.cartwheelT >= 1f)
+                {
+                    p.cartwheelT = 0f;
+                    p.root.localRotation = Quaternion.identity;
+                }
+                else
+                {
+                    float spin = p.cartwheelDir * 360f * p.cartwheelT;
+                    float hop = Mathf.Sin(p.cartwheelT * Mathf.PI) * 35f;
+                    Vector2 pos = p.root.anchoredPosition;
+                    pos.y += hop;
+                    p.root.anchoredPosition = pos;
+                    p.root.localRotation = Quaternion.Euler(0, 0, spin);
+                }
+            }
+            else if (p.excitement > 0.6f && p.interactState == 0 && Random.value < 0.003f)
+            {
+                p.cartwheelT = 0.01f;
+                p.cartwheelDir = Random.value < 0.5f ? 1f : -1f;
+            }
+        }
+
         _p[i] = p;
+    }
+
+    // === PYRAMID FORMATION ===
+
+    void AnimatePyramid(float dt)
+    {
+        _pyramidT = Mathf.MoveTowards(_pyramidT, 1f, dt * 0.7f);
+        float t = Mathf.SmoothStep(0f, 1f, _pyramidT);
+
+        for (int i = 0; i < COUNT; i++)
+        {
+            var p = _p[i];
+            if (p.root == null) continue;
+
+            // Lerp anchor X toward pyramid position
+            float targetX = PYRAMID_X[i];
+            float currentX = Mathf.Lerp(POS_X[i], targetX, t);
+            p.root.anchorMin = new Vector2(currentX, 0f);
+            p.root.anchorMax = new Vector2(currentX, 0f);
+
+            // Lerp baseY toward pyramid height
+            p.baseY = Mathf.Lerp(-140f, PYRAMID_Y[i], t);
+
+            // Arms out wide like cheerleaders
+            float armSpread = Mathf.Lerp(50f, 88f, t);
+            if (p.leftArm != null)
+                p.leftArm.localRotation = Quaternion.Euler(0, 0, armSpread);
+            if (p.rightArm != null)
+                p.rightArm.localRotation = Quaternion.Euler(0, 0, -armSpread);
+
+            // Gentle synchronized wobble when pyramid is formed
+            if (t > 0.85f)
+            {
+                float wobble = Mathf.Sin(Time.time * 3f + i * 0.7f) * 3f;
+                p.root.localRotation = Quaternion.Euler(0, 0, wobble);
+            }
+
+            _p[i] = p;
+        }
     }
 
     // === SIGN SYSTEM ===
@@ -323,9 +515,9 @@ public class CheerOverlay : MonoBehaviour
         p.root.anchorMin = new Vector2(POS_X[idx], 0f);
         p.root.anchorMax = new Vector2(POS_X[idx], 0f);
         p.root.pivot = new Vector2(0.5f, 0f);
-        p.root.sizeDelta = new Vector2(220, 300);
-        p.root.anchoredPosition = new Vector2(0, -70);
-        p.baseY = -70f;
+        p.root.sizeDelta = new Vector2(180, 240);
+        p.root.anchoredPosition = new Vector2(0, -140);
+        p.baseY = -140f;
         p.phase = idx * 1.1f + Random.Range(0f, 1.5f);
 
         // Body
@@ -371,6 +563,7 @@ public class CheerOverlay : MonoBehaviour
         p.nextBlink = Random.Range(2f, 5f);
         p.pupilTimer = Random.Range(0.3f, 1.5f);
         p.pupilTarget = Vector2.zero;
+        p.interactTimer = Random.Range(2f, 6f);
 
         return p;
     }

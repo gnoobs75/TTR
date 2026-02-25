@@ -126,17 +126,20 @@ public class VerticalDrop : MonoBehaviour
         }
 
         if (ProceduralAudio.Instance != null)
+        {
+            ProceduralAudio.Instance.PlayToiletFlush();
             ProceduralAudio.Instance.PlayWaterSplosh();
+        }
 
         if (ScorePopup.Instance != null)
-            ScorePopup.Instance.ShowMilestone(tc.transform.position + Vector3.up * 2f, "DIVE!");
+            ScorePopup.Instance.ShowMilestone(tc.transform.position + Vector3.up * 2f, "FLUSH!!!");
 
         if (ParticleManager.Instance != null)
             ParticleManager.Instance.PlayWaterSplash(tc.transform.position);
 
         // Poop crew reacts to the plunge
         if (CheerOverlay.Instance != null)
-            CheerOverlay.Instance.ShowCheer("SPLOOSH!", new Color(0.2f, 0.8f, 0.5f), true);
+            CheerOverlay.Instance.ShowCheer("FLUSH!!!", new Color(0.2f, 0.8f, 1f), true);
 
         // Underwater tint flash
         if (ScreenEffects.Instance != null)
@@ -520,13 +523,13 @@ public class VerticalDrop : MonoBehaviour
         waterWall.GetComponent<Renderer>().material = waterWallMat;
         Object.Destroy(waterWall.GetComponent<Collider>());
 
-        // "DIVE!" sign above the water wall
-        GameObject diveSign = new GameObject("DiveSign");
+        // "FLUSH!!!" sign above the water wall
+        GameObject diveSign = new GameObject("FlushSign");
         diveSign.transform.SetParent(transform);
         diveSign.transform.position = center + up * 2.5f;
         diveSign.transform.rotation = Quaternion.LookRotation(-forward, up);
         TextMesh diveTM = diveSign.AddComponent<TextMesh>();
-        diveTM.text = "DIVE!";
+        diveTM.text = "FLUSH!!!";
         diveTM.fontSize = 64;
         diveTM.characterSize = 0.12f;
         diveTM.alignment = TextAlignment.Center;

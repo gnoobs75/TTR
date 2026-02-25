@@ -197,18 +197,14 @@ public class GameManager : MonoBehaviour
 
     void Update()
     {
-        // Action input (keyboard space OR touch tap via TouchInput)
-        bool actionPressed = false;
-        if (TouchInput.Instance != null)
-            actionPressed = TouchInput.Instance.ActionPressed;
-        else if (Keyboard.current != null)
-            actionPressed = Keyboard.current.spaceKey.wasPressedThisFrame;
-
         // Block input while paused or music panel open
         if (PauseMenu.Instance != null && PauseMenu.Instance.IsPaused) return;
         if (MusicPanel.Instance != null && MusicPanel.Instance.IsOpen) return;
 
-        if (actionPressed)
+        // SPACE key shortcut for start/restart (touch is handled by UI buttons only
+        // to prevent accidental starts when touching sliders, gallery, etc.)
+        bool spacePressed = Keyboard.current != null && Keyboard.current.spaceKey.wasPressedThisFrame;
+        if (spacePressed)
         {
             if (!isPlaying && !_isGameOver)
             {

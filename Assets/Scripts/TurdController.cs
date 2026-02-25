@@ -1287,6 +1287,7 @@ public class TurdController : MonoBehaviour
         _dropExitBoostMult = exitBoostMult;
         _dropExitBoostDur = exitBoostDur;
         _dropOffset = Vector2.zero;
+        _dropVelocity = Vector2.zero;
 
         // Kill angular velocity during drop
         _angularVelocity = 0f;
@@ -1299,6 +1300,9 @@ public class TurdController : MonoBehaviour
         if (ParticleManager.Instance != null)
             ParticleManager.Instance.StartUnderwaterEffects(transform);
     }
+
+    // Drop momentum for acceleration-based steering
+    private Vector2 _dropVelocity;
 
     void UpdateDropState()
     {
@@ -1332,18 +1336,58 @@ public class TurdController : MonoBehaviour
                 inputY -= 1f;
         }
 
-        // === UNDERWATER PHYSICS: floaty, inertial movement ===
-        // Movement feels like swimming - slow response, drifty
-        float floatyLerp = 7f; // responsive but still floaty
+        // === UNDERWATER PHYSICS: momentum-based movement ===
+        // Holding a direction builds up speed (acceleration), feels laggy at start but powerful
         Vector2 inputDir = new Vector2(inputX, inputY);
-        Vector2 targetOffset = _dropOffset + inputDir * _dropMoveSpeed * dt;
-        if (targetOffset.magnitude > _dropMoveRadius)
-            targetOffset = targetOffset.normalized * _dropMoveRadius;
-        _dropOffset = Vector2.Lerp(_dropOffset, targetOffset, dt * floatyLerp);
+        float accel = 18f; // acceleration rate
+        float maxMoveSpeed = _dropMoveSpeed;
+        float drag = 3.5f; // natural drag when no input
+
+        if (inputDir.magnitude > 0.1f)
+        {
+            // Accelerate in input direction - the longer you hold, the faster you go
+            _dropVelocity += inputDir.normalized * accel * dt;
+            // Clamp max velocity
+            if (_dropVelocity.magnitude > maxMoveSpeed)
+                _dropVelocity = _dropVelocity.normalized * maxMoveSpeed;
+        }
+        else
+        {
+            // Apply drag when no input - slow drift to stop
+            _dropVelocity = Vector2.Lerp(_dropVelocity, Vector2.zero, dt * drag);
+        }
+
+        // Apply velocity to offset
+        _dropOffset += _dropVelocity * dt;
+
+        // Clamp to pipe radius
+        if (_dropOffset.magnitude > _dropMoveRadius)
+        {
+            _dropOffset = _dropOffset.normalized * _dropMoveRadius;
+            // Bounce velocity inward slightly on wall hit
+            _dropVelocity *= -0.3f;
+        }
 
         // Drift slowly back to center when no input (gentle current)
         if (inputDir.magnitude < 0.1f)
-            _dropOffset = Vector2.Lerp(_dropOffset, Vector2.zero, dt * 0.15f);
+            _dropOffset = Vector2.Lerp(_dropOffset, Vector2.zero, dt * 0.1f);
+
+        // === WATER LEVEL VISUAL: rise during flush, fill the pipe ===
+        if (ScreenEffects.Instance != null)
+        {
+            // Water rises quickly in first 30%, stays high, then stays full until exit
+            float waterTarget;
+            if (progress < 0.3f)
+                waterTarget = Mathf.SmoothStep(0f, 0.85f, progress / 0.3f);
+            else
+                waterTarget = 0.85f + 0.15f * Mathf.SmoothStep(0f, 1f, (progress - 0.3f) / 0.7f);
+            ScreenEffects.Instance.SetWaterRushLevel(waterTarget);
+        }
+
+        // Tell WaterAnimator about flush fill level
+        if (WaterAnimator.Instance != null)
+            WaterAnimator.Instance.SetFlushFillLevel(progress < 0.3f
+                ? Mathf.SmoothStep(0f, 1f, progress / 0.3f) : 1f);
 
         // Forward speed: gentle swim, then PLUNGE acceleration in the final 20%
         float currentSwimSpeed = _dropSpeed;
@@ -1416,7 +1460,13 @@ public class TurdController : MonoBehaviour
 
         // Clear underwater tint and particles
         if (ScreenEffects.Instance != null)
+        {
             ScreenEffects.Instance.SetUnderwater(false);
+            // Start draining the water overlay (coroutine for smooth drain)
+            StartCoroutine(DrainWaterOverlay());
+        }
+        if (WaterAnimator.Instance != null)
+            WaterAnimator.Instance.StartDrainAfterFlush();
         if (ParticleManager.Instance != null)
             ParticleManager.Instance.StopUnderwaterEffects();
 
@@ -1455,5 +1505,24 @@ public class TurdController : MonoBehaviour
         }
 
         HapticManager.HeavyTap();
+    }
+
+    IEnumerator DrainWaterOverlay()
+    {
+        // Smooth drain over ~3 seconds after exiting flush
+        float drainDuration = 3f;
+        float timer = 0f;
+        float startLevel = 1f;
+        while (timer < drainDuration)
+        {
+            timer += Time.deltaTime;
+            float t = Mathf.Clamp01(timer / drainDuration);
+            float level = Mathf.Lerp(startLevel, 0f, t * t); // ease-in drain (fast at end)
+            if (ScreenEffects.Instance != null)
+                ScreenEffects.Instance.SetWaterRushLevel(level);
+            yield return null;
+        }
+        if (ScreenEffects.Instance != null)
+            ScreenEffects.Instance.SetWaterRushLevel(0f);
     }
 }
