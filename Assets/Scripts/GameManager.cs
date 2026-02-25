@@ -78,7 +78,23 @@ public class GameManager : MonoBehaviour
     };
 
     public int RunCoins => _runCoins;
+    public int RunNearMisses => _runNearMisses;
+    public int RunBestCombo => _runBestCombo;
     public float Multiplier => _multiplier;
+
+    // Race stats
+    private int _runHitsTaken;
+    private int _runBoostsUsed;
+    private float _runMaxSpeed;
+    private int _runStomps;
+    public int RunHitsTaken => _runHitsTaken;
+    public int RunBoostsUsed => _runBoostsUsed;
+    public float RunMaxSpeed => _runMaxSpeed;
+    public int RunStomps => _runStomps;
+    public void RecordHit() { _runHitsTaken++; }
+    public void RecordBoost() { _runBoostsUsed++; }
+    public void RecordStomp() { _runStomps++; }
+    public void TrackMaxSpeed(float speed) { if (speed > _runMaxSpeed) _runMaxSpeed = speed; }
 
     void Awake()
     {
@@ -96,6 +112,13 @@ public class GameManager : MonoBehaviour
 
     public void StartGame()
     {
+        // Race mode: skip flush sequence — race has its own intro with camera orbit
+        if (RaceManager.Instance != null)
+        {
+            ActuallyStartGame();
+            return;
+        }
+
         // Check if flush sequence should play
         if (FlushSequence.Instance != null && FlushSequence.Instance.State == FlushSequence.FlushState.Idle)
         {
@@ -151,6 +174,10 @@ public class GameManager : MonoBehaviour
         _runCoins = 0;
         _runNearMisses = 0;
         _runBestCombo = 0;
+        _runHitsTaken = 0;
+        _runBoostsUsed = 0;
+        _runMaxSpeed = 0f;
+        _runStomps = 0;
         _multiplier = 1f;
         _multiplierTimer = 0f;
         _nextMilestoneIdx = 0;
@@ -227,8 +254,10 @@ public class GameManager : MonoBehaviour
             Time.timeScale = _freezeTimer > 0f ? 0.05f : 1f;
         }
 
-        // Track distance along path
+        // Track distance along path + max speed
         distanceTraveled = player.DistanceTraveled;
+        if (player.CurrentSpeed > _runMaxSpeed)
+            _runMaxSpeed = player.CurrentSpeed;
         int distanceScore = Mathf.FloorToInt(distanceTraveled * scorePerMeter * _multiplier);
 
         // Multiplier growth (grows while doing well, no hits)
@@ -343,6 +372,7 @@ public class GameManager : MonoBehaviour
 
     public void OnPlayerHit()
     {
+        _runHitsTaken++;
         float oldMult = _multiplier;
         _multiplier = Mathf.Max(1f, _multiplier * multiplierDecayOnHit);
         _multiplierTimer = 0f;

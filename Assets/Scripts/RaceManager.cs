@@ -17,7 +17,7 @@ public class RaceManager : MonoBehaviour
 
     [Header("Race Settings")]
     public float raceDistance = 2000f; // meters to the Sewage Treatment Plant
-    public float countdownDuration = 3f;
+    public float countdownDuration = 5f;
 
     [Header("References")]
     public TurdController playerController;
@@ -51,10 +51,15 @@ public class RaceManager : MonoBehaviour
     private float _autoFinishTimer;
     private const float AUTO_FINISH_TIMEOUT = 15f;
 
-    // Pre-race lineup
-    private const float PRE_RACE_DURATION = 4f;
+    // Pre-race lineup + camera orbit
     private GameObject _preRacePanel;
     private CanvasGroup _preRaceCanvasGroup;
+    private bool _preRaceOrbiting;
+    private float _preRaceOrbitTimer;
+    private Vector3 _orbitPipeCenter;
+    private Vector3 _orbitPipeForward;
+    private Vector3 _orbitPipeUp;
+    private Vector3 _orbitPipeRight;
 
     // === RACE MUSIC ===
     [Header("Music")]
@@ -567,10 +572,14 @@ public class RaceManager : MonoBehaviour
     void StartCountdown()
     {
         _state = State.Countdown;
-        _countdownTimer = countdownDuration + PRE_RACE_DURATION; // extend for pre-race
+        _countdownTimer = countdownDuration; // 5s countdown with camera orbit
 #if UNITY_EDITOR
         Debug.Log($"[RACE] === PRE-RACE LINEUP === distance={raceDistance:F0} racers={aiRacers?.Length ?? 0}");
 #endif
+
+        // Freeze player during countdown (re-enabled at GO!)
+        if (playerController != null)
+            playerController.enabled = false;
 
         if (aiRacers != null)
         {
@@ -579,6 +588,31 @@ public class RaceManager : MonoBehaviour
                 if (aiRacers[i] != null)
                     aiRacers[i].SetStartOffset(-3f - i * 2f);
             }
+        }
+
+        // Setup camera orbit around starting area
+        _preRaceOrbiting = true;
+        _preRaceOrbitTimer = 0f;
+
+        if (pipeGen != null)
+        {
+            pipeGen.GetPathFrame(3f, out _orbitPipeCenter, out _orbitPipeForward, out _orbitPipeRight, out _orbitPipeUp);
+        }
+        else if (playerController != null)
+        {
+            _orbitPipeCenter = playerController.transform.position;
+            _orbitPipeForward = Vector3.forward;
+            _orbitPipeUp = Vector3.up;
+            _orbitPipeRight = Vector3.right;
+        }
+
+        // Disable PipeCamera for manual orbit control
+        Camera cam = Camera.main;
+        if (cam != null)
+        {
+            PipeCamera pipeCam = cam.GetComponent<PipeCamera>();
+            if (pipeCam != null)
+                pipeCam.enabled = false;
         }
 
         // Show pre-race lineup panel
@@ -740,8 +774,8 @@ public class RaceManager : MonoBehaviour
         if (_preRaceCanvasGroup != null)
             _preRaceCanvasGroup.alpha = 1f;
 
-        // Hold for PRE_RACE_DURATION minus fade times
-        yield return new WaitForSeconds(PRE_RACE_DURATION - 1.5f);
+        // Hold during camera orbit (fade out before GO!)
+        yield return new WaitForSeconds(3f);
 
         // Fade out over 0.5s
         elapsed = 0f;
@@ -760,8 +794,33 @@ public class RaceManager : MonoBehaviour
     void UpdateCountdown()
     {
         _countdownTimer -= Time.deltaTime;
+        _preRaceOrbitTimer += Time.deltaTime;
 
-        // Show countdown numbers (3, 2, 1, GO!)
+        // Camera orbit around all racers — "meet your competitors"
+        if (_preRaceOrbiting)
+        {
+            Camera cam = Camera.main;
+            if (cam != null)
+            {
+                float t = Mathf.Clamp01(_preRaceOrbitTimer / countdownDuration);
+
+                // Semicircle orbit: start in front of racers, sweep around to behind player
+                float angle = Mathf.Lerp(0f, Mathf.PI, t);
+                float forwardDist = Mathf.Cos(angle) * Mathf.Lerp(8f, 4f, t);
+                float sideDist = Mathf.Sin(angle) * 2.5f;
+                float height = 1.2f + Mathf.Sin(t * Mathf.PI) * 1.5f;
+
+                Vector3 camPos = _orbitPipeCenter
+                    + _orbitPipeForward * forwardDist
+                    + _orbitPipeRight * sideDist
+                    + _orbitPipeUp * height;
+
+                cam.transform.position = Vector3.Lerp(cam.transform.position, camPos, Time.deltaTime * 3f);
+                cam.transform.LookAt(_orbitPipeCenter + _orbitPipeUp * 0.3f);
+            }
+        }
+
+        // Show countdown numbers (5, 4, 3, 2, 1, GO!)
         int displayNum = Mathf.CeilToInt(_countdownTimer);
         if (displayNum != _lastCountdownNumber && displayNum >= 0)
         {
@@ -775,18 +834,33 @@ public class RaceManager : MonoBehaviour
                 if (displayNum > 0)
                 {
                     _countdownText.text = displayNum.ToString();
-                    _countdownText.color = displayNum == 1
-                        ? new Color(1f, 0.3f, 0.15f) // red for 1
-                        : displayNum == 2
-                            ? new Color(1f, 0.85f, 0.1f) // yellow for 2
-                            : new Color(0.3f, 1f, 0.4f); // green for 3
-                    _countdownText.fontSize = 140;
+                    // Color escalation: calm → urgent
+                    if (displayNum >= 4)
+                    {
+                        _countdownText.color = new Color(0.8f, 0.85f, 0.9f); // cool gray
+                        _countdownText.fontSize = 100;
+                    }
+                    else if (displayNum == 3)
+                    {
+                        _countdownText.color = new Color(0.3f, 1f, 0.4f); // green
+                        _countdownText.fontSize = 120;
+                    }
+                    else if (displayNum == 2)
+                    {
+                        _countdownText.color = new Color(1f, 0.85f, 0.1f); // yellow
+                        _countdownText.fontSize = 140;
+                    }
+                    else
+                    {
+                        _countdownText.color = new Color(1f, 0.3f, 0.15f); // red for 1
+                        _countdownText.fontSize = 160;
+                    }
                 }
                 else
                 {
                     _countdownText.text = "GO!";
                     _countdownText.color = new Color(0.1f, 1f, 0.3f);
-                    _countdownText.fontSize = 160;
+                    _countdownText.fontSize = 180;
                 }
             }
 
@@ -794,11 +868,11 @@ public class RaceManager : MonoBehaviour
             if (ProceduralAudio.Instance != null)
                 ProceduralAudio.Instance.PlayCountdownTick();
 
-            // Camera shake escalates
-            if (PipeCamera.Instance != null)
-                PipeCamera.Instance.Shake(0.1f + (3 - displayNum) * 0.05f);
-
-            HapticManager.MediumTap();
+            // Haptic escalation
+            if (displayNum <= 3)
+                HapticManager.MediumTap();
+            else
+                HapticManager.LightTap();
         }
 
         // Animate countdown text - punch scale then decay
@@ -819,9 +893,23 @@ public class RaceManager : MonoBehaviour
         {
             _state = State.Racing;
             _raceStartTime = Time.time;
+            _preRaceOrbiting = false;
 #if UNITY_EDITOR
             Debug.Log("[RACE] === GO! Racing started ===");
 #endif
+
+            // Re-enable player movement
+            if (playerController != null)
+                playerController.enabled = true;
+
+            // Re-enable PipeCamera
+            Camera cam2 = Camera.main;
+            if (cam2 != null)
+            {
+                PipeCamera pipeCam = cam2.GetComponent<PipeCamera>();
+                if (pipeCam != null)
+                    pipeCam.enabled = true;
+            }
 
             // Show "GO!" briefly then hide
             StartCoroutine(HideCountdownAfterDelay(0.6f));
@@ -838,14 +926,13 @@ public class RaceManager : MonoBehaviour
             if (ProceduralAudio.Instance != null)
                 ProceduralAudio.Instance.PlayGameStart();
 
-            // Big dramatic camera punch
+            // Big dramatic camera punch + launch feel
             if (PipeCamera.Instance != null)
             {
                 PipeCamera.Instance.PunchFOV(8f);
                 PipeCamera.Instance.Shake(0.15f);
             }
 
-            // Speed streaks flash for launch feel
             if (ScreenEffects.Instance != null)
             {
                 ScreenEffects.Instance.FlashSpeedStreaks(1.2f);
@@ -944,9 +1031,6 @@ public class RaceManager : MonoBehaviour
                 if (e.isPlayer)
                 {
                     OnPlayerFinished(e.finishPlace, raceTime);
-                    // Also populate the results panel
-                    if (finishLine != null)
-                        finishLine.OnRacerFinished(e.name, e.color, e.finishPlace, e.finishTime, true);
                 }
             }
 
@@ -1094,9 +1178,11 @@ public class RaceManager : MonoBehaviour
         _autoFinishTimer = 0f;
         Debug.Log($"TTR Race: Player finished in {place}{GetOrdinal(place)} place! Time: {time:F1}s");
 
-        // Stop player movement
+        // Stop player movement and score calculation
         if (playerController != null)
             playerController.enabled = false;
+        if (GameManager.Instance != null)
+            GameManager.Instance.isPlaying = false;
 
         // Hide race HUD (position + timer + progress + arrow) since the finish banner takes over
         if (_positionHudText != null)
@@ -1112,12 +1198,6 @@ public class RaceManager : MonoBehaviour
         _musicFading = true;
         _musicFadeTimer = 0f;
 
-        // Start camera orbit around player
-        StartCameraOrbit();
-
-        if (finishLine != null)
-            finishLine.OnPlayerFinished(place, time);
-
         if (ProceduralAudio.Instance != null)
             ProceduralAudio.Instance.PlayCelebration();
 
@@ -1126,6 +1206,63 @@ public class RaceManager : MonoBehaviour
             GameCenterManager.Instance.ReportRaceResult(time, place);
 
         HapticManager.HeavyTap();
+
+        // Show the finish banner for the player
+        if (finishLine != null)
+        {
+            finishLine.OnPlayerFinished(place, time);
+            finishLine.OnRacerFinished("Mr. Corny", new Color(0.45f, 0.28f, 0.1f), place, time, true);
+        }
+
+        // === INSTANT FINISH: Calculate all remaining AI positions right now ===
+        InstantFinishAllRacers(time);
+    }
+
+    /// <summary>
+    /// Instantly calculate finish positions for all remaining AI racers
+    /// based on their current distance/speed. No waiting — show results immediately.
+    /// </summary>
+    void InstantFinishAllRacers(float playerFinishTime)
+    {
+        // Build a list of unfinished racers with estimated finish times
+        var unfinished = new List<(int index, float estimatedTime)>();
+        for (int i = 0; i < _entries.Count; i++)
+        {
+            var e = _entries[i];
+            if (e.isFinished) continue;
+
+            // Estimate remaining time based on current speed and distance
+            float remaining = raceDistance - e.distance;
+            float speed = Mathf.Max(e.speed, 3f); // floor to prevent div by zero
+            float estimatedTime = playerFinishTime + (remaining / speed);
+            // Add some randomness so it's not perfectly predictable
+            estimatedTime += Random.Range(0.5f, 3f);
+            unfinished.Add((i, estimatedTime));
+        }
+
+        // Sort by estimated finish time (fastest first)
+        unfinished.Sort((a, b) => a.estimatedTime.CompareTo(b.estimatedTime));
+
+        // Assign finish places
+        foreach (var (idx, estTime) in unfinished)
+        {
+            var e = _entries[idx];
+            e.isFinished = true;
+            e.finishPlace = _nextFinishPlace++;
+            e.finishTime = estTime;
+            e.distance = raceDistance; // snap to finish
+            if (e.ai != null)
+                e.ai.OnFinish(estTime);
+            _entries[idx] = e;
+
+            // Populate results row
+            if (finishLine != null)
+                finishLine.OnRacerFinished(e.name, e.color, e.finishPlace, e.finishTime, e.isPlayer);
+        }
+
+        // Now all racers are finished — trigger race complete immediately
+        _state = State.Finished;
+        OnRaceComplete();
     }
 
     // AI finish quips shown as floating text when each rival crosses the line

@@ -3630,10 +3630,10 @@ public class SceneBootstrapper
         if (!hasBounds) return;
 
         // Corn kernel material - rich golden with strong emission for visibility against brown body
-        Color richGold = new Color(0.95f, 0.82f, 0.12f); // warmer, more golden
+        Color richGold = new Color(0.98f, 0.85f, 0.08f); // saturated gold
         Material kernelMat = MakeURPMat("CornKernel_Proc", richGold, 0.02f, 0.55f);
         kernelMat.EnableKeyword("_EMISSION");
-        kernelMat.SetColor("_EmissionColor", richGold * 0.5f); // stronger glow
+        kernelMat.SetColor("_EmissionColor", richGold * 0.65f); // boosted glow
         EditorUtility.SetDirty(kernelMat);
 
         // Darker underside material for depth — warm amber shadow
@@ -3657,11 +3657,11 @@ public class SceneBootstrapper
             // Distribute kernels around the body using spherical coordinates
             float theta = Random.Range(0f, Mathf.PI * 2f);
             float phi = Random.Range(0.25f, 0.75f); // avoid top/bottom poles
-            float heightT = Random.Range(-0.3f, 0.3f); // along body length
+            float heightT = Random.Range(-0.4f, 0.4f); // along full body length
 
-            // Place kernels embedded in the body surface — 0.26x so they look attached
-            float radiusX = extents.x * 0.26f;
-            float radiusZ = extents.z * 0.26f;
+            // Place kernels half-embedded in body surface — 0.18x so tips poke out
+            float radiusX = extents.x * 0.18f;
+            float radiusZ = extents.z * 0.18f;
 
             Vector3 localPos = center + new Vector3(
                 Mathf.Cos(theta) * radiusX * Mathf.Sin(phi * Mathf.PI),
@@ -3687,7 +3687,7 @@ public class SceneBootstrapper
 
             // Add a tiny darker ring at the base of each kernel for depth
             AddPrimChild(kernel, "Shadow", PrimitiveType.Sphere,
-                new Vector3(0, 0, -0.2f), Quaternion.identity,
+                new Vector3(0, 0, -0.1f), Quaternion.identity,
                 new Vector3(1.1f, 1.1f, 0.3f), kernelDarkMat);
         }
 

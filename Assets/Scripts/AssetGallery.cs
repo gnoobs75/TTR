@@ -366,7 +366,7 @@ public class AssetGallery : MonoBehaviour
                 }
             }
 
-            _orbitAngle = 180f; // Start facing the camera
+            _orbitAngle = 0f; // GLB face is at -Z, camera at -Z → face toward camera
         }
         else
         {

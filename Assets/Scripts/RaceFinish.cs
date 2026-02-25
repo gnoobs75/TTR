@@ -59,12 +59,17 @@ public class RaceFinish : MonoBehaviour
         public Text timeText;
     }
 
-    // Podium dimensions
+    // Podium dimensions — #2 is tallest because YOU'RE NUMBER TWO! (it's a poop joke)
     const float PODIUM_WIDTH = 120f;
     const float PODIUM_SPACING = 10f;
-    const float FIRST_HEIGHT = 100f;
-    const float SECOND_HEIGHT = 70f;
-    const float THIRD_HEIGHT = 50f;
+    const float FIRST_HEIGHT = 80f;   // 1st place
+    const float SECOND_HEIGHT = 110f; // 2nd place — TALLEST (the winner is #2!)
+    const float THIRD_HEIGHT = 50f;   // 3rd place
+
+    // Race stats UI
+    private RectTransform _statsRoot;
+    private CanvasGroup _statsGroup;
+    private Text[] _statTexts;
 
     static readonly Color GoldColor = new Color(1f, 0.85f, 0.1f);
     static readonly Color SilverColor = new Color(0.75f, 0.75f, 0.82f);
@@ -87,13 +92,16 @@ public class RaceFinish : MonoBehaviour
         CreateBanner();
         CreatePodium();
         CreateResultsPanel();
+        CreateStatsPanel();
 
         // Hide everything initially
         _bannerGroup.alpha = 0f;
         _podiumGroup.alpha = 0f;
         _resultsGroup.alpha = 0f;
+        _statsGroup.alpha = 0f;
         podiumRoot.gameObject.SetActive(false);
         _resultsRoot.gameObject.SetActive(false);
+        _statsRoot.gameObject.SetActive(false);
     }
 
     void CreateBanner()
@@ -214,7 +222,7 @@ public class RaceFinish : MonoBehaviour
         titleText.fontStyle = FontStyle.Bold;
         titleText.alignment = TextAnchor.MiddleCenter;
         titleText.color = GoldColor;
-        titleText.text = "WINNERS POODIUM";
+        titleText.text = "YOU'RE NUMBER TWO!";
         _poodiumTitle = titleText;
         Outline titleOutline = titleObj.AddComponent<Outline>();
         titleOutline.effectColor = new Color(0, 0, 0, 0.95f);
@@ -349,6 +357,126 @@ public class RaceFinish : MonoBehaviour
         row.timeText.color = Color.clear;
 
         return row;
+    }
+
+    void CreateStatsPanel()
+    {
+        // Race statistics panel — left side, shows player's race stats
+        GameObject statsObj = new GameObject("RaceStats");
+        _statsRoot = statsObj.AddComponent<RectTransform>();
+        _statsRoot.SetParent(finishCanvas.transform, false);
+        _statsRoot.anchorMin = new Vector2(0.02f, 0.15f);
+        _statsRoot.anchorMax = new Vector2(0.42f, 0.65f);
+        _statsRoot.offsetMin = Vector2.zero;
+        _statsRoot.offsetMax = Vector2.zero;
+
+        _statsGroup = statsObj.AddComponent<CanvasGroup>();
+
+        Image statsBg = statsObj.AddComponent<Image>();
+        statsBg.color = new Color(0.06f, 0.05f, 0.03f, 0.88f);
+
+        Font font = Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
+        if (font == null) font = Resources.GetBuiltinResource<Font>("Arial.ttf");
+
+        // Title
+        GameObject statsTitleObj = new GameObject("StatsTitle");
+        RectTransform statsTitleRect = statsTitleObj.AddComponent<RectTransform>();
+        statsTitleRect.SetParent(_statsRoot, false);
+        statsTitleRect.anchorMin = new Vector2(0.05f, 0.88f);
+        statsTitleRect.anchorMax = new Vector2(0.95f, 0.98f);
+        statsTitleRect.offsetMin = Vector2.zero;
+        statsTitleRect.offsetMax = Vector2.zero;
+        Text statsTitleText = statsTitleObj.AddComponent<Text>();
+        statsTitleText.font = font;
+        statsTitleText.fontSize = 18;
+        statsTitleText.fontStyle = FontStyle.Bold;
+        statsTitleText.alignment = TextAnchor.MiddleCenter;
+        statsTitleText.color = GoldColor;
+        statsTitleText.text = "RACE STATS";
+        Outline stOut = statsTitleObj.AddComponent<Outline>();
+        stOut.effectColor = new Color(0, 0, 0, 0.9f);
+        stOut.effectDistance = new Vector2(1.5f, -1.5f);
+
+        // 8 stat rows
+        string[] statLabels = {
+            "Coins Collected", "Max Speed", "Hits Taken", "Boosts Used",
+            "Near Misses", "Best Combo", "Stomps", "Score"
+        };
+        _statTexts = new Text[statLabels.Length];
+        float rowH = 0.09f;
+        float startY = 0.84f;
+
+        for (int i = 0; i < statLabels.Length; i++)
+        {
+            float yTop = startY - i * (rowH + 0.01f);
+
+            // Label (left)
+            GameObject labelObj = new GameObject($"StatLabel_{i}");
+            RectTransform labelRect = labelObj.AddComponent<RectTransform>();
+            labelRect.SetParent(_statsRoot, false);
+            labelRect.anchorMin = new Vector2(0.05f, yTop - rowH);
+            labelRect.anchorMax = new Vector2(0.55f, yTop);
+            labelRect.offsetMin = Vector2.zero;
+            labelRect.offsetMax = Vector2.zero;
+            Text labelText = labelObj.AddComponent<Text>();
+            labelText.font = font;
+            labelText.fontSize = 13;
+            labelText.alignment = TextAnchor.MiddleLeft;
+            labelText.color = new Color(0.7f, 0.65f, 0.55f);
+            labelText.text = statLabels[i];
+
+            // Value (right)
+            GameObject valObj = new GameObject($"StatValue_{i}");
+            RectTransform valRect = valObj.AddComponent<RectTransform>();
+            valRect.SetParent(_statsRoot, false);
+            valRect.anchorMin = new Vector2(0.55f, yTop - rowH);
+            valRect.anchorMax = new Vector2(0.95f, yTop);
+            valRect.offsetMin = Vector2.zero;
+            valRect.offsetMax = Vector2.zero;
+            _statTexts[i] = valObj.AddComponent<Text>();
+            _statTexts[i].font = font;
+            _statTexts[i].fontSize = 14;
+            _statTexts[i].fontStyle = FontStyle.Bold;
+            _statTexts[i].alignment = TextAnchor.MiddleRight;
+            _statTexts[i].color = Color.white;
+            _statTexts[i].text = "-";
+        }
+    }
+
+    void PopulateStats()
+    {
+        if (_statTexts == null || _statTexts.Length < 8) return;
+
+        GameManager gm = GameManager.Instance;
+        if (gm == null) return;
+
+        _statTexts[0].text = gm.RunCoins.ToString();
+        _statTexts[0].color = GoldColor;
+
+        float maxSpd = gm.RunMaxSpeed;
+        _statTexts[1].text = $"{maxSpd:F1} SMPH";
+        _statTexts[1].color = maxSpd > 15f ? new Color(1f, 0.3f, 0.2f) :
+                              maxSpd > 10f ? new Color(1f, 0.7f, 0.2f) :
+                              new Color(0.3f, 1f, 0.4f);
+
+        _statTexts[2].text = gm.RunHitsTaken.ToString();
+        _statTexts[2].color = gm.RunHitsTaken == 0 ? new Color(0.3f, 1f, 0.4f) :
+                              gm.RunHitsTaken > 5 ? new Color(1f, 0.3f, 0.2f) : Color.white;
+
+        _statTexts[3].text = gm.RunBoostsUsed.ToString();
+        _statTexts[3].color = new Color(0.2f, 0.9f, 1f);
+
+        _statTexts[4].text = gm.RunNearMisses.ToString();
+        _statTexts[4].color = gm.RunNearMisses > 10 ? new Color(0.7f, 0.3f, 1f) : Color.white;
+
+        _statTexts[5].text = gm.RunBestCombo.ToString();
+        _statTexts[5].color = gm.RunBestCombo >= 10 ? GoldColor : Color.white;
+
+        _statTexts[6].text = gm.RunStomps.ToString();
+        _statTexts[6].color = gm.RunStomps > 0 ? new Color(0.3f, 1f, 0.4f) : Color.white;
+
+        _statTexts[7].text = gm.score.ToString("N0");
+        _statTexts[7].color = GoldColor;
     }
 
     /// <summary>Called when any racer finishes. Populates live results rows.</summary>
@@ -524,10 +652,10 @@ public class RaceFinish : MonoBehaviour
                            place == 2 ? SilverColor :
                            place == 3 ? BronzeColor : Color.white;
 
-        // Funny placement quips
+        // Funny placement quips — #2 is the joke winner
         string[] placeQuips = {
             "KING OF THE SEWER!",
-            "ALMOST GOLDEN... TURD!",
+            "THE ULTIMATE #2!",
             "BRONZE IS JUST FANCY RUST!",
             "YOU TRIED YOUR WORST!",
             "LAST PLACE, BEST SMELL!"
@@ -653,16 +781,31 @@ public class RaceFinish : MonoBehaviour
         var sorted = new List<RaceManager.RacerEntry>(entries);
         sorted.Sort((a, b) => a.finishPlace.CompareTo(b.finishPlace));
 
-        // Build 3D podium in world space
+        // Build 3D podium in world space (with #2 tallest!)
         Create3DPodium(sorted);
 
-        yield return new WaitForSeconds(1.5f);
+        yield return new WaitForSeconds(1.0f);
 
+        // Show stats panel first (slide in from left)
+        _statsRoot.gameObject.SetActive(true);
+        PopulateStats();
+        float fadeTime = 0.6f;
+        float elapsed = 0f;
+        while (elapsed < fadeTime)
+        {
+            elapsed += Time.deltaTime;
+            _statsGroup.alpha = elapsed / fadeTime;
+            yield return null;
+        }
+        _statsGroup.alpha = 1f;
+
+        yield return new WaitForSeconds(0.8f);
+
+        // Now show podium
         podiumRoot.gameObject.SetActive(true);
 
-        // Fade in podium UI overlay
-        float fadeTime = 0.8f;
-        float elapsed = 0f;
+        fadeTime = 0.8f;
+        elapsed = 0f;
         while (elapsed < fadeTime)
         {
             elapsed += Time.deltaTime;
@@ -702,7 +845,6 @@ public class RaceFinish : MonoBehaviour
             float revealIntensity = (r + 1) / 3f; // 0.33, 0.66, 1.0
             if (ScreenEffects.Instance != null)
             {
-                // Vignette darkens as suspense builds
                 ScreenEffects.Instance.UpdateZoneVignette(
                     new Color(0.1f, 0.08f, 0.03f), revealIntensity * 0.5f);
             }
@@ -752,10 +894,22 @@ public class RaceFinish : MonoBehaviour
         if (_confetti != null)
             _confetti.Play();
 
-        // Poop crew goes wild — form the cheerleading pyramid!
+        // Find player's place for the big announcement
+        int playerPlace = 0;
+        string playerRacerName = "";
+        foreach (var e in sorted)
+        {
+            if (e.isPlayer) { playerPlace = e.finishPlace; playerRacerName = e.name; break; }
+        }
+
+        // Comedy: "YOU'RE NUMBER TWO!" announcement (because it's a poop game)
+        string announcement = playerPlace == 2 ? "YOU'RE NUMBER TWO!"
+            : playerPlace == 1 ? "YOU'RE NUMBER ONE... BUT TWO IS TALLER!"
+            : $"YOU'RE NUMBER {playerPlace}!";
+
         if (CheerOverlay.Instance != null)
         {
-            CheerOverlay.Instance.ShowCheer("POODIUM!", GoldColor, true);
+            CheerOverlay.Instance.ShowCheer(announcement, GoldColor, true);
             CheerOverlay.Instance.StartPyramid();
         }
 
@@ -777,8 +931,9 @@ public class RaceFinish : MonoBehaviour
         Shader shader = toonLit != null ? toonLit : Shader.Find("Universal Render Pipeline/Lit");
         if (shader == null) shader = Shader.Find("Standard");
 
-        // Platform heights: 1st = tallest (center), 2nd = left, 3rd = right
-        float[] heights = { 2.5f, 1.8f, 1.2f };
+        // Platform heights: #2 is TALLEST (because you're number two — it's a poop game!)
+        // Layout: 1st center, 2nd left (tallest!), 3rd right
+        float[] heights = { 2.0f, 3.0f, 1.2f };
         float[] xOffsets = { 0f, -2.5f, 2.5f };
         Color[] pedestalColors = { GoldColor * 0.5f, SilverColor * 0.5f, BronzeColor * 0.5f };
         string[] labels = { "1ST", "2ND", "3RD" };
@@ -1030,6 +1185,13 @@ public class RaceFinish : MonoBehaviour
                 _resultRows[i].timeText.color = Color.clear;
                 _resultRows[i].bg.color = new Color(0.12f, 0.10f, 0.07f, 0f);
             }
+        }
+
+        // Reset stats panel
+        if (_statsRoot != null)
+        {
+            _statsGroup.alpha = 0f;
+            _statsRoot.gameObject.SetActive(false);
         }
     }
 

@@ -105,6 +105,9 @@ public class SpeedBoost : MonoBehaviour
             tc.ApplySpeedBoost(speedMultiplier, duration);
             _used = true;
 
+            if (GameManager.Instance != null)
+                GameManager.Instance.RecordBoost();
+
             // Tutorial hint on first speed boost
             if (TutorialOverlay.Instance != null)
                 TutorialOverlay.Instance.OnFirstSpeedBoost();

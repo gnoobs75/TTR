@@ -11,7 +11,9 @@ Material:
   m_Shader: {fileID: 4800000, guid: c0cd8fc7f4bde0e408f8331903506450, type: 3}
   m_Parent: {fileID: 0}
   m_ModifiedSerializedProperties: 0
-  m_ValidKeywords: []
+  m_ValidKeywords:
+  - _EMISSION
+  - _NORMALMAP
   m_InvalidKeywords: []
   m_LightmapFlags: 4
   m_EnableInstancingVariants: 0
@@ -24,21 +26,21 @@ Material:
     serializedVersion: 3
     m_TexEnvs:
     - _BaseMap:
-        m_Texture: {fileID: 0}
-        m_Scale: {x: 1, y: 1}
+        m_Texture: {fileID: 2800000, guid: f3ad6d43655d13249b3e85be7e3612b8, type: 3}
+        m_Scale: {x: 4, y: 1}
         m_Offset: {x: 0, y: 0}
     - _BumpMap:
-        m_Texture: {fileID: 0}
-        m_Scale: {x: 1, y: 1}
+        m_Texture: {fileID: 2800000, guid: c1d2457dcd1244c448a2c24f5f2390ef, type: 3}
+        m_Scale: {x: 4, y: 1}
         m_Offset: {x: 0, y: 0}
     - _OcclusionMap:
-        m_Texture: {fileID: 0}
-        m_Scale: {x: 1, y: 1}
+        m_Texture: {fileID: 2800000, guid: 9ce58c60410f0964b8269ce846402964, type: 3}
+        m_Scale: {x: 4, y: 1}
         m_Offset: {x: 0, y: 0}
     m_Ints: []
     m_Floats:
     - _Blend: 0
-    - _BumpScale: 1
+    - _BumpScale: 1.5
     - _Cull: 2
     - _DstBlend: 0
     - _Glossiness: 32
@@ -48,7 +50,7 @@ Material:
     - _Metallic: 0.65
     - _MidSmoothness: 0.03
     - _MidThreshold: 0.65
-    - _OcclusionStrength: 1
+    - _OcclusionStrength: 0.6
     - _RimAmount: 0.6
     - _RimThreshold: 0.1
     - _ShadowSmoothness: 0.02
@@ -59,10 +61,10 @@ Material:
     - _Surface: 0
     - _ZWrite: 1
     m_Colors:
-    - _BaseColor: {r: 0.75200003, g: 0.7, b: 0.63, a: 1}
-    - _EmissionColor: {r: 0, g: 0, b: 0, a: 1}
+    - _BaseColor: {r: 0.4, g: 0.35, b: 0.28, a: 1}
+    - _EmissionColor: {r: 0.04, g: 0.03, b: 0.02, a: 1}
     - _RimColor: {r: 1, g: 1, b: 1, a: 1}
-    - _ShadowColor: {r: 0.22560002, g: 0.21000001, b: 0.18900001, a: 1}
+    - _ShadowColor: {r: 0.120000005, g: 0.102, b: 0.0768, a: 1}
     - _SpecularColor: {r: 1, g: 1, b: 1, a: 1}
   m_BuildTextureStacks: []
   m_AllowLocking: 1

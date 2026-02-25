@@ -108,6 +108,9 @@ public class VerticalDrop : MonoBehaviour
         // Spawn nasty floaties and debris
         SpawnUnderwaterObstacles(startDist);
 
+        // Spawn sewer bombs (dangerous explosives!)
+        SpawnSewerBombs(startDist);
+
         // Spawn bubble clusters for atmosphere
         SpawnBubbleClusters(startDist);
 
@@ -450,6 +453,115 @@ public class VerticalDrop : MonoBehaviour
 
         obj.AddComponent<Obstacle>();
         return obj;
+    }
+
+    // ===== SEWER BOMBS (explosive obstacles during flush) =====
+
+    void SpawnSewerBombs(float startDist)
+    {
+        PipeGenerator pipeGen = Object.FindFirstObjectByType<PipeGenerator>();
+        if (pipeGen == null) return;
+
+        int bombCount = Random.Range(6, 9); // 6-8 bombs
+        float spacing = 15f;
+        float firstBombDist = startDist + 25f; // start 25m into flush zone
+
+        for (int i = 0; i < bombCount; i++)
+        {
+            float dist = firstBombDist + i * spacing + Random.Range(-3f, 3f);
+            Vector3 center, forward, right, up;
+            pipeGen.GetPathFrame(dist, out center, out forward, out right, out up);
+
+            // Place in player's path (0.4-0.7 pipe radius, not at edges)
+            float angle = Random.Range(0f, 360f) * Mathf.Deg2Rad;
+            float r = Random.Range(0.4f, 0.7f) * obstacleRadius;
+            Vector3 offset = right * Mathf.Cos(angle) * r + up * Mathf.Sin(angle) * r;
+            Vector3 pos = center + offset;
+
+            GameObject bomb = CreateSewerBomb();
+            bomb.transform.position = pos;
+            bomb.transform.rotation = Quaternion.LookRotation(forward, up)
+                * Quaternion.Euler(Random.Range(-15f, 15f), Random.Range(-180f, 180f), 0);
+            bomb.transform.SetParent(transform);
+
+            // Gentle bob like other underwater objects
+            UnderwaterBob bob = bomb.AddComponent<UnderwaterBob>();
+            bob.bobSpeed = Random.Range(0.6f, 1.2f);
+            bob.bobAmount = Random.Range(0.05f, 0.15f);
+        }
+#if UNITY_EDITOR
+        Debug.Log($"[VDROP] Spawned {bombCount} sewer bombs starting at dist={firstBombDist:F0}");
+#endif
+    }
+
+    GameObject CreateSewerBomb()
+    {
+        GameObject root = new GameObject("SewerBomb");
+
+        // Black spiky sphere body
+        float bodyScale = 0.3f;
+        GameObject body = GameObject.CreatePrimitive(PrimitiveType.Sphere);
+        body.name = "Body";
+        body.transform.SetParent(root.transform);
+        body.transform.localPosition = Vector3.zero;
+        body.transform.localScale = Vector3.one * bodyScale;
+        Material bodyMat = MakeMat(new Color(0.06f, 0.06f, 0.06f), 0.7f, 0.4f);
+        body.GetComponent<Renderer>().material = bodyMat;
+        Object.Destroy(body.GetComponent<Collider>());
+
+        // 8 spike protrusions (elongated spheres pointing outward)
+        Material spikeMat = MakeMat(new Color(0.08f, 0.08f, 0.08f), 0.6f, 0.3f);
+        for (int i = 0; i < 8; i++)
+        {
+            float theta = (i / 8f) * Mathf.PI * 2f;
+            float phi = (i % 2 == 0) ? 0.3f : 0.7f;
+            Vector3 dir = new Vector3(
+                Mathf.Sin(phi * Mathf.PI) * Mathf.Cos(theta),
+                Mathf.Cos(phi * Mathf.PI),
+                Mathf.Sin(phi * Mathf.PI) * Mathf.Sin(theta)
+            ).normalized;
+
+            GameObject spike = GameObject.CreatePrimitive(PrimitiveType.Sphere);
+            spike.name = $"Spike_{i}";
+            spike.transform.SetParent(root.transform);
+            spike.transform.localPosition = dir * bodyScale * 0.45f;
+            spike.transform.localScale = new Vector3(0.06f, 0.06f, 0.15f);
+            spike.transform.localRotation = Quaternion.LookRotation(dir);
+            spike.GetComponent<Renderer>().material = spikeMat;
+            Object.Destroy(spike.GetComponent<Collider>());
+        }
+
+        // Pulsing red core (emissive inner sphere)
+        GameObject core = GameObject.CreatePrimitive(PrimitiveType.Sphere);
+        core.name = "RedCore";
+        core.transform.SetParent(root.transform);
+        core.transform.localPosition = Vector3.zero;
+        core.transform.localScale = Vector3.one * 0.15f;
+        Material coreMat = MakeMat(new Color(1f, 0.1f, 0.05f), 0f, 0.9f);
+        coreMat.EnableKeyword("_EMISSION");
+        coreMat.SetColor("_EmissionColor", new Color(1f, 0.15f, 0.05f) * 5f);
+        core.GetComponent<Renderer>().material = coreMat;
+        Object.Destroy(core.GetComponent<Collider>());
+
+        // Metal equator band
+        GameObject band = GameObject.CreatePrimitive(PrimitiveType.Cylinder);
+        band.name = "Band";
+        band.transform.SetParent(root.transform);
+        band.transform.localPosition = Vector3.zero;
+        band.transform.localScale = new Vector3(bodyScale * 1.05f, 0.015f, bodyScale * 1.05f);
+        Material bandMat = MakeMat(new Color(0.4f, 0.4f, 0.35f), 0.8f, 0.6f);
+        band.GetComponent<Renderer>().material = bandMat;
+        Object.Destroy(band.GetComponent<Collider>());
+
+        // Collider + behavior
+        SphereCollider sc = root.AddComponent<SphereCollider>();
+        sc.isTrigger = true;
+        sc.radius = 0.4f;
+        root.tag = "Obstacle";
+
+        root.AddComponent<SewerBombBehavior>();
+
+        return root;
     }
 
     // ===== BUBBLE CLUSTERS =====

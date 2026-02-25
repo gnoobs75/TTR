@@ -758,6 +758,99 @@ public class TurdController : MonoBehaviour
         _stunCoroutine = StartCoroutine(StunCoroutine());
     }
 
+    /// <summary>
+    /// Heavy bomb hit during underwater flush. 3s stun at 10% speed, massive knockback.
+    /// Called by SewerBombBehavior.OnTriggerEnter.
+    /// </summary>
+    public void TakeBombHit()
+    {
+        if (_hitState != HitState.Normal) return;
+
+        // Shield absorbs bomb too
+        if (_shieldPowerTimer > 0f)
+        {
+            _shieldPowerTimer = 0f;
+            DestroyShieldBubble();
+            if (ScorePopup.Instance != null)
+                ScorePopup.Instance.ShowMilestone(transform.position + Vector3.up * 1.5f, "SHIELD BLOCKED!");
+            if (ProceduralAudio.Instance != null)
+                ProceduralAudio.Instance.PlayNearMiss();
+            HapticManager.HeavyTap();
+            return;
+        }
+
+#if UNITY_EDITOR
+        Debug.Log($"[HIT] TakeBombHit at dist={DistanceTraveled:F1} drop={_isDropping}");
+#endif
+
+        // Massive knockback during drop
+        if (_isDropping)
+        {
+            Vector2 knockDir = Random.insideUnitCircle.normalized;
+            _dropOffset += knockDir * 3f;
+            if (_dropOffset.magnitude > _dropMoveRadius)
+                _dropOffset = _dropOffset.normalized * _dropMoveRadius;
+
+            // Severe speed debuff — 10% speed for 3 seconds
+            StartCoroutine(BombSpeedDebuff(3f, 0.1f));
+        }
+
+        // Heavy camera shake
+        if (PipeCamera.Instance != null)
+            PipeCamera.Instance.Shake(0.6f);
+
+        // Audio
+        if (ProceduralAudio.Instance != null)
+            ProceduralAudio.Instance.PlayObstacleHit();
+        HapticManager.HeavyTap();
+
+        // Red flash
+        if (ScreenEffects.Instance != null)
+            ScreenEffects.Instance.TriggerHitFlash(new Color(1f, 0.15f, 0.05f));
+
+        // Popup
+        if (ScorePopup.Instance != null)
+            ScorePopup.Instance.ShowMilestone(transform.position + Vector3.up * 2f, "EXPLODED!");
+
+        // Poop crew reacts
+        if (CheerOverlay.Instance != null)
+            CheerOverlay.Instance.ShowCheer("BOOM!", new Color(1f, 0.3f, 0.1f), false);
+
+        // Reset combo
+        if (ComboSystem.Instance != null)
+            ComboSystem.Instance.ResetCombo();
+
+        // Reset multiplier
+        if (GameManager.Instance != null)
+            GameManager.Instance.OnPlayerHit();
+
+        // Track hit for race stats
+        _bombHitsThisRace++;
+    }
+
+    private int _bombHitsThisRace;
+    public int BombHitsThisRace => _bombHitsThisRace;
+
+    IEnumerator BombSpeedDebuff(float duration, float speedMult)
+    {
+        float originalDropSpeed = _dropSpeed;
+        _dropSpeed *= speedMult;
+
+        float timer = 0f;
+        while (timer < duration)
+        {
+            timer += Time.deltaTime;
+            // Gradually restore speed in last 30%
+            if (timer > duration * 0.7f)
+            {
+                float recovery = (timer - duration * 0.7f) / (duration * 0.3f);
+                _dropSpeed = Mathf.Lerp(originalDropSpeed * speedMult, originalDropSpeed, recovery);
+            }
+            yield return null;
+        }
+        _dropSpeed = originalDropSpeed;
+    }
+
     IEnumerator StunCoroutine()
     {
         // === STUN PHASE ===
@@ -915,7 +1008,10 @@ public class TurdController : MonoBehaviour
         // Score bonus: increases with combo
         int stompScore = 50 * _stompCombo;
         if (GameManager.Instance != null)
+        {
             GameManager.Instance.AddScore(stompScore);
+            GameManager.Instance.RecordStomp();
+        }
 
         // Score popup
         if (ScorePopup.Instance != null)
