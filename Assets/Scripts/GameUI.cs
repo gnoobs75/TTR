@@ -44,6 +44,13 @@ public class GameUI : MonoBehaviour
     public Slider musicVolumeSlider;
     public Slider sfxVolumeSlider;
 
+    [Header("Control Scheme")]
+    public Button controlSchemeButton;
+
+    // Control scheme
+    private Text _splashSchemeLabel;
+    private static readonly string[] SCHEME_NAMES = { "Touch Zones", "Swipe", "Tilt", "Keyboard" };
+
     // Splash screen music
     private AudioSource _splashMusic;
     private AudioClip[] _musicClips;
@@ -141,6 +148,14 @@ public class GameUI : MonoBehaviour
             sfxVolumeSlider.onValueChanged.AddListener(OnSFXVolumeChanged);
             ApplySFXVolume(sfxVolumeSlider.value);
         }
+
+        // Wire control scheme button
+        if (controlSchemeButton != null)
+        {
+            controlSchemeButton.onClick.AddListener(CycleSplashControlScheme);
+            _splashSchemeLabel = controlSchemeButton.GetComponentInChildren<Text>();
+            UpdateSplashSchemeLabel();
+        }
     }
 
     void OnStartClicked()
@@ -231,6 +246,35 @@ public class GameUI : MonoBehaviour
     {
         if (ProceduralAudio.Instance != null)
             ProceduralAudio.Instance.sfxVolume = val;
+    }
+
+    void CycleSplashControlScheme()
+    {
+        if (TouchInput.Instance == null) return;
+
+        int current = (int)TouchInput.Instance.controlScheme;
+        int next = (current + 1) % SCHEME_NAMES.Length;
+
+        // Skip keyboard on mobile, skip tilt on desktop
+#if UNITY_IOS || UNITY_ANDROID
+        if (next == (int)TouchInput.ControlScheme.Keyboard) next = 0;
+#else
+        if (next == (int)TouchInput.ControlScheme.Tilt) next++;
+        if (next >= SCHEME_NAMES.Length) next = 0;
+#endif
+
+        TouchInput.Instance.SetControlScheme((TouchInput.ControlScheme)next);
+        UpdateSplashSchemeLabel();
+        HapticManager.LightTap();
+        if (ProceduralAudio.Instance != null) ProceduralAudio.Instance.PlayUIClick();
+    }
+
+    void UpdateSplashSchemeLabel()
+    {
+        if (_splashSchemeLabel == null) return;
+        int idx = TouchInput.Instance != null ? (int)TouchInput.Instance.controlScheme : 0;
+        if (idx >= 0 && idx < SCHEME_NAMES.Length)
+            _splashSchemeLabel.text = SCHEME_NAMES[idx];
     }
 
     public void ShowHUD()

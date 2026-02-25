@@ -20,7 +20,7 @@ public class iOSBuildConfig
 
         // Version
         PlayerSettings.bundleVersion = "1.0.0";
-        PlayerSettings.iOS.buildNumber = "1";
+        PlayerSettings.iOS.buildNumber = "2";
 
         // iOS specific
         PlayerSettings.iOS.targetDevice = iOSTargetDevice.iPhoneAndiPad;

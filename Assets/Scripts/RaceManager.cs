@@ -1189,6 +1189,9 @@ public class RaceManager : MonoBehaviour
 
         if (raceSongs == null || raceSongs.Length == 0) return;
 
+        // Kill any existing music (splash screen, leftover sources) before starting race music
+        StopAllMusicSources();
+
         if (_musicSource == null)
         {
             _musicSource = gameObject.AddComponent<AudioSource>();
@@ -1197,14 +1200,35 @@ public class RaceManager : MonoBehaviour
             _musicSource.spatialBlend = 0f; // 2D
         }
 
-        AudioClip song = raceSongs[Random.Range(0, raceSongs.Length)];
+        // Use saved track preference if available, otherwise random
+        int savedTrack = PlayerPrefs.GetInt("MusicTrack", -1);
+        AudioClip song;
+        if (savedTrack >= 0 && savedTrack < raceSongs.Length)
+            song = raceSongs[savedTrack];
+        else
+            song = raceSongs[Random.Range(0, raceSongs.Length)];
+
         _musicSource.clip = song;
         _musicSource.volume = 0f; // Start silent, fade in smoothly
         _musicSource.Play();
         _musicFading = false;
         _musicFadingIn = true;
         _musicFadeInTimer = 0f;
-        Debug.Log($"TTR Race: Playing \"{song.name}\" ({raceSongs.Length} songs available)");
+#if UNITY_EDITOR
+        Debug.Log($"[MUSIC] Race: Playing \"{song.name}\" ({raceSongs.Length} songs available)");
+#endif
+    }
+
+    /// <summary>Stop all music-length AudioSources in the scene (prevents overlap).</summary>
+    static void StopAllMusicSources()
+    {
+        foreach (var src in Object.FindObjectsByType<AudioSource>(FindObjectsSortMode.None))
+        {
+            if (src != null && src.clip != null && src.clip.length > 10f && src.isPlaying)
+            {
+                src.Stop();
+            }
+        }
     }
 
     // === 3D FINISH LINE GATE ===

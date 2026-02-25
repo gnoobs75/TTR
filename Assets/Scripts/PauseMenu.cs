@@ -380,6 +380,10 @@ public class PauseMenu : MonoBehaviour
         }
         if (_pauseButton != null) _pauseButton.SetActive(false);
 
+        // Hide music button while paused
+        if (MusicPanel.Instance != null)
+            MusicPanel.Instance.HideMusicButton();
+
         UpdateSchemeLabel();
         SyncVolumeSliders();
 
@@ -401,6 +405,10 @@ public class PauseMenu : MonoBehaviour
         _pauseFadingIn = false;
         _pauseFadeTimer = 0f;
         if (_pauseButton != null) _pauseButton.SetActive(true);
+
+        // Restore music button
+        if (MusicPanel.Instance != null)
+            MusicPanel.Instance.ShowMusicButton();
 
         // Welcome back!
         if (CheerOverlay.Instance != null)

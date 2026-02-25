@@ -588,6 +588,9 @@ public class SceneBootstrapper
         // Pause menu (mobile-critical)
         obj.AddComponent<PauseMenu>();
 
+        // Music panel (in-game music icon + settings)
+        obj.AddComponent<MusicPanel>();
+
         // Obstacle radar HUD (fades in at high speed)
         obj.AddComponent<ObstacleRadar>();
     }
@@ -6782,15 +6785,8 @@ public class SceneBootstrapper
         EditorSceneManager.MarkSceneDirty(EditorSceneManager.GetActiveScene());
         EditorSceneManager.SaveScene(EditorSceneManager.GetActiveScene(), scenePath);
 
-        var scenes = new List<EditorBuildSettingsScene>(EditorBuildSettings.scenes);
-        bool found = false;
-        foreach (var s in scenes)
-            if (s.path == scenePath) { found = true; break; }
-        if (!found)
-        {
-            scenes.Add(new EditorBuildSettingsScene(scenePath, true));
-            EditorBuildSettings.scenes = scenes.ToArray();
-        }
+        // Set SewerRun as the ONLY scene at index 0 (remove SampleScene etc.)
+        EditorBuildSettings.scenes = new[] { new EditorBuildSettingsScene(scenePath, true) };
     }
 
     // ===== UI =====
@@ -6999,7 +6995,41 @@ public class SceneBootstrapper
         // "or press SPACE" hint at very bottom
         MakeStretchText(startPanel.transform, "HintText", "or press SPACE",
             18, TextAnchor.MiddleCenter, new Color(0.7f, 0.7f, 0.65f, 0.5f),
-            new Vector2(0.25f, 0.02f), new Vector2(0.75f, 0.06f), false);
+            new Vector2(0.25f, 0.01f), new Vector2(0.75f, 0.04f), false);
+
+        // === CONTROL SCHEME PICKER ===
+        GameObject ctrlRow = new GameObject("ControlRow");
+        ctrlRow.transform.SetParent(startPanel.transform, false);
+        {
+            RectTransform crt = ctrlRow.AddComponent<RectTransform>();
+            crt.anchorMin = new Vector2(0.15f, 0.04f);
+            crt.anchorMax = new Vector2(0.85f, 0.10f);
+            crt.offsetMin = Vector2.zero;
+            crt.offsetMax = Vector2.zero;
+        }
+
+        MakeStretchText(ctrlRow.transform, "ControlLabel", "Controls:",
+            20, TextAnchor.MiddleRight, new Color(0.7f, 0.7f, 0.65f),
+            new Vector2(0, 0), new Vector2(0.4f, 1f), true);
+
+        GameObject ctrlBtnObj = new GameObject("SchemeButton");
+        ctrlBtnObj.transform.SetParent(ctrlRow.transform, false);
+        {
+            RectTransform cbrt = ctrlBtnObj.AddComponent<RectTransform>();
+            cbrt.anchorMin = new Vector2(0.45f, 0.1f);
+            cbrt.anchorMax = new Vector2(0.95f, 0.9f);
+            cbrt.offsetMin = Vector2.zero;
+            cbrt.offsetMax = Vector2.zero;
+        }
+        Image ctrlBtnBg = ctrlBtnObj.AddComponent<Image>();
+        ctrlBtnBg.color = new Color(0.2f, 0.18f, 0.15f, 0.8f);
+        Button ctrlBtn = ctrlBtnObj.AddComponent<Button>();
+        ctrlBtnObj.AddComponent<ButtonPressEffect>();
+
+        Text ctrlSchemeText = MakeStretchText(ctrlBtnObj.transform, "SchemeText", "Keyboard",
+            22, TextAnchor.MiddleCenter, new Color(1f, 0.85f, 0.3f),
+            new Vector2(0, 0), new Vector2(1, 1), false);
+        ctrlSchemeText.fontStyle = FontStyle.Bold;
 
         // === VOLUME SLIDERS (bottom of splash screen) ===
         Slider musicSlider = MakeVolumeSlider(startPanel.transform, "MusicSlider", "MUSIC",
@@ -7153,6 +7183,7 @@ public class SceneBootstrapper
         ui.speedText = speedText;
         ui.musicVolumeSlider = musicSlider;
         ui.sfxVolumeSlider = sfxSlider;
+        ui.controlSchemeButton = ctrlBtn;
 
         // Screen Effects overlay (hit flash, speed vignette)
         GameObject sfxOverlay = new GameObject("ScreenEffects");

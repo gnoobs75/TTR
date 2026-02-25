@@ -137,6 +137,13 @@ public class GameManager : MonoBehaviour
 #if UNITY_EDITOR
         Debug.Log("[GAME] === GAME STARTED ===");
 #endif
+        // Kill any lingering music (splash screen) to prevent overlap
+        foreach (var src in Object.FindObjectsByType<AudioSource>(FindObjectsSortMode.None))
+        {
+            if (src != null && src.clip != null && src.clip.length > 10f && src.isPlaying)
+                src.Stop();
+        }
+
         isPlaying = true;
         _isGameOver = false;
         score = 0;
@@ -175,6 +182,10 @@ public class GameManager : MonoBehaviour
         if (PauseMenu.Instance != null)
             PauseMenu.Instance.ShowPauseButton();
 
+        // Show music button during gameplay
+        if (MusicPanel.Instance != null)
+            MusicPanel.Instance.ShowMusicButton();
+
         // Start signature poop effects
         if (ParticleManager.Instance != null && player != null)
         {
@@ -193,8 +204,9 @@ public class GameManager : MonoBehaviour
         else if (Keyboard.current != null)
             actionPressed = Keyboard.current.spaceKey.wasPressedThisFrame;
 
-        // Block input while paused
+        // Block input while paused or music panel open
         if (PauseMenu.Instance != null && PauseMenu.Instance.IsPaused) return;
+        if (MusicPanel.Instance != null && MusicPanel.Instance.IsOpen) return;
 
         if (actionPressed)
         {
@@ -478,6 +490,10 @@ public class GameManager : MonoBehaviour
         // Hide pause button on game over
         if (PauseMenu.Instance != null)
             PauseMenu.Instance.HidePauseButton();
+
+        // Hide music button on game over
+        if (MusicPanel.Instance != null)
+            MusicPanel.Instance.HideMusicButton();
 
         // Delay game-over screen slightly so death effects breathe
         int _finalScore = finalScore;
