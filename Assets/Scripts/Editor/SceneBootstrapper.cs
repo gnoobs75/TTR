@@ -922,36 +922,133 @@ public class SceneBootstrapper
         else
             obstaclePrefabs.Add(CreateCockroachPrefab());
 
-        // Hair Wads - comical hair blobs with googly eyes, multiple colors
-        obstaclePrefabs.Add(CreateHairWadPrefab("HairWad_Black",
-            new Color(0.12f, 0.08f, 0.06f), new Color(0.06f, 0.04f, 0.03f)));
-        obstaclePrefabs.Add(CreateHairWadPrefab("HairWad_Blonde",
-            new Color(0.85f, 0.7f, 0.35f), new Color(0.65f, 0.5f, 0.2f)));
-        obstaclePrefabs.Add(CreateHairWadPrefab("HairWad_Red",
-            new Color(0.6f, 0.15f, 0.08f), new Color(0.45f, 0.1f, 0.05f)));
-        obstaclePrefabs.Add(CreateHairWadPrefab("HairWad_Brunette",
-            new Color(0.35f, 0.2f, 0.1f), new Color(0.22f, 0.12f, 0.06f)));
+        // Hair Wads - GLB model with color variants, fallback to primitives
+        GameObject hairWadGLB = LoadModel("Assets/Models/HairWad.glb");
+        if (hairWadGLB != null)
+        {
+            var hwVariants = new (string suffix, Color mainColor)[] {
+                ("Black", new Color(0.12f, 0.08f, 0.06f)),
+                ("Blonde", new Color(0.85f, 0.7f, 0.35f)),
+                ("Red", new Color(0.6f, 0.15f, 0.08f)),
+                ("Brunette", new Color(0.35f, 0.2f, 0.1f)),
+            };
+            foreach (var hw in hwVariants)
+            {
+                string hwName = $"HairWad_{hw.suffix}";
+                GameObject hwObj = (GameObject)Object.Instantiate(hairWadGLB);
+                hwObj.name = hwName;
+                hwObj.transform.localScale = new Vector3(0.7f, 0.7f, 0.7f);
+                UpgradeToURP(hwObj);
+                // Verify materials post-upgrade (glTFast safety)
+                foreach (Renderer r in hwObj.GetComponentsInChildren<Renderer>())
+                {
+                    Material[] checkMats = r.sharedMaterials;
+                    bool anyBroken = false;
+                    for (int ci = 0; ci < checkMats.Length; ci++)
+                    {
+                        if (checkMats[ci] == null || checkMats[ci].shader == null ||
+                            checkMats[ci].shader.name == "Hidden/InternalErrorShader" ||
+                            checkMats[ci].shader.name.Contains("glTF"))
+                        {
+                            checkMats[ci] = MakeURPMat($"{hwName}_Fix_{ci}", hw.mainColor, 0.05f, 0.3f);
+                            anyBroken = true;
+                        }
+                    }
+                    if (anyBroken) r.sharedMaterials = checkMats;
+                }
+                AssetDatabase.SaveAssets();
+                SphereCollider hwCol = hwObj.AddComponent<SphereCollider>();
+                hwCol.isTrigger = true;
+                hwObj.AddComponent<Obstacle>();
+                hwObj.tag = "Obstacle";
+                hwObj.AddComponent<HairWadBehavior>();
+                // Tint body materials for this color variant
+                foreach (Renderer r in hwObj.GetComponentsInChildren<Renderer>())
+                {
+                    Material[] mats = r.sharedMaterials;
+                    for (int mi = 0; mi < mats.Length; mi++)
+                    {
+                        // Safety: if the UpgradeToURP material has wrong shader, use fresh URP mat
+                        if (mats[mi] == null || mats[mi].shader == null ||
+                            mats[mi].shader.name.Contains("glTF"))
+                        {
+                            mats[mi] = MakeURPMat($"{hwName}_Base_{mi}", hw.mainColor, 0.05f, 0.3f);
+                        }
+                        Material newMat = new Material(mats[mi]);
+                        newMat.name = $"{hwName}_Mat_{mi}";
+                        if (newMat.HasProperty("_BaseColor"))
+                            newMat.SetColor("_BaseColor", hw.mainColor);
+                        newMat = SaveMaterial(newMat);
+                        mats[mi] = newMat;
+                    }
+                    r.sharedMaterials = mats;
+                }
+                GameObject hwPrefab = PrefabUtility.SaveAsPrefabAsset(hwObj, $"Assets/Prefabs/{hwName}.prefab");
+                Object.DestroyImmediate(hwObj);
+                obstaclePrefabs.Add(hwPrefab);
+            }
+        }
+        else
+        {
+            obstaclePrefabs.Add(CreateHairWadPrefab("HairWad_Black",
+                new Color(0.12f, 0.08f, 0.06f), new Color(0.06f, 0.04f, 0.03f)));
+            obstaclePrefabs.Add(CreateHairWadPrefab("HairWad_Blonde",
+                new Color(0.85f, 0.7f, 0.35f), new Color(0.65f, 0.5f, 0.2f)));
+            obstaclePrefabs.Add(CreateHairWadPrefab("HairWad_Red",
+                new Color(0.6f, 0.15f, 0.08f), new Color(0.45f, 0.1f, 0.05f)));
+            obstaclePrefabs.Add(CreateHairWadPrefab("HairWad_Brunette",
+                new Color(0.35f, 0.2f, 0.1f), new Color(0.22f, 0.12f, 0.06f)));
+        }
 
-        // Toxic Frog - squatty mutant frog that hops and lashes tongue
-        obstaclePrefabs.Add(CreateToxicFrogPrefab());
+        // Toxic Frog - GLB model, fallback to primitives (0.8 = ~80cm, visible in 3.5m pipe)
+        GameObject toxicFrogPrefab = CreateCreatureFromGLB("ToxicFrog", "Assets/Models/ToxicFrog.glb",
+            new Vector3(0.8f, 0.8f, 0.8f), typeof(ToxicFrogBehavior));
+        obstaclePrefabs.Add(toxicFrogPrefab ?? CreateToxicFrogPrefab());
 
-        // Sewer Jellyfish - pulsing translucent blob with trailing tentacles
-        obstaclePrefabs.Add(CreateSewerJellyfishPrefab());
+        // Sewer Jellyfish - GLB model, fallback to primitives
+        GameObject jellyfishPrefab = CreateCreatureFromGLB("SewerJellyfish", "Assets/Models/SewerJellyfish.glb",
+            new Vector3(0.85f, 0.85f, 0.85f), typeof(SewerJellyfishBehavior));
+        obstaclePrefabs.Add(jellyfishPrefab ?? CreateSewerJellyfishPrefab());
 
-        // Sewer Spider - creepy wall-hanger that drops down
-        obstaclePrefabs.Add(CreateSewerSpiderPrefab());
+        // Sewer Spider - GLB model, fallback to primitives
+        GameObject spiderPrefab = CreateCreatureFromGLB("SewerSpider", "Assets/Models/SewerSpider.glb",
+            new Vector3(0.75f, 0.75f, 0.75f), typeof(SewerSpiderBehavior));
+        obstaclePrefabs.Add(spiderPrefab ?? CreateSewerSpiderPrefab());
 
-        // Sewer Snake - slithering sine-wave across pipe
-        obstaclePrefabs.Add(CreateSewerSnakePrefab());
+        // Sewer Snake - GLB model, fallback to primitives
+        GameObject snakePrefab = CreateCreatureFromGLB("SewerSnake", "Assets/Models/SewerSnake.glb",
+            new Vector3(0.8f, 0.8f, 0.8f), typeof(SewerSnakeBehavior));
+        obstaclePrefabs.Add(snakePrefab ?? CreateSewerSnakePrefab());
 
-        // TP Mummy - wrapped in toilet paper, unfurls when near
-        obstaclePrefabs.Add(CreateTPMummyPrefab());
+        // TP Mummy - GLB model, fallback to primitives
+        GameObject mummyPrefab = CreateCreatureFromGLB("TPMummy", "Assets/Models/ToiletPaperMummy.glb",
+            new Vector3(0.75f, 0.75f, 0.75f), typeof(ToiletPaperMummyBehavior));
+        obstaclePrefabs.Add(mummyPrefab ?? CreateTPMummyPrefab());
 
-        // Grease Glob - slides along walls, drools, puffs up
-        obstaclePrefabs.Add(CreateGreaseGlobPrefab());
+        // Grease Glob - GLB model, fallback to primitives
+        GameObject greasePrefab = CreateCreatureFromGLB("GreaseGlob", "Assets/Models/GreaseGlob.glb",
+            new Vector3(0.7f, 0.7f, 0.7f), typeof(GreaseGlobBehavior));
+        obstaclePrefabs.Add(greasePrefab ?? CreateGreaseGlobPrefab());
 
-        // Poop Fly Swarm - 8 orbiting flies that tighten toward player
-        obstaclePrefabs.Add(CreatePoopFlySwarmPrefab());
+        // Poop Fly Swarm - GLB model, fallback to primitives
+        GameObject flyPrefab = CreateCreatureFromGLB("PoopFlySwarm", "Assets/Models/PoopFlySwarm.glb",
+            new Vector3(0.85f, 0.85f, 0.85f), typeof(PoopFlySwarmBehavior));
+        obstaclePrefabs.Add(flyPrefab ?? CreatePoopFlySwarmPrefab());
+
+        // === OBSTACLE PREFAB SUMMARY ===
+        Debug.Log($"TTR: ========== OBSTACLE PREFAB SUMMARY ({obstaclePrefabs.Count} total) ==========");
+        for (int pi = 0; pi < obstaclePrefabs.Count; pi++)
+        {
+            var p = obstaclePrefabs[pi];
+            if (p == null) { Debug.LogError($"TTR: Prefab [{pi}] is NULL!"); continue; }
+            int renderers = p.GetComponentsInChildren<Renderer>().Length;
+            bool hasObs = p.GetComponent<Obstacle>() != null;
+            bool hasBeh = p.GetComponent<ObstacleBehavior>() != null;
+            bool hasCol = p.GetComponent<Collider>() != null;
+            string behName = hasBeh ? p.GetComponent<ObstacleBehavior>().GetType().Name : "NONE";
+            Debug.Log($"TTR: [{pi}] {p.name} — renderers={renderers}, obstacle={hasObs}, behavior={behName}, collider={hasCol}");
+        }
+        Debug.Log("TTR: =================================================");
 
         // Fartcoin - copper penny with $ emboss, sized like a real coin you'd find in a sewer
         GameObject coinPrefab = CreateFartcoinPrefab();
@@ -994,6 +1091,10 @@ public class SceneBootstrapper
             ("ToxicFrog",   new Color(0.15f, 0.5f, 0.08f),  0.1f,  0.65f, new Color(0.05f, 0.3f, 0.02f),  1.5f),  // slimy green amphibian
             ("SewerJellyfish", new Color(0.2f, 0.6f, 0.5f), 0.0f,  0.9f,  new Color(0.08f, 0.5f, 0.35f),  3.0f),  // translucent bioluminescent
             ("SewerSpider",    new Color(0.12f, 0.1f, 0.08f), 0.05f, 0.4f,  new Color(0.03f, 0.01f, 0.01f), 0.15f), // dark matte chitin
+            ("SewerSnake",     new Color(0.2f, 0.35f, 0.12f),  0.1f,  0.7f,  new Color(0.06f, 0.15f, 0.03f), 0.8f),   // scaly green serpent
+            ("TPMummy",        new Color(0.85f, 0.8f, 0.7f),   0.0f,  0.2f,  new Color(0.1f, 0.08f, 0.05f),  0.3f),   // dirty white paper wraps
+            ("GreaseGlob",     new Color(0.4f, 0.3f, 0.1f),    0.15f, 0.85f, new Color(0.15f, 0.1f, 0.02f),  0.6f),   // oily shiny grease
+            ("PoopFlySwarm",   new Color(0.08f, 0.06f, 0.04f), 0.0f,  0.3f,  new Color(0.02f, 0.01f, 0.005f),0.1f),   // dark buzzing flies
         };
 
         foreach (var c in creatures)
@@ -1042,6 +1143,8 @@ public class SceneBootstrapper
                             existingTex = existing.GetTexture("_ColorMap");
                         if (existingTex == null && existing.HasProperty("_Albedo"))
                             existingTex = existing.GetTexture("_Albedo");
+                        if (existingTex == null && existing.HasProperty("baseColorTexture"))
+                            existingTex = existing.GetTexture("baseColorTexture"); // glTFast
                         // Universal fallback: scan ALL texture properties
                         if (existingTex == null)
                         {
@@ -1095,6 +1198,9 @@ public class SceneBootstrapper
             Object.DestroyImmediate(instance);
             Debug.Log($"TTR: Applied creature material to {c.name} (metal={c.metal}, smooth={c.smooth}, textures preserved)");
         }
+
+        // Flush all creature materials to disk
+        AssetDatabase.SaveAssets();
     }
 
     // ===== SCENERY SPAWNER =====
@@ -1329,21 +1435,6 @@ public class SceneBootstrapper
         // Spray paint stencil style — yellow text on pipe surface
         Color yellow = new Color(0.95f, 0.85f, 0.1f);
 
-        // Overspray haze — flat cube BEHIND the text
-        Material hazeMat = MakeURPMat("Gross_WarnHaze", new Color(yellow.r, yellow.g, yellow.b, 0.10f), 0f, 0.1f);
-        hazeMat.EnableKeyword("_EMISSION");
-        hazeMat.SetColor("_EmissionColor", yellow * 0.05f);
-        if (hazeMat.HasProperty("_Surface"))
-        {
-            hazeMat.SetFloat("_Surface", 1);
-            hazeMat.SetOverrideTag("RenderType", "Transparent");
-            hazeMat.renderQueue = 3000;
-        }
-        EditorUtility.SetDirty(hazeMat);
-        // Positive z = toward pipe center = visible to player inside pipe
-        AddPrimChild(root, "Haze", PrimitiveType.Cube, new Vector3(0, 0, 0.003f),
-            Quaternion.identity, new Vector3(0.6f, 0.35f, 0.001f), hazeMat);
-
         string txt = WarningTexts[_warningIndex % WarningTexts.Length];
         _warningIndex++;
 
@@ -1412,21 +1503,6 @@ public class SceneBootstrapper
 
         // Stenciled sector number — white spray paint on pipe
         Color stencilCol = new Color(0.85f, 0.82f, 0.7f);
-
-        // Overspray haze — flat cube BEHIND the text
-        Material hazeMat = MakeURPMat("Gross_NumHaze", new Color(stencilCol.r, stencilCol.g, stencilCol.b, 0.06f), 0f, 0.1f);
-        hazeMat.EnableKeyword("_EMISSION");
-        hazeMat.SetColor("_EmissionColor", stencilCol * 0.03f);
-        if (hazeMat.HasProperty("_Surface"))
-        {
-            hazeMat.SetFloat("_Surface", 1);
-            hazeMat.SetOverrideTag("RenderType", "Transparent");
-            hazeMat.renderQueue = 3000;
-        }
-        EditorUtility.SetDirty(hazeMat);
-        // Positive z = toward player inside pipe
-        AddPrimChild(root, "Haze", PrimitiveType.Cube, new Vector3(0, 0, 0.003f),
-            Quaternion.identity, new Vector3(0.55f, 0.2f, 0.001f), hazeMat);
 
         string num = PipeNumbers[_pipeNumIndex % PipeNumbers.Length];
         _pipeNumIndex++;
@@ -1516,24 +1592,7 @@ public class SceneBootstrapper
         };
         Color sprayColor = sprayColors[_graffitiIndex % sprayColors.Length];
 
-        // Overspray haze — flat quad BEHIND the text (use Cube with tiny Z to avoid
-        // sphere geometry poking through and occluding the text)
-        Material hazeMat = MakeURPMat("Gross_GrafHaze", new Color(sprayColor.r, sprayColor.g, sprayColor.b, 0.08f), 0f, 0.1f);
-        hazeMat.EnableKeyword("_EMISSION");
-        hazeMat.SetColor("_EmissionColor", sprayColor * 0.04f);
-        if (hazeMat.HasProperty("_Surface"))
-        {
-            hazeMat.SetFloat("_Surface", 1); // Transparent
-            hazeMat.SetFloat("_Blend", 0);   // Alpha blend
-            hazeMat.SetOverrideTag("RenderType", "Transparent");
-            hazeMat.renderQueue = 3000; // render before text
-        }
-        EditorUtility.SetDirty(hazeMat);
-        // Haze slightly behind text but still inside pipe (positive z = toward player)
-        AddPrimChild(root, "Haze", PrimitiveType.Cube, new Vector3(0, 0, 0.003f),
-            Quaternion.identity, new Vector3(0.65f, 0.35f, 0.001f), hazeMat);
-
-        // Spray painted text — in front of haze, facing player inside the pipe
+        // Spray painted text — facing player inside the pipe
         // Sign faces INWARD so positive Z = toward pipe center = toward player = visible
         string msg = GraffitiMessages[_graffitiIndex % GraffitiMessages.Length];
         _graffitiIndex++;
@@ -1937,12 +1996,6 @@ public class SceneBootstrapper
         GameObject root = new GameObject("ArrowSign");
 
         Color arrowCol = new Color(1f, 0.6f, 0.1f); // orange
-        Color bgCol = new Color(0.08f, 0.06f, 0.04f);
-
-        // Dark background rectangle (positive z = toward player inside pipe)
-        Material bgMat = MakeURPMat("Gross_ArrowBG", bgCol, 0f, 0.15f);
-        AddPrimChild(root, "BG", PrimitiveType.Cube, new Vector3(0, 0, 0.003f),
-            Quaternion.identity, new Vector3(0.4f, 0.15f, 0.003f), bgMat);
 
         // Arrow triangle (pointing right)
         Material arrowMat = MakeURPMat("Gross_Arrow", arrowCol, 0f, 0.3f);
@@ -3314,6 +3367,15 @@ public class SceneBootstrapper
         rm.aiRacers = aiRacers;
         rm.pipeGen = pipeGen;
         rm.raceDistance = 2000f;
+
+        // Assign gallery prefabs for announcer intro sequence
+        rm.racerGalleryPrefabs = new GameObject[presets.Length];
+        for (int i = 0; i < presets.Length; i++)
+        {
+            string galleryPath = $"Assets/Prefabs/Racer_{presets[i]}_Gallery.prefab";
+            rm.racerGalleryPrefabs[i] = AssetDatabase.LoadAssetAtPath<GameObject>(galleryPath);
+        }
+        rm.playerGalleryPrefab = AssetDatabase.LoadAssetAtPath<GameObject>("Assets/Prefabs/MrCorny_Gallery.prefab");
         // Race music loaded at runtime from Resources/music/ (all .ogg files)
 
         // ---- Race Leaderboard (on the game canvas) ----
@@ -6006,6 +6068,26 @@ public class SceneBootstrapper
             // Upgrade all materials to URP Lit
             UpgradeToURP(obj);
 
+            // Verify materials post-upgrade (safety net for glTFast imports)
+            foreach (Renderer r in obj.GetComponentsInChildren<Renderer>())
+            {
+                Material[] checkMats = r.sharedMaterials;
+                bool anyBroken = false;
+                for (int ci = 0; ci < checkMats.Length; ci++)
+                {
+                    if (checkMats[ci] == null || checkMats[ci].shader == null ||
+                        checkMats[ci].shader.name == "Hidden/InternalErrorShader" ||
+                        checkMats[ci].shader.name.Contains("glTF"))
+                    {
+                        checkMats[ci] = MakeURPMat($"{name}_Fix_{ci}", fallbackColor, 0.1f, 0.4f);
+                        anyBroken = true;
+                        Debug.LogWarning($"TTR: Fixed broken material on {name} slot {ci}");
+                    }
+                }
+                if (anyBroken) r.sharedMaterials = checkMats;
+            }
+            AssetDatabase.SaveAssets();
+
             // Add collider that wraps the model
             BoxCollider box = obj.AddComponent<BoxCollider>();
             box.isTrigger = true;
@@ -6062,6 +6144,99 @@ public class SceneBootstrapper
 
         GameObject prefab = PrefabUtility.SaveAsPrefabAsset(obj, prefabPath);
         Object.DestroyImmediate(obj);
+        return prefab;
+    }
+
+    /// <summary>
+    /// Creates a creature prefab from a GLB model with behavior script.
+    /// Returns null if GLB not found (caller falls back to primitive build).
+    /// </summary>
+    static GameObject CreateCreatureFromGLB(string name, string glbPath, Vector3 scale,
+        System.Type behaviorType)
+    {
+        string prefabPath = $"Assets/Prefabs/{name}.prefab";
+        GameObject modelAsset = LoadModel(glbPath);
+
+        if (modelAsset == null)
+        {
+            Debug.LogWarning($"TTR: *** GLB NOT FOUND for {name} at '{glbPath}' — using primitive fallback ***");
+            return null;
+        }
+        Debug.Log($"TTR: *** GLB LOADED for {name} from '{glbPath}' — {modelAsset.name}, renderers={modelAsset.GetComponentsInChildren<Renderer>().Length} ***");
+
+        GameObject obj = (GameObject)Object.Instantiate(modelAsset);
+        obj.name = name;
+        obj.transform.localScale = scale;
+        UpgradeToURP(obj);
+
+        // Verify all materials have valid shaders (safety net for glTFast imports)
+        foreach (Renderer r in obj.GetComponentsInChildren<Renderer>())
+        {
+            Material[] mats = r.sharedMaterials;
+            bool anyFixed = false;
+            for (int i = 0; i < mats.Length; i++)
+            {
+                if (mats[i] == null || mats[i].shader == null ||
+                    mats[i].shader.name == "Hidden/InternalErrorShader" ||
+                    mats[i].shader.name.Contains("glTF"))
+                {
+                    // Material still has broken/glTFast shader - force replace
+                    Color fallbackColor = new Color(0.5f, 0.4f, 0.3f);
+                    if (mats[i] != null)
+                    {
+                        // Try to extract color before replacing
+                        try {
+                            string[] colorProps = { "_BaseColor", "_Color", "baseColorFactor" };
+                            foreach (string prop in colorProps)
+                            {
+                                if (mats[i].HasProperty(prop))
+                                {
+                                    fallbackColor = mats[i].GetColor(prop);
+                                    break;
+                                }
+                            }
+                        } catch { }
+                    }
+                    string oldShaderName = mats[i]?.shader?.name ?? "null";
+                    Material fixMat = MakeURPMat($"{name}_Fix_{i}", fallbackColor, 0.1f, 0.4f);
+                    mats[i] = fixMat;
+                    anyFixed = true;
+                    Debug.LogWarning($"TTR: Fixed broken material on {name} renderer {r.name} slot {i} (was shader '{oldShaderName}')");
+                }
+            }
+            if (anyFixed)
+                r.sharedMaterials = mats;
+        }
+
+        // Flush material assets to disk before saving prefab
+        AssetDatabase.SaveAssets();
+
+        SphereCollider sc = obj.AddComponent<SphereCollider>();
+        sc.isTrigger = true;
+        // Auto-size collider from renderers
+        Bounds bounds = new Bounds(obj.transform.position, Vector3.zero);
+        bool hasBounds = false;
+        foreach (Renderer r in obj.GetComponentsInChildren<Renderer>())
+        {
+            if (!hasBounds) { bounds = r.bounds; hasBounds = true; }
+            else bounds.Encapsulate(r.bounds);
+        }
+        if (hasBounds)
+        {
+            sc.center = obj.transform.InverseTransformPoint(bounds.center);
+            float maxDim = Mathf.Max(bounds.size.x, bounds.size.y, bounds.size.z);
+            sc.radius = (maxDim * 0.5f) / Mathf.Max(scale.x, scale.y, scale.z);
+        }
+
+        obj.AddComponent<Obstacle>();
+        obj.tag = "Obstacle";
+
+        if (behaviorType != null)
+            obj.AddComponent(behaviorType);
+
+        GameObject prefab = PrefabUtility.SaveAsPrefabAsset(obj, prefabPath);
+        Object.DestroyImmediate(obj);
+        Debug.Log($"TTR: Created creature prefab {name} from GLB ({glbPath})");
         return prefab;
     }
 
@@ -6126,12 +6301,16 @@ public class SceneBootstrapper
                     {
                         if (old.HasProperty("_BaseColor")) baseColor = old.GetColor("_BaseColor");
                         else if (old.HasProperty("_Color")) baseColor = old.GetColor("_Color");
+                        else if (old.HasProperty("baseColorFactor")) baseColor = old.GetColor("baseColorFactor"); // glTFast
                     } catch { }
                     try
                     {
                         if (old.HasProperty("_Metallic")) metallic = old.GetFloat("_Metallic");
+                        else if (old.HasProperty("metallicFactor")) metallic = old.GetFloat("metallicFactor"); // glTFast
                         if (old.HasProperty("_Glossiness")) smoothness = old.GetFloat("_Glossiness");
                         else if (old.HasProperty("_Smoothness")) smoothness = old.GetFloat("_Smoothness");
+                        else if (old.HasProperty("roughnessFactor"))
+                            smoothness = 1f - old.GetFloat("roughnessFactor"); // glTFast uses roughness (inverse)
                     } catch { }
                     // Try ALL common texture property names to preserve textures
                     try
@@ -6140,6 +6319,7 @@ public class SceneBootstrapper
                         if (mainTex == null && old.HasProperty("_MainTex")) mainTex = old.GetTexture("_MainTex");
                         if (mainTex == null && old.HasProperty("_ColorMap")) mainTex = old.GetTexture("_ColorMap");
                         if (mainTex == null && old.HasProperty("_Albedo")) mainTex = old.GetTexture("_Albedo");
+                        if (mainTex == null && old.HasProperty("baseColorTexture")) mainTex = old.GetTexture("baseColorTexture"); // glTFast
                         // Universal fallback: scan ALL texture properties (catches GLB/glTF imports)
                         if (mainTex == null)
                         {
@@ -6637,12 +6817,12 @@ public class SceneBootstrapper
         gallery.sewerBackground = sewerBg;
 
         // Category filter buttons (wired at runtime via categoryNames array)
-        string[] categories = { "All", "Characters", "Obstacles", "Power-Ups", "Scenery", "Collectibles", "Signs" };
+        string[] categories = { "All", "Characters", "Obstacles", "Creatures", "Power-Ups", "Scenery", "Collectibles", "Signs" };
         Color[] catColors = {
             new Color(0.3f, 0.3f, 0.3f), new Color(0.5f, 0.3f, 0.15f),
-            new Color(0.5f, 0.15f, 0.1f), new Color(0.1f, 0.4f, 0.55f),
-            new Color(0.25f, 0.45f, 0.2f), new Color(0.55f, 0.45f, 0.1f),
-            new Color(0.45f, 0.35f, 0.15f)
+            new Color(0.5f, 0.15f, 0.1f), new Color(0.4f, 0.2f, 0.5f),
+            new Color(0.1f, 0.4f, 0.55f), new Color(0.25f, 0.45f, 0.2f),
+            new Color(0.55f, 0.45f, 0.1f), new Color(0.45f, 0.35f, 0.15f)
         };
         List<Button> catBtns = new List<Button>();
         float catWidth = 0.9f / categories.Length;
@@ -6670,7 +6850,7 @@ public class SceneBootstrapper
         // MrCorny gallery prefab (with face features, yellow corn, mouth, eyes)
         string mrCornyGallery = "Assets/Prefabs/MrCorny_Gallery.prefab";
         gallery.RegisterAsset("Mr. Corny", "The classic corn-studded turd. Hero of the sewers.",
-            "Characters", mrCornyGallery, 0.17f);
+            "Characters", mrCornyGallery, 0.17f, default, 180f);
 
         // Skin color variants (same model, different body color)
         var skins = new (string name, string desc, Color col)[] {
@@ -6682,11 +6862,11 @@ public class SceneBootstrapper
             ("Ghost Corny", "The phantom of the pipes.", new Color(0.9f, 0.92f, 0.95f)),
         };
         foreach (var s in skins)
-            gallery.RegisterAsset(s.name, s.desc, "Characters", mrCornyGallery, 0.17f, s.col);
+            gallery.RegisterAsset(s.name, s.desc, "Characters", mrCornyGallery, 0.17f, s.col, 180f);
 
         // Smooth Snake (standalone AI racer)
         gallery.RegisterAsset("Smooth Snake", "The smuggest turd in the sewer. Half-lidded and unimpressed.",
-            "Characters", "Assets/Prefabs/Racer_SmoothSnake_Gallery.prefab", 0.16f, new Color(0.25f, 0.15f, 0.08f));
+            "Characters", "Assets/Prefabs/Racer_SmoothSnake_Gallery.prefab", 0.16f, new Color(0.25f, 0.15f, 0.08f), 180f);
 
         // AI Racers (with unique faces and expressions)
         var racers = new (string preset, string name, string desc, Color col)[] {
@@ -6698,23 +6878,38 @@ public class SceneBootstrapper
         foreach (var r in racers)
         {
             string racerPrefab = $"Assets/Prefabs/Racer_{r.preset}_Gallery.prefab";
-            gallery.RegisterAsset(r.name, r.desc, "Characters", racerPrefab, 0.15f, r.col);
+            gallery.RegisterAsset(r.name, r.desc, "Characters", racerPrefab, 0.15f, r.col, 180f);
         }
 
         // === OBSTACLES ===
-        var obstacles = new (string name, string desc, string path)[] {
-            ("Sewer Rat", "Lurking rodent. Will pounce and stun you!", "Assets/Prefabs/SewerRat.prefab"),
-            ("Toxic Barrel", "Corroded waste barrel. Glows menacingly.", "Assets/Prefabs/ToxicBarrel.prefab"),
-            ("Poop Blob", "A slithering wet blob. Splatters on impact.", "Assets/Prefabs/PoopBlob.prefab"),
-            ("Sewer Mine", "Explosive metal sphere. Red warning glow.", "Assets/Prefabs/SewerMine.prefab"),
-            ("Cockroach", "Chitinous nightmare. Panics when hit.", "Assets/Prefabs/Cockroach.prefab"),
-            ("Hair Wad (Black)", "Tangled hair blob with googly eyes.", "Assets/Prefabs/HairWad_Black.prefab"),
-            ("Hair Wad (Blonde)", "Golden locks of clogged horror.", "Assets/Prefabs/HairWad_Blonde.prefab"),
-            ("Hair Wad (Red)", "Fiery red hair monster.", "Assets/Prefabs/HairWad_Red.prefab"),
-            ("Hair Wad (Brunette)", "Dark tangled mass blocking your path.", "Assets/Prefabs/HairWad_Brunette.prefab"),
+        var obstacles = new (string name, string desc, string path, float rotY)[] {
+            ("Sewer Rat", "Lurking rodent. Will pounce and stun you!", "Assets/Prefabs/SewerRat.prefab", 180f),
+            ("Toxic Barrel", "Corroded waste barrel. Glows menacingly.", "Assets/Prefabs/ToxicBarrel.prefab", 0f),
+            ("Poop Blob", "A slithering wet blob. Splatters on impact.", "Assets/Prefabs/PoopBlob.prefab", 0f),
+            ("Sewer Mine", "Explosive metal sphere. Red warning glow.", "Assets/Prefabs/SewerMine.prefab", 0f),
+            ("Cockroach", "Chitinous nightmare. Panics when hit.", "Assets/Prefabs/Cockroach.prefab", 180f),
+            ("Hair Wad (Black)", "Tangled hair blob with googly eyes.", "Assets/Prefabs/HairWad_Black.prefab", 180f),
+            ("Hair Wad (Blonde)", "Golden locks of clogged horror.", "Assets/Prefabs/HairWad_Blonde.prefab", 180f),
+            ("Hair Wad (Red)", "Fiery red hair monster.", "Assets/Prefabs/HairWad_Red.prefab", 180f),
+            ("Hair Wad (Brunette)", "Dark tangled mass blocking your path.", "Assets/Prefabs/HairWad_Brunette.prefab", 180f),
         };
         foreach (var o in obstacles)
-            gallery.RegisterAsset(o.name, o.desc, "Obstacles", o.path, 1f);
+            gallery.RegisterAsset(o.name, o.desc, "Obstacles", o.path, 1f, default, o.rotY);
+
+        // === CREATURES (GLB models) ===
+        var creatures = new (string name, string desc, string path, float rotY)[] {
+            ("Toxic Frog", "Squatty mutant frog. Hops and lashes a toxic tongue!", "Assets/Prefabs/ToxicFrog.prefab", 180f),
+            ("Sewer Jellyfish", "Translucent pulsing blob with trailing stinger tentacles.", "Assets/Prefabs/SewerJellyfish.prefab", 180f),
+            ("Sewer Spider", "Eight-legged creeper. Drops from above on silk threads!", "Assets/Prefabs/SewerSpider.prefab", 180f),
+            ("Sewer Snake", "Slithering sine-wave of scales across the pipe floor.", "Assets/Prefabs/SewerSnake.prefab", 180f),
+            ("TP Mummy", "Wrapped in toilet paper. Unfurls and lunges when you're near!", "Assets/Prefabs/TPMummy.prefab", 180f),
+            ("Grease Glob", "Oily dark blob. Slides along walls and puffs up with rage.", "Assets/Prefabs/GreaseGlob.prefab", 180f),
+            ("Poop Fly Swarm", "Buzzing cloud of flies that tightens around you!", "Assets/Prefabs/PoopFlySwarm.prefab", 180f),
+            ("Sewer Gator", "Massive jaws lurking in the murky water. Snaps at anything!", "Assets/Models/SewerGator.glb", 180f),
+            ("Rubber Duck", "Squeaky yellow friend. Or is it? Quacks suspiciously.", "Assets/Models/RubberDuck.glb", 180f),
+        };
+        foreach (var c in creatures)
+            gallery.RegisterAsset(c.name, c.desc, "Creatures", c.path, 1f, default, c.rotY);
 
         // === COLLECTIBLES ===
         gallery.RegisterAsset("Fartcoin", "Brown Town's official currency. Spin big and shiny like Sonic rings!",
@@ -6991,6 +7186,7 @@ public class SceneBootstrapper
         Shadow tagShadow = raceTagline.gameObject.AddComponent<Shadow>();
         tagShadow.effectColor = new Color(0.3f, 0.15f, 0f, 0.9f);
         tagShadow.effectDistance = new Vector2(2, -2);
+        NeonUIEffects.ApplyNeonTextGlow(raceTagline, NeonUIEffects.NeonGold, 0.6f);
 
         // Wallet/Fartcoin count — visible below the tagline
         Text startWalletText = MakeStretchText(startPanel.transform, "StartWallet", "0 Fartcoins",
@@ -7053,9 +7249,11 @@ public class SceneBootstrapper
             new Vector2(0.03f, 0.05f), new Vector2(0.97f, 0.95f));
         shopPanel.SetActive(false);
 
-        MakeStretchText(shopPanel.transform, "ShopTitle", "SKIN SHOP",
+        Text shopTitleText = MakeStretchText(shopPanel.transform, "ShopTitle", "SKIN SHOP",
             52, TextAnchor.MiddleCenter, new Color(1f, 0.85f, 0.1f),
             new Vector2(0.1f, 0.88f), new Vector2(0.9f, 0.98f), true);
+        NeonUIEffects.ApplyNeonTextGlow(shopTitleText, NeonUIEffects.NeonGold, 0.6f);
+        NeonUIEffects.CreateNeonBorder(shopPanel.GetComponent<RectTransform>(), NeonUIEffects.NeonGold, 1.5f);
 
         Button shopCloseButton = MakeButton(shopPanel.transform, "ShopCloseBtn", "BACK",
             30, new Color(0.5f, 0.12f, 0.08f), Color.white,
@@ -7294,7 +7492,7 @@ public class SceneBootstrapper
 
         // "FARTCOINS" label — right column below distance
         Text coinLabel = MakeStretchText(hudParent, "CoinLabel", "FARTCOINS",
-            18, TextAnchor.LowerRight, new Color(0.85f, 0.6f, 0.15f, 0.85f),
+            26, TextAnchor.LowerRight, new Color(0.85f, 0.6f, 0.15f, 0.85f),
             new Vector2(0.80f, 0.72f), new Vector2(0.98f, 0.76f), true);
 
         // HUD coin counter — right column below fartcoin label
@@ -7315,7 +7513,7 @@ public class SceneBootstrapper
 
         // HUD speed indicator — right column below coins
         Text speedText = MakeStretchText(hudParent, "SpeedText", "0 SMPH",
-            22, TextAnchor.MiddleRight, new Color(0.3f, 1f, 0.4f, 0.85f),
+            30, TextAnchor.MiddleRight, new Color(0.3f, 1f, 0.4f, 0.85f),
             new Vector2(0.80f, 0.60f), new Vector2(0.98f, 0.66f), true);
 
         // HUD wallet text — right column below multiplier
@@ -7335,6 +7533,7 @@ public class SceneBootstrapper
         Outline goOutline2 = goTitle.gameObject.AddComponent<Outline>();
         goOutline2.effectColor = new Color(0.3f, 0f, 0f, 0.9f);
         goOutline2.effectDistance = new Vector2(4, -4);
+        NeonUIEffects.ApplyNeonTextGlow(goTitle, NeonUIEffects.NeonRed, 0.7f);
 
         Text finalScoreText = MakeStretchText(gameOverPanel.transform, "FinalScoreText",
             "Score: 0", 46, TextAnchor.MiddleCenter, Color.white,
@@ -7351,6 +7550,7 @@ public class SceneBootstrapper
         Button restartButton = MakeButton(gameOverPanel.transform, "RestartButton",
             "FLUSH AGAIN", 42, new Color(0.55f, 0.12f, 0.08f), Color.white,
             new Vector2(0.15f, 0.20f), new Vector2(0.85f, 0.32f));
+        NeonUIEffects.ApplyNeonGlow(restartButton.gameObject, NeonUIEffects.NeonRed, 0.5f);
 
         Button returnToBowlButton = MakeButton(gameOverPanel.transform, "ReturnToBowlButton",
             "RETURN TO BOWL", 24, new Color(0.35f, 0.28f, 0.22f, 0.85f), new Color(0.85f, 0.82f, 0.75f),
