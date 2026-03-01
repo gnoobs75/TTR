@@ -36,9 +36,17 @@ public class ObstacleSpawner : MonoBehaviour
     private PipeGenerator _pipeGen;
     private TurdController _tc;
     private float _nextSpawnDist = 25f;
-    private List<GameObject> _spawnedObjects = new List<GameObject>();
+    private List<SpawnedEntry> _spawnedEntries = new List<SpawnedEntry>();
     private float _cleanupDistance = 50f;
     private int _obstacleIndex = 0;
+
+    // Track spawn distance per object so cleanup uses pipe distance, not world-space direction
+    // (world-space direction fails in curved pipes — objects ahead can appear "behind" the player)
+    private struct SpawnedEntry
+    {
+        public GameObject obj;
+        public float spawnDist; // distance along pipe where this was spawned
+    }
 
     // Object pooling
     private Dictionary<GameObject, Queue<GameObject>> _pool = new Dictionary<GameObject, Queue<GameObject>>();
@@ -183,48 +191,55 @@ public class ObstacleSpawner : MonoBehaviour
             if (prefab == null) continue;
 
             // Classify by behavior component or name
+            // Every creature gets a primary zone + appears in at least one other
+            // so players see variety from the start
+            bool classified = false;
+
+            // Porcelain (0-155m): intro creatures
             if (prefab.GetComponent<PoopBlobBehavior>() != null ||
                 prefab.GetComponent<ToxicBarrelBehavior>() != null ||
-                prefab.GetComponent<ToiletPaperMummyBehavior>() != null ||
                 prefab.name.IndexOf("Duck", System.StringComparison.OrdinalIgnoreCase) >= 0)
             {
-                _zonePools[0].Add(prefab); // Porcelain
-                // TP Mummy also in Grimy
-                if (prefab.GetComponent<ToiletPaperMummyBehavior>() != null)
-                    _zonePools[1].Add(prefab);
+                _zonePools[0].Add(prefab);
+                classified = true;
             }
-            else if (prefab.GetComponent<HairWadBehavior>() != null)
+
+            // Grimy (155-510m): crawlers, clogs, mummies
+            if (prefab.GetComponent<HairWadBehavior>() != null ||
+                prefab.GetComponent<SewerSnakeBehavior>() != null ||
+                prefab.GetComponent<ToiletPaperMummyBehavior>() != null ||
+                prefab.GetComponent<GreaseGlobBehavior>() != null ||
+                prefab.GetComponent<CockroachBehavior>() != null)
             {
-                _zonePools[1].Add(prefab); // Grimy
+                _zonePools[0].Add(prefab); // Also in Porcelain for early visibility
+                _zonePools[1].Add(prefab);
+                classified = true;
             }
-            else if (prefab.GetComponent<SewerSnakeBehavior>() != null)
+
+            // Toxic (510-1020m): hazardous creatures
+            if (prefab.GetComponent<ToxicFrogBehavior>() != null ||
+                prefab.GetComponent<SewerJellyfishBehavior>() != null ||
+                prefab.GetComponent<SewerMineBehavior>() != null ||
+                prefab.GetComponent<GreaseGlobBehavior>() != null)
             {
-                _zonePools[1].Add(prefab); // Grimy
-                _zonePools[3].Add(prefab); // Rusty
+                _zonePools[1].Add(prefab); // Also in Grimy
+                _zonePools[2].Add(prefab);
+                classified = true;
             }
-            else if (prefab.GetComponent<ToxicFrogBehavior>() != null ||
-                     prefab.GetComponent<SewerJellyfishBehavior>() != null ||
-                     prefab.GetComponent<SewerMineBehavior>() != null)
+
+            // Rusty (1020-1600m): pest infestation + ambush
+            if (prefab.GetComponent<SewerRatBehavior>() != null ||
+                prefab.GetComponent<SewerSpiderBehavior>() != null ||
+                prefab.GetComponent<PoopFlySwarmBehavior>() != null ||
+                prefab.GetComponent<SewerSnakeBehavior>() != null ||
+                prefab.GetComponent<CockroachBehavior>() != null)
             {
-                _zonePools[2].Add(prefab); // Toxic
+                _zonePools[2].Add(prefab); // Also in Toxic for earlier encounters
+                _zonePools[3].Add(prefab);
+                classified = true;
             }
-            else if (prefab.GetComponent<GreaseGlobBehavior>() != null)
-            {
-                _zonePools[2].Add(prefab); // Toxic
-                _zonePools[3].Add(prefab); // Rusty
-            }
-            else if (prefab.GetComponent<SewerRatBehavior>() != null ||
-                     prefab.GetComponent<CockroachBehavior>() != null ||
-                     prefab.GetComponent<SewerSpiderBehavior>() != null)
-            {
-                _zonePools[3].Add(prefab); // Rusty
-            }
-            else if (prefab.GetComponent<PoopFlySwarmBehavior>() != null)
-            {
-                _zonePools[3].Add(prefab); // Rusty
-                _zonePools[4].Add(prefab); // Hellsewer (also gets added via "all" below)
-            }
-            else
+
+            if (!classified)
             {
                 // Unclassified: add to Porcelain as fallback
                 _zonePools[0].Add(prefab);
@@ -233,6 +248,28 @@ public class ObstacleSpawner : MonoBehaviour
 
         // Hellsewer (zone 4) gets ALL obstacle types
         _zonePools[4].AddRange(obstaclePrefabs);
+
+#if UNITY_EDITOR
+        string[] zoneNames = { "Porcelain", "Grimy", "Toxic", "Rusty", "Hellsewer" };
+        for (int i = 0; i < 5; i++)
+        {
+            string creatures = "";
+            foreach (var p in _zonePools[i])
+                creatures += p.name + ", ";
+            Debug.Log($"[ZONE POOL] {zoneNames[i]}: {_zonePools[i].Count} types → {creatures}");
+        }
+
+        // Verify all prefabs have required components
+        int missingCollider = 0, missingObstacle = 0, missingBehavior = 0;
+        foreach (var prefab in obstaclePrefabs)
+        {
+            if (prefab == null) continue;
+            if (prefab.GetComponent<Collider>() == null) { missingCollider++; Debug.LogWarning($"[VERIFY] {prefab.name} missing Collider!"); }
+            if (prefab.GetComponent<Obstacle>() == null) { missingObstacle++; Debug.LogWarning($"[VERIFY] {prefab.name} missing Obstacle component!"); }
+            if (prefab.GetComponent<ObstacleBehavior>() == null) { missingBehavior++; Debug.LogWarning($"[VERIFY] {prefab.name} missing ObstacleBehavior!"); }
+        }
+        Debug.Log($"[VERIFY] Prefab check: {obstaclePrefabs.Length} total, missing collider={missingCollider} obstacle={missingObstacle} behavior={missingBehavior}");
+#endif
     }
 
     GameObject GetZoneObstacle(float dist)
@@ -334,20 +371,21 @@ public class ObstacleSpawner : MonoBehaviour
         // Speed corridor entry announcements
         CheckCorridorEntry(playerDist);
 
-        // Cleanup behind (return to pool instead of destroying)
-        for (int i = _spawnedObjects.Count - 1; i >= 0; i--)
+        // Cleanup behind using pipe distance (not world-space direction, which fails in curves)
+        for (int i = _spawnedEntries.Count - 1; i >= 0; i--)
         {
-            if (_spawnedObjects[i] == null)
+            if (_spawnedEntries[i].obj == null)
             {
-                _spawnedObjects.RemoveAt(i);
+                _spawnedEntries.RemoveAt(i);
                 continue;
             }
 
-            Vector3 toObj = _spawnedObjects[i].transform.position - player.position;
-            if (toObj.magnitude > _cleanupDistance && Vector3.Dot(toObj, player.forward) < 0)
+            // Only remove objects the player has clearly passed (pipe distance behind)
+            float distBehind = playerDist - _spawnedEntries[i].spawnDist;
+            if (distBehind > _cleanupDistance)
             {
-                ReturnToPool(_spawnedObjects[i]);
-                _spawnedObjects.RemoveAt(i);
+                ReturnToPool(_spawnedEntries[i].obj);
+                _spawnedEntries.RemoveAt(i);
             }
         }
     }
@@ -441,19 +479,55 @@ public class ObstacleSpawner : MonoBehaviour
         }
     }
 
+    // Spawn diagnostics (lightweight - just counts, no per-frame cost)
+#if UNITY_EDITOR
+    private Dictionary<string, int> _spawnCounts = new Dictionary<string, int>();
+    private float _lastDiagTime;
+    private int _totalSpawns;
+    private int _totalCollisions;
+    private int _totalStomps;
+
+    /// <summary>Call from Obstacle.OnTriggerEnter to track collision events.</summary>
+    public void RecordCollision(string creatureName, bool wasStomp)
+    {
+        if (wasStomp) _totalStomps++;
+        else _totalCollisions++;
+    }
+
+    void LogSpawnDiagnostics()
+    {
+        if (Time.time - _lastDiagTime < 30f) return; // every 30s
+        _lastDiagTime = Time.time;
+        float playerDist = _tc != null ? _tc.DistanceTraveled : 0f;
+        string summary = $"[SPAWN DIAG] dist={playerDist:F0}m | total spawned={_totalSpawns} | hits={_totalCollisions} stomps={_totalStomps} | active={_spawnedEntries.Count}\n  Counts: ";
+        foreach (var kv in _spawnCounts)
+            summary += $"{kv.Key}={kv.Value} ";
+        Debug.Log(summary);
+    }
+#endif
+
     void SpawnObstacle(float dist, Vector3 center, Vector3 forward, Vector3 right, Vector3 up)
     {
         // Zone-themed obstacle selection (pick FIRST so we can customize placement)
         GameObject prefab = GetZoneObstacle(dist);
         if (prefab == null) return;
 
-        // Per-creature placement preferences
+        // Identify creature type for placement
+        // Original creatures
         bool isMine = prefab.GetComponent<SewerMineBehavior>() != null;
         bool isSpider = prefab.GetComponent<SewerSpiderBehavior>() != null;
         bool isJelly = prefab.GetComponent<SewerJellyfishBehavior>() != null;
         bool isFrog = prefab.GetComponent<ToxicFrogBehavior>() != null;
         bool isSnake = prefab.GetComponent<SewerSnakeBehavior>() != null;
         bool isRat = prefab.GetComponent<SewerRatBehavior>() != null;
+        // New GLB creatures
+        bool isHairWad = prefab.GetComponent<HairWadBehavior>() != null;
+        bool isMummy = prefab.GetComponent<ToiletPaperMummyBehavior>() != null;
+        bool isGrease = prefab.GetComponent<GreaseGlobBehavior>() != null;
+        bool isFlySwarm = prefab.GetComponent<PoopFlySwarmBehavior>() != null;
+        bool isBarrel = prefab.GetComponent<ToxicBarrelBehavior>() != null;
+        bool isBlob = prefab.GetComponent<PoopBlobBehavior>() != null;
+        bool isRoach = prefab.GetComponent<CockroachBehavior>() != null;
 
         float angleDeg;
         float radiusMin = 0.40f;
@@ -467,23 +541,25 @@ public class ObstacleSpawner : MonoBehaviour
         }
         else if (isSpider)
         {
-            // Spiders hang from ceiling/upper walls
+            // Spiders hang from ceiling/upper walls - always overhead threat
             angleDeg = Random.Range(45f, 135f);
             radiusMin = 0.70f; radiusMax = 0.85f;
         }
         else if (isJelly)
         {
-            // Jellyfish float mid-pipe, visible from afar
+            // Jellyfish drift mid-pipe at varying heights - harder to dodge
             float jPick = Random.value;
-            if (jPick < 0.5f)
-                angleDeg = Random.Range(150f, 210f); // walls
-            else
+            if (jPick < 0.4f)
+                angleDeg = Random.Range(150f, 210f); // side walls
+            else if (jPick < 0.7f)
                 angleDeg = Random.Range(60f, 120f);  // upper area
-            radiusMin = 0.30f; radiusMax = 0.50f;
+            else
+                angleDeg = Random.Range(240f, 300f);  // lower area (blocking floor path)
+            radiusMin = 0.25f; radiusMax = 0.50f;
         }
         else if (isFrog)
         {
-            // Frogs sit on lower walls, above the waterline
+            // Frogs crouch on lower walls above the waterline, ready to hop
             angleDeg = (Random.value < 0.5f)
                 ? Random.Range(210f, 250f)  // lower-left wall
                 : Random.Range(290f, 330f); // lower-right wall
@@ -491,7 +567,7 @@ public class ObstacleSpawner : MonoBehaviour
         }
         else if (isSnake)
         {
-            // Snakes slither across the floor path, elevated so visible
+            // Snakes slither across the floor, blocking the main path
             angleDeg = 270f + Random.Range(-30f, 30f);
             radiusMin = 0.30f; radiusMax = 0.50f;
         }
@@ -506,9 +582,75 @@ public class ObstacleSpawner : MonoBehaviour
                     ? Random.Range(170f, 220f) : Random.Range(320f, 370f); // walls
             radiusMin = 0.45f; radiusMax = 0.60f;
         }
+        else if (isHairWad)
+        {
+            // Hair wads clog the pipe - stuck to walls or hanging from ceiling like real clogs
+            float hwPick = Random.value;
+            if (hwPick < 0.35f)
+                angleDeg = Random.Range(60f, 120f);  // ceiling - hanging hairball
+            else if (hwPick < 0.70f)
+                angleDeg = (Random.value < 0.5f) ? Random.Range(150f, 200f) : Random.Range(340f, 390f); // walls
+            else
+                angleDeg = 270f + Random.Range(-25f, 25f); // floor drain clog
+            radiusMin = 0.55f; radiusMax = 0.75f;
+        }
+        else if (isMummy)
+        {
+            // TP Mummy stands upright on the floor/lower walls like a shambling zombie
+            float tpPick = Random.value;
+            if (tpPick < 0.6f)
+                angleDeg = 270f + Random.Range(-35f, 35f); // floor (shuffling toward you)
+            else
+                angleDeg = (Random.value < 0.5f) ? Random.Range(200f, 240f) : Random.Range(300f, 340f); // lower walls
+            radiusMin = 0.45f; radiusMax = 0.65f;
+        }
+        else if (isGrease)
+        {
+            // Grease globs slide along walls and ceiling - oily drip positions
+            float gPick = Random.value;
+            if (gPick < 0.4f)
+                angleDeg = Random.Range(70f, 110f); // ceiling drip
+            else
+                angleDeg = (Random.value < 0.5f) ? Random.Range(140f, 200f) : Random.Range(340f, 400f); // walls
+            radiusMin = 0.60f; radiusMax = 0.80f;
+        }
+        else if (isFlySwarm)
+        {
+            // Fly swarms hover in the middle of the pipe - unavoidable cloud
+            angleDeg = Random.Range(0f, 360f); // truly anywhere
+            radiusMin = 0.20f; radiusMax = 0.40f; // closer to center = harder to dodge
+        }
+        else if (isBarrel)
+        {
+            // Toxic barrels sit on the floor, sometimes wedged against walls
+            float bPick = Random.value;
+            if (bPick < 0.7f)
+                angleDeg = 270f + Random.Range(-30f, 30f); // floor
+            else
+                angleDeg = (Random.value < 0.5f) ? Random.Range(200f, 240f) : Random.Range(300f, 340f); // lower walls
+            radiusMin = 0.55f; radiusMax = 0.75f;
+        }
+        else if (isBlob)
+        {
+            // Poop blobs sit in puddles on the floor, sometimes on lower walls
+            angleDeg = 270f + Random.Range(-35f, 35f); // mostly floor
+            radiusMin = 0.50f; radiusMax = 0.70f;
+        }
+        else if (isRoach)
+        {
+            // Cockroaches scatter everywhere - walls, floor, ceiling (they go anywhere)
+            float rPick = Random.value;
+            if (rPick < 0.4f)
+                angleDeg = 270f + Random.Range(-45f, 45f); // floor
+            else if (rPick < 0.7f)
+                angleDeg = (Random.value < 0.5f) ? Random.Range(150f, 210f) : Random.Range(330f, 390f); // walls
+            else
+                angleDeg = Random.Range(50f, 130f); // ceiling
+            radiusMin = 0.50f; radiusMax = 0.75f;
+        }
         else
         {
-            // Default: 55% floor, 25% walls, 20% ceiling
+            // Default fallback: 55% floor, 25% walls, 20% ceiling
             float zonePick = Random.value;
             if (zonePick < 0.55f)
                 angleDeg = 270f + Random.Range(-40f, 40f);
@@ -550,9 +692,41 @@ public class ObstacleSpawner : MonoBehaviour
         Vector3 inward = (center - pos).normalized;
         Quaternion rot = Quaternion.LookRotation(-forward, inward);
         GameObject obj = GetFromPool(prefab, pos, rot);
-        _spawnedObjects.Add(obj);
+        _spawnedEntries.Add(new SpawnedEntry { obj = obj, spawnDist = dist });
+
+        // Verify collider exists (safety net for GLB-based creatures)
+        Collider objCol = obj.GetComponent<Collider>();
+        if (objCol == null)
+        {
+            // GLB creature missing collider - add one automatically
+            SphereCollider sc = obj.AddComponent<SphereCollider>();
+            sc.isTrigger = true;
+            sc.radius = 0.5f;
 #if UNITY_EDITOR
-        Debug.Log($"[SPAWN] {prefab.name} at dist={dist:F0} angle={angleDeg:F0}° radius={spawnRadius:F1} lane={spawnLane != null}");
+            Debug.LogWarning($"[SPAWN] {prefab.name} had NO collider! Auto-added SphereCollider(0.5)");
+#endif
+        }
+        else if (!objCol.isTrigger && obj.GetComponent<GrateBehavior>() == null)
+        {
+            // Non-grate obstacle should be trigger
+            objCol.isTrigger = true;
+        }
+
+#if UNITY_EDITOR
+        _totalSpawns++;
+        string pName = prefab.name;
+        if (!_spawnCounts.ContainsKey(pName)) _spawnCounts[pName] = 0;
+        _spawnCounts[pName]++;
+
+        // Determine placement label for readable logging
+        string placement;
+        if (angleDeg > 240f && angleDeg < 300f) placement = "FLOOR";
+        else if (angleDeg > 60f && angleDeg < 120f) placement = "CEILING";
+        else if ((angleDeg >= 120f && angleDeg <= 240f) || angleDeg >= 300f || angleDeg <= 60f) placement = "WALL";
+        else placement = $"{angleDeg:F0}°";
+
+        Debug.Log($"[SPAWN] {pName} at dist={dist:F0}m {placement} r={spawnRadius:F1} hasCollider={objCol != null} hasBehavior={obj.GetComponent<ObstacleBehavior>() != null}");
+        LogSpawnDiagnostics();
 #endif
 
         // Pass actual spawn distance to rat for accurate orbit
@@ -638,7 +812,7 @@ public class ObstacleSpawner : MonoBehaviour
         Vector3 inward = (center - pos).normalized;
         Quaternion rot = Quaternion.LookRotation(forward, inward);
         GameObject coin = Instantiate(coinPrefab, pos, rot, transform);
-        _spawnedObjects.Add(coin);
+        _spawnedEntries.Add(new SpawnedEntry { obj = coin, spawnDist = dist });
     }
 
     // Original straight line trail at a random angle (not just bottom)
@@ -764,7 +938,7 @@ public class ObstacleSpawner : MonoBehaviour
         Vector3 inward = (center - pos).normalized;
         Quaternion rot = Quaternion.LookRotation(forward, inward);
         GameObject obj = Instantiate(bigAirRampPrefab, pos, rot, transform);
-        _spawnedObjects.Add(obj);
+        _spawnedEntries.Add(new SpawnedEntry { obj = obj, spawnDist = dist });
     }
 
     void SpawnDropZone(float dist)
@@ -776,7 +950,7 @@ public class ObstacleSpawner : MonoBehaviour
         // Place drop trigger at pipe center
         Quaternion rot = Quaternion.LookRotation(forward, up);
         GameObject obj = Instantiate(dropZonePrefab, center, rot, transform);
-        _spawnedObjects.Add(obj);
+        _spawnedEntries.Add(new SpawnedEntry { obj = obj, spawnDist = dist });
     }
 
     void SpawnGrate(float dist)
@@ -814,6 +988,6 @@ public class ObstacleSpawner : MonoBehaviour
         if (grate != null)
             grate.blockSide = side;
 
-        _spawnedObjects.Add(obj);
+        _spawnedEntries.Add(new SpawnedEntry { obj = obj, spawnDist = dist });
     }
 }

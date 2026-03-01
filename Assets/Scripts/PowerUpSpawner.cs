@@ -33,9 +33,15 @@ public class PowerUpSpawner : MonoBehaviour
     private PipeGenerator _pipeGen;
     private TurdController _tc;
     private float _nextSpawnDist = 40f;
-    private List<GameObject> _spawnedObjects = new List<GameObject>();
+    private List<SpawnedEntry> _spawnedEntries = new List<SpawnedEntry>();
     private int _typeIndex = 0;
     private float _lastSpecialDist = -200f;
+
+    private struct SpawnedEntry
+    {
+        public GameObject obj;
+        public float spawnDist;
+    }
 
     void Start()
     {
@@ -61,20 +67,20 @@ public class PowerUpSpawner : MonoBehaviour
                 _nextSpawnDist += Random.Range(minSpacing, maxSpacing);
         }
 
-        // Cleanup behind
-        for (int i = _spawnedObjects.Count - 1; i >= 0; i--)
+        // Cleanup behind using pipe distance (world-space direction fails in curves)
+        for (int i = _spawnedEntries.Count - 1; i >= 0; i--)
         {
-            if (_spawnedObjects[i] == null)
+            if (_spawnedEntries[i].obj == null)
             {
-                _spawnedObjects.RemoveAt(i);
+                _spawnedEntries.RemoveAt(i);
                 continue;
             }
 
-            Vector3 toObj = _spawnedObjects[i].transform.position - player.position;
-            if (toObj.magnitude > 60f && Vector3.Dot(toObj, player.forward) < 0)
+            float distBehind = playerDist - _spawnedEntries[i].spawnDist;
+            if (distBehind > 60f)
             {
-                Destroy(_spawnedObjects[i]);
-                _spawnedObjects.RemoveAt(i);
+                Destroy(_spawnedEntries[i].obj);
+                _spawnedEntries.RemoveAt(i);
             }
         }
     }
@@ -157,7 +163,7 @@ public class PowerUpSpawner : MonoBehaviour
                 Vector3 inward = (center - specialPos).normalized;
                 Quaternion rot = Quaternion.LookRotation(forward, inward);
                 GameObject obj = Instantiate(specialPrefab, specialPos, rot, transform);
-                _spawnedObjects.Add(obj);
+                _spawnedEntries.Add(new SpawnedEntry { obj = obj, spawnDist = dist });
                 _lastSpecialDist = dist;
                 spawnedSpecial = true;
 #if UNITY_EDITOR
@@ -184,7 +190,7 @@ public class PowerUpSpawner : MonoBehaviour
             Vector3 inward = (center - pos).normalized;
             Quaternion rot = Quaternion.LookRotation(forward, inward);
             GameObject obj = Instantiate(prefab, pos, rot, transform);
-            _spawnedObjects.Add(obj);
+            _spawnedEntries.Add(new SpawnedEntry { obj = obj, spawnDist = dist });
 
             // Spawn a bonus Fartcoin after every jump ramp - only reachable by jumping
             if (prefab == jumpRampPrefab && bonusCoinPrefab != null)
@@ -196,7 +202,7 @@ public class PowerUpSpawner : MonoBehaviour
                 Vector3 coinPos = bCenter - bUp * (pipeRadius * 0.1f);
                 Quaternion coinRot = Quaternion.LookRotation(bFwd, bUp);
                 GameObject coin = Instantiate(bonusCoinPrefab, coinPos, coinRot, transform);
-                _spawnedObjects.Add(coin);
+                _spawnedEntries.Add(new SpawnedEntry { obj = coin, spawnDist = bonusDist });
             }
         }
     }

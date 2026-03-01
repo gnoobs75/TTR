@@ -31,8 +31,14 @@ public class ScenerySpawner : MonoBehaviour
     private float _nextSpawnDist = 10f;
     private float _nextGrossDist = 5f;
     private float _nextSignDist = 15f;
-    private List<GameObject> _spawnedObjects = new List<GameObject>();
+    private List<SpawnedEntry> _spawnedEntries = new List<SpawnedEntry>();
     private float _cleanupDistance = 50f;
+
+    private struct SpawnedEntry
+    {
+        public GameObject obj;
+        public float spawnDist;
+    }
 
     void Start()
     {
@@ -68,20 +74,20 @@ public class ScenerySpawner : MonoBehaviour
             _nextSignDist += Random.Range(20f, 40f); // readable spacing
         }
 
-        // Cleanup behind
-        for (int i = _spawnedObjects.Count - 1; i >= 0; i--)
+        // Cleanup behind using pipe distance (world-space direction fails in curves)
+        for (int i = _spawnedEntries.Count - 1; i >= 0; i--)
         {
-            if (_spawnedObjects[i] == null)
+            if (_spawnedEntries[i].obj == null)
             {
-                _spawnedObjects.RemoveAt(i);
+                _spawnedEntries.RemoveAt(i);
                 continue;
             }
 
-            Vector3 toObj = _spawnedObjects[i].transform.position - player.position;
-            if (toObj.magnitude > _cleanupDistance && Vector3.Dot(toObj, player.forward) < 0)
+            float distBehind = playerDist - _spawnedEntries[i].spawnDist;
+            if (distBehind > _cleanupDistance)
             {
-                Destroy(_spawnedObjects[i]);
-                _spawnedObjects.RemoveAt(i);
+                Destroy(_spawnedEntries[i].obj);
+                _spawnedEntries.RemoveAt(i);
             }
         }
     }
@@ -113,7 +119,7 @@ public class ScenerySpawner : MonoBehaviour
 
         GameObject prefab = sceneryPrefabs[Random.Range(0, sceneryPrefabs.Length)];
         GameObject obj = Instantiate(prefab, pos, rot, transform);
-        _spawnedObjects.Add(obj);
+        _spawnedEntries.Add(new SpawnedEntry { obj = obj, spawnDist = dist });
     }
 
     void SpawnGrossDecor(float dist)
@@ -135,7 +141,7 @@ public class ScenerySpawner : MonoBehaviour
 
         GameObject prefab = grossPrefabs[Random.Range(0, grossPrefabs.Length)];
         GameObject obj = Instantiate(prefab, pos, rot, transform);
-        _spawnedObjects.Add(obj);
+        _spawnedEntries.Add(new SpawnedEntry { obj = obj, spawnDist = dist });
     }
 
     void SpawnSign(float dist)
@@ -167,6 +173,23 @@ public class ScenerySpawner : MonoBehaviour
 
         GameObject prefab = signPrefabs[Random.Range(0, signPrefabs.Length)];
         GameObject obj = Instantiate(prefab, pos, rot, transform);
-        _spawnedObjects.Add(obj);
+
+        // Inject AI-generated graffiti into graffiti sign prefabs
+        if (prefab.name.StartsWith("GraffitiSign") && AITextManager.Instance != null)
+        {
+            string aiGraffiti = AITextManager.Instance.GetGraffiti();
+            if (!string.IsNullOrEmpty(aiGraffiti))
+            {
+                var tm = obj.GetComponentInChildren<TextMesh>();
+                if (tm != null)
+                    tm.text = aiGraffiti;
+
+                var tmp = obj.GetComponentInChildren<TMPro.TextMeshPro>();
+                if (tmp != null)
+                    tmp.text = aiGraffiti;
+            }
+        }
+
+        _spawnedEntries.Add(new SpawnedEntry { obj = obj, spawnDist = dist });
     }
 }
