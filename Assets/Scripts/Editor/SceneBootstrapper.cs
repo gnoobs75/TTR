@@ -83,6 +83,7 @@ public class SceneBootstrapper
         CreateFlushSequence();
         CreateAssetGallery(gameUI);
         CreateSewerTour(player.GetComponent<TurdController>(), pipeGenObj.GetComponent<PipeGenerator>());
+        CreateSeedChallengeSystem(gameUI);
         SaveScene();
 
         Debug.Log("TTR: Scene setup complete! Press Play to test.");
@@ -6972,6 +6973,24 @@ public class SceneBootstrapper
         Debug.Log($"TTR: Registered gallery assets (check Gallery button on start screen)");
     }
 
+    // ===== SEED CHALLENGE SYSTEM =====
+    static void CreateSeedChallengeSystem(GameUI gameUI)
+    {
+        // SeedManager singleton
+        GameObject seedObj = new GameObject("SeedManager");
+        seedObj.AddComponent<SeedManager>();
+
+        // SeedChallengeUI on the canvas
+        Canvas canvas = gameUI.GetComponentInParent<Canvas>();
+        if (canvas != null)
+        {
+            SeedChallengeUI challengeUI = canvas.gameObject.AddComponent<SeedChallengeUI>();
+            challengeUI.Initialize(canvas, _font);
+        }
+
+        Debug.Log("TTR: Seed challenge system created (SeedManager + SeedChallengeUI)");
+    }
+
     // ===== SAVE =====
     static void SaveScene()
     {
@@ -7178,6 +7197,19 @@ public class SceneBootstrapper
             new Color(0.95f, 0.5f, 0.1f),
             "duck");
 
+        // --- SEED RACE poster: left stall wall, below SHOP ---
+        Button seedButton = MakeStallPoster(startPanel.transform, "SeedButton",
+            "POOP\nW/ SEED", new Color(0.3f, 0.9f, 1f),
+            new Vector2(0.04f, 0.22f), new Vector2(0.13f, 0.40f), -2.5f,
+            new Color(0.1f, 0.25f, 0.35f),
+            new Color(0.3f, 0.85f, 1f),
+            "blob");
+        seedButton.onClick.AddListener(() =>
+        {
+            if (SeedChallengeUI.Instance != null)
+                SeedChallengeUI.Instance.ShowSeedEntry();
+        });
+
         // === TOP OF STALL INFO BAR (above the doors, clear space) ===
         // Race tagline — big and bold in the top stall area
         Text raceTagline = MakeStretchText(startPanel.transform, "RaceTagline", "RACE TO BROWN TOWN!",
@@ -7197,11 +7229,15 @@ public class SceneBootstrapper
         Text challengeText = MakeStretchText(startPanel.transform, "ChallengeText", "DAILY: ...",
             20, TextAnchor.MiddleCenter, new Color(1f, 0.85f, 0.3f, 0.8f),
             new Vector2(0.20f, 0.27f), new Vector2(0.80f, 0.32f), true);
+        challengeText.raycastTarget = false;
 
-        // "or press SPACE" hint — below the doors, bigger
-        MakeStretchText(startPanel.transform, "HintText", "or press SPACE",
+        // (Seed Race button is now a stall poster on the left wall)
+
+        // "or press SPACE" hint — below the doors
+        Text hintText = MakeStretchText(startPanel.transform, "HintText", "or press SPACE",
             22, TextAnchor.MiddleCenter, new Color(0.75f, 0.75f, 0.7f, 0.7f),
-            new Vector2(0.30f, 0.22f), new Vector2(0.70f, 0.27f), true);
+            new Vector2(0.30f, 0.17f), new Vector2(0.70f, 0.22f), true);
+        hintText.raycastTarget = false;
 
         // === CONTROL SCHEME PICKER ===
         GameObject ctrlRow = new GameObject("ControlRow");
@@ -7549,12 +7585,22 @@ public class SceneBootstrapper
 
         Button restartButton = MakeButton(gameOverPanel.transform, "RestartButton",
             "FLUSH AGAIN", 42, new Color(0.55f, 0.12f, 0.08f), Color.white,
-            new Vector2(0.15f, 0.20f), new Vector2(0.85f, 0.32f));
+            new Vector2(0.15f, 0.24f), new Vector2(0.85f, 0.34f));
         NeonUIEffects.ApplyNeonGlow(restartButton.gameObject, NeonUIEffects.NeonRed, 0.5f);
+
+        // "CHALLENGE" button — gold/amber, share your run
+        Button challengeButton = MakeButton(gameOverPanel.transform, "ChallengeButton",
+            "CHALLENGE", 28, new Color(0.6f, 0.45f, 0.1f), Color.white,
+            new Vector2(0.25f, 0.15f), new Vector2(0.75f, 0.23f));
+        challengeButton.onClick.AddListener(() =>
+        {
+            if (SeedChallenge.PlayerResult.HasValue && SeedChallengeUI.Instance != null)
+                SeedChallengeUI.Instance.ShowChallengeCode(SeedChallenge.PlayerResult.Value);
+        });
 
         Button returnToBowlButton = MakeButton(gameOverPanel.transform, "ReturnToBowlButton",
             "RETURN TO BOWL", 24, new Color(0.35f, 0.28f, 0.22f, 0.85f), new Color(0.85f, 0.82f, 0.75f),
-            new Vector2(0.25f, 0.06f), new Vector2(0.75f, 0.17f));
+            new Vector2(0.25f, 0.04f), new Vector2(0.75f, 0.14f));
 
         GameUI ui = canvasObj.AddComponent<GameUI>();
         ui.scoreText = scoreText;

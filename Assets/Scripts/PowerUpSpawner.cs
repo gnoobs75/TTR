@@ -32,6 +32,7 @@ public class PowerUpSpawner : MonoBehaviour
 
     private PipeGenerator _pipeGen;
     private TurdController _tc;
+    private System.Random _puRng;
     private float _nextSpawnDist = 40f;
     private List<SpawnedEntry> _spawnedEntries = new List<SpawnedEntry>();
     private int _typeIndex = 0;
@@ -48,6 +49,8 @@ public class PowerUpSpawner : MonoBehaviour
         _pipeGen = Object.FindFirstObjectByType<PipeGenerator>();
         if (player != null)
             _tc = player.GetComponent<TurdController>();
+        if (SeedManager.Instance != null)
+            _puRng = SeedManager.Instance.PowerUpRNG;
     }
 
     void Update()
@@ -62,9 +65,9 @@ public class PowerUpSpawner : MonoBehaviour
 
             // Dense boost spacing in speed corridors (12-15m vs normal 30-60m)
             if (ObstacleSpawner.IsSpeedCorridor(_nextSpawnDist))
-                _nextSpawnDist += Random.Range(12f, 15f);
+                _nextSpawnDist += SeedManager.Range(_puRng, 12f, 15f);
             else
-                _nextSpawnDist += Random.Range(minSpacing, maxSpacing);
+                _nextSpawnDist += SeedManager.Range(_puRng, minSpacing, maxSpacing);
         }
 
         // Cleanup behind using pipe distance (world-space direction fails in curves)
@@ -100,47 +103,47 @@ public class PowerUpSpawner : MonoBehaviour
         // In lane zones: speed boosts biased to right (risky) side
         float angleDeg;
         bool inCorridor = ObstacleSpawner.IsSpeedCorridor(dist);
-        float zonePick = Random.value;
+        float zonePick = SeedManager.Value(_puRng);
 
         if (inLaneZone)
         {
             // Lane zone: 60% right side (risky = speed boosts), 25% floor center, 15% left
             if (zonePick < 0.60f)
-                angleDeg = Random.Range(300f, 370f); // right side (risky)
+                angleDeg = SeedManager.Range(_puRng, 300f, 370f); // right side (risky)
             else if (zonePick < 0.85f)
-                angleDeg = 270f + Random.Range(-20f, 20f); // floor center
+                angleDeg = 270f + SeedManager.Range(_puRng, -20f, 20f); // floor center
             else
-                angleDeg = Random.Range(190f, 240f); // left side (safe)
+                angleDeg = SeedManager.Range(_puRng, 190f, 240f); // left side (safe)
         }
         else if (inCorridor)
         {
             // Speed corridors: 80% floor, 10% left, 10% right (easy to chain)
             if (zonePick < 0.8f)
-                angleDeg = 270f + Random.Range(-20f, 20f);
+                angleDeg = 270f + SeedManager.Range(_puRng, -20f, 20f);
             else if (zonePick < 0.9f)
-                angleDeg = Random.Range(200f, 240f);
+                angleDeg = SeedManager.Range(_puRng, 200f, 240f);
             else
-                angleDeg = Random.Range(300f, 340f);
+                angleDeg = SeedManager.Range(_puRng, 300f, 340f);
         }
         else if (zonePick < 0.4f)
         {
             // Floor (easiest to hit)
-            angleDeg = 270f + Random.Range(-25f, 25f);
+            angleDeg = 270f + SeedManager.Range(_puRng, -25f, 25f);
         }
         else if (zonePick < 0.65f)
         {
             // Left wall
-            angleDeg = Random.Range(170f, 220f);
+            angleDeg = SeedManager.Range(_puRng, 170f, 220f);
         }
         else if (zonePick < 0.9f)
         {
             // Right wall
-            angleDeg = Random.Range(320f, 370f);
+            angleDeg = SeedManager.Range(_puRng, 320f, 370f);
         }
         else
         {
             // Ceiling (hardest to reach, high reward)
-            angleDeg = Random.Range(60f, 120f);
+            angleDeg = SeedManager.Range(_puRng, 60f, 120f);
         }
 
         float angle = angleDeg * Mathf.Deg2Rad;
@@ -152,13 +155,13 @@ public class PowerUpSpawner : MonoBehaviour
         bool spawnedSpecial = false;
         if (!inCorridor && dist >= specialMinDistance &&
             dist - _lastSpecialDist >= specialMinSpacing &&
-            Random.value < specialChance)
+            SeedManager.Value(_puRng) < specialChance)
         {
             GameObject specialPrefab = PickSpecialPrefab();
             if (specialPrefab != null)
             {
                 // Specials always on floor for visibility
-                float floorAngle = (270f + Random.Range(-15f, 15f)) * Mathf.Deg2Rad;
+                float floorAngle = (270f + SeedManager.Range(_puRng, -15f, 15f)) * Mathf.Deg2Rad;
                 Vector3 specialPos = center + (right * Mathf.Cos(floorAngle) + up * Mathf.Sin(floorAngle)) * spawnRadius;
                 Vector3 inward = (center - specialPos).normalized;
                 Quaternion rot = Quaternion.LookRotation(forward, inward);
@@ -210,7 +213,7 @@ public class PowerUpSpawner : MonoBehaviour
     GameObject PickSpecialPrefab()
     {
         // Equal weight: 1/3 each
-        float pick = Random.value;
+        float pick = SeedManager.Value(_puRng);
         if (pick < 0.33f && shieldPrefab != null) return shieldPrefab;
         if (pick < 0.66f && magnetPrefab != null) return magnetPrefab;
         if (slowMoPrefab != null) return slowMoPrefab;

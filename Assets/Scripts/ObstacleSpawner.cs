@@ -35,6 +35,8 @@ public class ObstacleSpawner : MonoBehaviour
 
     private PipeGenerator _pipeGen;
     private TurdController _tc;
+    private System.Random _obsRng;
+    private System.Random _coinRng;
     private float _nextSpawnDist = 25f;
     private List<SpawnedEntry> _spawnedEntries = new List<SpawnedEntry>();
     private float _cleanupDistance = 50f;
@@ -126,6 +128,11 @@ public class ObstacleSpawner : MonoBehaviour
         if (player != null)
             _tc = player.GetComponent<TurdController>();
         _corridorAnnounced = new bool[SpeedCorridors.Length];
+        if (SeedManager.Instance != null)
+        {
+            _obsRng = SeedManager.Instance.ObstacleRNG;
+            _coinRng = SeedManager.Instance.CoinRNG;
+        }
         BuildZonePools();
     }
 
@@ -285,7 +292,7 @@ public class ObstacleSpawner : MonoBehaviour
         else zoneIdx = 4;                     // Hellsewer
 
         // 15% chance of a "wanderer" from the full pool for variety
-        if (Random.value < 0.15f)
+        if (SeedManager.Value(_obsRng) < 0.15f)
         {
             _obstacleIndex = (_obstacleIndex + 1) % obstaclePrefabs.Length;
             return obstaclePrefabs[_obstacleIndex];
@@ -329,7 +336,7 @@ public class ObstacleSpawner : MonoBehaviour
             SpawnAtDistance(_nextSpawnDist);
             // Spacing opens up near corridors, tightens after
             float spacingMult = GetCorridorSpacingMultiplier(_nextSpawnDist);
-            _nextSpawnDist += Random.Range(minSpacing, maxSpacing) * spacingMult;
+            _nextSpawnDist += SeedManager.Range(_obsRng, minSpacing, maxSpacing) * spacingMult;
         }
 
         // Special events: big air ramps (every 300-500m) — skip in corridors
@@ -340,7 +347,7 @@ public class ObstacleSpawner : MonoBehaviour
             else
             {
                 SpawnBigAirRamp(_nextBigAirDist);
-                _nextBigAirDist += Random.Range(300f, 500f);
+                _nextBigAirDist += SeedManager.Range(_obsRng, 300f, 500f);
             }
         }
 
@@ -352,7 +359,7 @@ public class ObstacleSpawner : MonoBehaviour
             else
             {
                 SpawnDropZone(_nextDropDist);
-                _nextDropDist += Random.Range(400f, 600f);
+                _nextDropDist += SeedManager.Range(_obsRng, 400f, 600f);
             }
         }
 
@@ -364,7 +371,7 @@ public class ObstacleSpawner : MonoBehaviour
             else
             {
                 SpawnGrate(_nextGrateDist);
-                _nextGrateDist += Random.Range(60f, 120f);
+                _nextGrateDist += SeedManager.Range(_obsRng, 60f, 120f);
             }
         }
 
@@ -398,7 +405,7 @@ public class ObstacleSpawner : MonoBehaviour
             if (coinPrefab != null)
             {
                 // Always Spiral or FullLoop patterns in corridors for max collection
-                if (Random.value < 0.5f)
+                if (SeedManager.Value(_coinRng) < 0.5f)
                     SpawnCoinsSpiral(dist);
                 else
                     SpawnCoinsFullLoop(dist);
@@ -421,7 +428,7 @@ public class ObstacleSpawner : MonoBehaviour
             Vector3 center, forward, right, up;
             _pipeGen.GetPathFrame(dist, out center, out forward, out right, out up);
 
-            if (Random.value < currentChance && obstaclePrefabs != null && obstaclePrefabs.Length > 0)
+            if (SeedManager.Value(_obsRng) < currentChance && obstaclePrefabs != null && obstaclePrefabs.Length > 0)
             {
                 SpawnObstacle(dist, center, forward, right, up);
             }
@@ -429,7 +436,7 @@ public class ObstacleSpawner : MonoBehaviour
             {
                 SpawnCoinTrailAlongPath(dist);
                 // In lane zones, risky side gets extra coins
-                if (laneZone != null && Random.value < 0.4f)
+                if (laneZone != null && SeedManager.Value(_coinRng) < 0.4f)
                     SpawnCoinTrailAlongPath(dist + 5f);
             }
         }
@@ -536,133 +543,133 @@ public class ObstacleSpawner : MonoBehaviour
         if (isMine)
         {
             // Mines float in the water at pipe bottom
-            angleDeg = 270f + Random.Range(-20f, 20f);
+            angleDeg = 270f + SeedManager.Range(_obsRng, -20f, 20f);
             radiusMin = 0.78f; radiusMax = 0.85f;
         }
         else if (isSpider)
         {
             // Spiders hang from ceiling/upper walls - always overhead threat
-            angleDeg = Random.Range(45f, 135f);
+            angleDeg = SeedManager.Range(_obsRng, 45f, 135f);
             radiusMin = 0.70f; radiusMax = 0.85f;
         }
         else if (isJelly)
         {
             // Jellyfish drift mid-pipe at varying heights - harder to dodge
-            float jPick = Random.value;
+            float jPick = SeedManager.Value(_obsRng);
             if (jPick < 0.4f)
-                angleDeg = Random.Range(150f, 210f); // side walls
+                angleDeg = SeedManager.Range(_obsRng, 150f, 210f); // side walls
             else if (jPick < 0.7f)
-                angleDeg = Random.Range(60f, 120f);  // upper area
+                angleDeg = SeedManager.Range(_obsRng, 60f, 120f);  // upper area
             else
-                angleDeg = Random.Range(240f, 300f);  // lower area (blocking floor path)
+                angleDeg = SeedManager.Range(_obsRng, 240f, 300f);  // lower area (blocking floor path)
             radiusMin = 0.25f; radiusMax = 0.50f;
         }
         else if (isFrog)
         {
             // Frogs crouch on lower walls above the waterline, ready to hop
-            angleDeg = (Random.value < 0.5f)
-                ? Random.Range(210f, 250f)  // lower-left wall
-                : Random.Range(290f, 330f); // lower-right wall
+            angleDeg = (SeedManager.Value(_obsRng) < 0.5f)
+                ? SeedManager.Range(_obsRng, 210f, 250f)  // lower-left wall
+                : SeedManager.Range(_obsRng, 290f, 330f); // lower-right wall
             radiusMin = 0.55f; radiusMax = 0.70f;
         }
         else if (isSnake)
         {
             // Snakes slither across the floor, blocking the main path
-            angleDeg = 270f + Random.Range(-30f, 30f);
+            angleDeg = 270f + SeedManager.Range(_obsRng, -30f, 30f);
             radiusMin = 0.30f; radiusMax = 0.50f;
         }
         else if (isRat)
         {
             // Rats orbit - spawn on floor/walls, visible height
-            float rPick = Random.value;
+            float rPick = SeedManager.Value(_obsRng);
             if (rPick < 0.6f)
-                angleDeg = 270f + Random.Range(-40f, 40f); // floor
+                angleDeg = 270f + SeedManager.Range(_obsRng, -40f, 40f); // floor
             else
-                angleDeg = (Random.value < 0.5f)
-                    ? Random.Range(170f, 220f) : Random.Range(320f, 370f); // walls
+                angleDeg = (SeedManager.Value(_obsRng) < 0.5f)
+                    ? SeedManager.Range(_obsRng, 170f, 220f) : SeedManager.Range(_obsRng, 320f, 370f); // walls
             radiusMin = 0.45f; radiusMax = 0.60f;
         }
         else if (isHairWad)
         {
             // Hair wads clog the pipe - stuck to walls or hanging from ceiling like real clogs
-            float hwPick = Random.value;
+            float hwPick = SeedManager.Value(_obsRng);
             if (hwPick < 0.35f)
-                angleDeg = Random.Range(60f, 120f);  // ceiling - hanging hairball
+                angleDeg = SeedManager.Range(_obsRng, 60f, 120f);  // ceiling - hanging hairball
             else if (hwPick < 0.70f)
-                angleDeg = (Random.value < 0.5f) ? Random.Range(150f, 200f) : Random.Range(340f, 390f); // walls
+                angleDeg = (SeedManager.Value(_obsRng) < 0.5f) ? SeedManager.Range(_obsRng, 150f, 200f) : SeedManager.Range(_obsRng, 340f, 390f); // walls
             else
-                angleDeg = 270f + Random.Range(-25f, 25f); // floor drain clog
+                angleDeg = 270f + SeedManager.Range(_obsRng, -25f, 25f); // floor drain clog
             radiusMin = 0.55f; radiusMax = 0.75f;
         }
         else if (isMummy)
         {
             // TP Mummy stands upright on the floor/lower walls like a shambling zombie
-            float tpPick = Random.value;
+            float tpPick = SeedManager.Value(_obsRng);
             if (tpPick < 0.6f)
-                angleDeg = 270f + Random.Range(-35f, 35f); // floor (shuffling toward you)
+                angleDeg = 270f + SeedManager.Range(_obsRng, -35f, 35f); // floor (shuffling toward you)
             else
-                angleDeg = (Random.value < 0.5f) ? Random.Range(200f, 240f) : Random.Range(300f, 340f); // lower walls
+                angleDeg = (SeedManager.Value(_obsRng) < 0.5f) ? SeedManager.Range(_obsRng, 200f, 240f) : SeedManager.Range(_obsRng, 300f, 340f); // lower walls
             radiusMin = 0.45f; radiusMax = 0.65f;
         }
         else if (isGrease)
         {
             // Grease globs slide along walls and ceiling - oily drip positions
-            float gPick = Random.value;
+            float gPick = SeedManager.Value(_obsRng);
             if (gPick < 0.4f)
-                angleDeg = Random.Range(70f, 110f); // ceiling drip
+                angleDeg = SeedManager.Range(_obsRng, 70f, 110f); // ceiling drip
             else
-                angleDeg = (Random.value < 0.5f) ? Random.Range(140f, 200f) : Random.Range(340f, 400f); // walls
+                angleDeg = (SeedManager.Value(_obsRng) < 0.5f) ? SeedManager.Range(_obsRng, 140f, 200f) : SeedManager.Range(_obsRng, 340f, 400f); // walls
             radiusMin = 0.60f; radiusMax = 0.80f;
         }
         else if (isFlySwarm)
         {
             // Fly swarms hover in the middle of the pipe - unavoidable cloud
-            angleDeg = Random.Range(0f, 360f); // truly anywhere
+            angleDeg = SeedManager.Range(_obsRng, 0f, 360f); // truly anywhere
             radiusMin = 0.20f; radiusMax = 0.40f; // closer to center = harder to dodge
         }
         else if (isBarrel)
         {
             // Toxic barrels sit on the floor, sometimes wedged against walls
-            float bPick = Random.value;
+            float bPick = SeedManager.Value(_obsRng);
             if (bPick < 0.7f)
-                angleDeg = 270f + Random.Range(-30f, 30f); // floor
+                angleDeg = 270f + SeedManager.Range(_obsRng, -30f, 30f); // floor
             else
-                angleDeg = (Random.value < 0.5f) ? Random.Range(200f, 240f) : Random.Range(300f, 340f); // lower walls
+                angleDeg = (SeedManager.Value(_obsRng) < 0.5f) ? SeedManager.Range(_obsRng, 200f, 240f) : SeedManager.Range(_obsRng, 300f, 340f); // lower walls
             radiusMin = 0.55f; radiusMax = 0.75f;
         }
         else if (isBlob)
         {
             // Poop blobs sit in puddles on the floor, sometimes on lower walls
-            angleDeg = 270f + Random.Range(-35f, 35f); // mostly floor
+            angleDeg = 270f + SeedManager.Range(_obsRng, -35f, 35f); // mostly floor
             radiusMin = 0.50f; radiusMax = 0.70f;
         }
         else if (isRoach)
         {
             // Cockroaches scatter everywhere - walls, floor, ceiling (they go anywhere)
-            float rPick = Random.value;
+            float rPick = SeedManager.Value(_obsRng);
             if (rPick < 0.4f)
-                angleDeg = 270f + Random.Range(-45f, 45f); // floor
+                angleDeg = 270f + SeedManager.Range(_obsRng, -45f, 45f); // floor
             else if (rPick < 0.7f)
-                angleDeg = (Random.value < 0.5f) ? Random.Range(150f, 210f) : Random.Range(330f, 390f); // walls
+                angleDeg = (SeedManager.Value(_obsRng) < 0.5f) ? SeedManager.Range(_obsRng, 150f, 210f) : SeedManager.Range(_obsRng, 330f, 390f); // walls
             else
-                angleDeg = Random.Range(50f, 130f); // ceiling
+                angleDeg = SeedManager.Range(_obsRng, 50f, 130f); // ceiling
             radiusMin = 0.50f; radiusMax = 0.75f;
         }
         else
         {
             // Default fallback: 55% floor, 25% walls, 20% ceiling
-            float zonePick = Random.value;
+            float zonePick = SeedManager.Value(_obsRng);
             if (zonePick < 0.55f)
-                angleDeg = 270f + Random.Range(-40f, 40f);
+                angleDeg = 270f + SeedManager.Range(_obsRng, -40f, 40f);
             else if (zonePick < 0.80f)
             {
-                if (Random.value < 0.5f)
-                    angleDeg = Random.Range(160f, 220f);
+                if (SeedManager.Value(_obsRng) < 0.5f)
+                    angleDeg = SeedManager.Range(_obsRng, 160f, 220f);
                 else
-                    angleDeg = Random.Range(340f, 400f);
+                    angleDeg = SeedManager.Range(_obsRng, 340f, 400f);
             }
             else
-                angleDeg = Random.Range(60f, 120f);
+                angleDeg = SeedManager.Range(_obsRng, 60f, 120f);
             radiusMin = 0.40f; radiusMax = 0.60f;
         }
 
@@ -678,11 +685,11 @@ public class ObstacleSpawner : MonoBehaviour
         {
             float obsMult = spawnLane.GetObstacleMultiplier(angleDeg);
             // If obstacle mult is low (safe side), sometimes skip spawning
-            if (obsMult < 1f && Random.value > obsMult)
+            if (obsMult < 1f && SeedManager.Value(_obsRng) > obsMult)
                 return;
         }
 
-        float spawnRadius = effectivePipeRadius * Random.Range(radiusMin, radiusMax);
+        float spawnRadius = effectivePipeRadius * SeedManager.Range(_obsRng, radiusMin, radiusMax);
 
         // Apply lane zone horizontal stretch to spawn position
         Vector3 pos = center + (right * Mathf.Cos(angle) * laneWidth + up * Mathf.Sin(angle)) * spawnRadius;
@@ -747,12 +754,12 @@ public class ObstacleSpawner : MonoBehaviour
         CoinPattern pattern;
         if (startDist < 60f)
         {
-            pattern = Random.value < 0.6f ? CoinPattern.Straight : CoinPattern.WallRun;
+            pattern = SeedManager.Value(_coinRng) < 0.6f ? CoinPattern.Straight : CoinPattern.WallRun;
         }
         else
         {
             // Weighted random from all patterns, favoring spirals and loops
-            float roll = Random.value;
+            float roll = SeedManager.Value(_coinRng);
             if (roll < 0.12f)
                 pattern = CoinPattern.Straight;
             else if (roll < 0.30f)
@@ -819,11 +826,11 @@ public class ObstacleSpawner : MonoBehaviour
     void SpawnCoinsStraight(float startDist)
     {
         // Can be at any angle now, not just bottom
-        float angleDeg = Random.value < 0.5f
-            ? 270f + Random.Range(-40f, 40f)  // bottom half
-            : Random.Range(0f, 360f);          // anywhere
+        float angleDeg = SeedManager.Value(_coinRng) < 0.5f
+            ? 270f + SeedManager.Range(_coinRng, -40f, 40f)  // bottom half
+            : SeedManager.Range(_coinRng, 0f, 360f);          // anywhere
 
-        int count = Random.Range(4, 8);
+        int count = SeedManager.Range(_coinRng, 4, 8);
         for (int i = 0; i < count; i++)
             SpawnCoinAtAngle(startDist + i * 3f, angleDeg);
     }
@@ -831,13 +838,13 @@ public class ObstacleSpawner : MonoBehaviour
     // Spiral: coins go around the pipe like a corkscrew
     void SpawnCoinsSpiral(float startDist)
     {
-        float startAngle = Random.Range(0f, 360f);
+        float startAngle = SeedManager.Range(_coinRng, 0f, 360f);
         // How much of the pipe circumference to cover (180-540 degrees)
-        float totalSweep = Random.Range(180f, 540f);
+        float totalSweep = SeedManager.Range(_coinRng, 180f, 540f);
         // Randomize direction (clockwise vs counterclockwise)
-        float dir = Random.value < 0.5f ? 1f : -1f;
+        float dir = SeedManager.Value(_coinRng) < 0.5f ? 1f : -1f;
 
-        int count = Random.Range(8, 14);
+        int count = SeedManager.Range(_coinRng, 8, 14);
         float spacing = 4f;
         for (int i = 0; i < count; i++)
         {
@@ -852,10 +859,10 @@ public class ObstacleSpawner : MonoBehaviour
     {
         // Start at bottom (270°), sweep 180° to top (90°)
         // Or start on a wall and sweep half around
-        float startAngle = Random.value < 0.5f ? 270f : 90f;
-        float endAngle = startAngle + (Random.value < 0.5f ? 180f : -180f);
+        float startAngle = SeedManager.Value(_coinRng) < 0.5f ? 270f : 90f;
+        float endAngle = startAngle + (SeedManager.Value(_coinRng) < 0.5f ? 180f : -180f);
 
-        int count = Random.Range(6, 10);
+        int count = SeedManager.Range(_coinRng, 6, 10);
         float spacing = 3.5f;
         for (int i = 0; i < count; i++)
         {
@@ -868,10 +875,10 @@ public class ObstacleSpawner : MonoBehaviour
     // Full loop: coins go all the way around the pipe (360°)
     void SpawnCoinsFullLoop(float startDist)
     {
-        float startAngle = Random.Range(0f, 360f);
-        float dir = Random.value < 0.5f ? 1f : -1f;
+        float startAngle = SeedManager.Range(_coinRng, 0f, 360f);
+        float dir = SeedManager.Value(_coinRng) < 0.5f ? 1f : -1f;
 
-        int count = Random.Range(10, 16);
+        int count = SeedManager.Range(_coinRng, 10, 16);
         float spacing = 3.5f;
         for (int i = 0; i < count; i++)
         {
@@ -884,10 +891,10 @@ public class ObstacleSpawner : MonoBehaviour
     // S-curve: coins weave side-to-side across the pipe
     void SpawnCoinsSCurve(float startDist)
     {
-        float centerAngle = Random.Range(0f, 360f);
-        float amplitude = Random.Range(60f, 120f); // degrees of swing
+        float centerAngle = SeedManager.Range(_coinRng, 0f, 360f);
+        float amplitude = SeedManager.Range(_coinRng, 60f, 120f); // degrees of swing
 
-        int count = Random.Range(8, 12);
+        int count = SeedManager.Range(_coinRng, 8, 12);
         float spacing = 3.5f;
         for (int i = 0; i < count; i++)
         {
@@ -901,11 +908,11 @@ public class ObstacleSpawner : MonoBehaviour
     void SpawnCoinsWallRun(float startDist)
     {
         // Left wall (~180°) or right wall (~0°/360°)
-        float angleDeg = Random.value < 0.5f
-            ? Random.Range(160f, 200f)
-            : Random.Range(340f, 380f);
+        float angleDeg = SeedManager.Value(_coinRng) < 0.5f
+            ? SeedManager.Range(_coinRng, 160f, 200f)
+            : SeedManager.Range(_coinRng, 340f, 380f);
 
-        int count = Random.Range(5, 8);
+        int count = SeedManager.Range(_coinRng, 5, 8);
         for (int i = 0; i < count; i++)
             SpawnCoinAtAngle(startDist + i * 4f, angleDeg);
     }
@@ -914,10 +921,10 @@ public class ObstacleSpawner : MonoBehaviour
     void SpawnCoinsCeilingArc(float startDist)
     {
         // Arc from one upper side to the other across the ceiling
-        float startAngle = Random.Range(130f, 160f);
-        float endAngle = Random.Range(20f, 50f);
+        float startAngle = SeedManager.Range(_coinRng, 130f, 160f);
+        float endAngle = SeedManager.Range(_coinRng, 20f, 50f);
 
-        int count = Random.Range(6, 10);
+        int count = SeedManager.Range(_coinRng, 6, 10);
         float spacing = 3.5f;
         for (int i = 0; i < count; i++)
         {
@@ -960,7 +967,7 @@ public class ObstacleSpawner : MonoBehaviour
         _pipeGen.GetPathFrame(dist, out center, out forward, out right, out up);
 
         // Pick which half to block (left, right, top, bottom)
-        GrateBehavior.BlockSide side = (GrateBehavior.BlockSide)Random.Range(0, 4);
+        GrateBehavior.BlockSide side = (GrateBehavior.BlockSide)SeedManager.Range(_obsRng, 0, 4);
         Vector3 offset = Vector3.zero;
         float halfRadius = pipeRadius * 0.5f;
 

@@ -59,6 +59,11 @@ public class RaceFinish : MonoBehaviour
     private int _autoTabCount;
     private bool _tabSwitching;
 
+    // Tab neon underline
+    private RectTransform _tabUnderline;
+    private float _tabUnderlineTargetX;
+    private float _tabUnderlineCurrentX;
+
     // Animation state
     private float _headerPulsePhase;
     private Color _placeBaseColor;
@@ -143,20 +148,11 @@ public class RaceFinish : MonoBehaviour
         Image panelBg = panelObj.AddComponent<Image>();
         panelBg.color = PanelBg;
 
-        // Thin gold border via inner outline rect
-        GameObject borderObj = new GameObject("GoldBorder");
-        RectTransform borderRect = borderObj.AddComponent<RectTransform>();
-        borderRect.SetParent(_panelRoot, false);
-        borderRect.anchorMin = new Vector2(0.003f, 0.003f);
-        borderRect.anchorMax = new Vector2(0.997f, 0.997f);
-        borderRect.offsetMin = Vector2.zero;
-        borderRect.offsetMax = Vector2.zero;
-        Image borderImg = borderObj.AddComponent<Image>();
-        borderImg.color = new Color(0, 0, 0, 0); // transparent fill
-        borderImg.raycastTarget = false;
-        Outline borderOutline = borderObj.AddComponent<Outline>();
-        borderOutline.effectColor = GoldBorder;
-        borderOutline.effectDistance = new Vector2(2, -2);
+        // Neon gold border (replaces plain outline)
+        NeonUIEffects.CreateNeonBorder(_panelRoot, NeonUIEffects.NeonGold, 2f);
+
+        // Subtle scanline overlay for CRT sewer-monitor vibe
+        NeonUIEffects.AddScanlineOverlay(_panelRoot, 0.035f);
 
         CreateHeader(font);
         CreateTabBar(font);
@@ -177,16 +173,17 @@ public class RaceFinish : MonoBehaviour
         Image headerBg = headerObj.AddComponent<Image>();
         headerBg.color = new Color(0.08f, 0.06f, 0.03f, 0.6f);
 
-        // Place text (left side)
+        // Place text (left side) — neon glow for arcade feel
         _headerPlaceText = CreateText(headerRect, "PlaceText",
             new Vector2(0.02f, 0f), new Vector2(0.68f, 1f),
-            font, 26, FontStyle.Bold, TextAnchor.MiddleLeft, GoldColor, true);
+            font, 42, FontStyle.Bold, TextAnchor.MiddleLeft, GoldColor, true);
         _headerPlaceText.horizontalOverflow = HorizontalWrapMode.Overflow;
+        NeonUIEffects.ApplyNeonTextGlow(_headerPlaceText, NeonUIEffects.NeonGold, 0.5f);
 
         // Time text (right side)
         _headerTimeText = CreateText(headerRect, "TimeText",
             new Vector2(0.68f, 0f), new Vector2(0.98f, 1f),
-            font, 20, FontStyle.Normal, TextAnchor.MiddleRight, new Color(0.8f, 0.8f, 0.75f), true);
+            font, 32, FontStyle.Normal, TextAnchor.MiddleRight, new Color(0.8f, 0.8f, 0.75f), true);
     }
 
     void CreateTabBar(Font font)
@@ -228,10 +225,23 @@ public class RaceFinish : MonoBehaviour
 
             _tabButtonTexts[i] = CreateText(tabRect, "Label",
                 Vector2.zero, Vector2.one,
-                font, 14, FontStyle.Bold, TextAnchor.MiddleCenter, TabTextInactive, false);
+                font, 22, FontStyle.Bold, TextAnchor.MiddleCenter, TabTextInactive, false);
             _tabButtonTexts[i].text = tabNames[i];
             _tabButtonTexts[i].raycastTarget = false;
         }
+
+        // Neon underline indicator (slides between tabs)
+        GameObject underlineObj = new GameObject("TabUnderline");
+        _tabUnderline = underlineObj.AddComponent<RectTransform>();
+        _tabUnderline.SetParent(tabBarRect, false);
+        _tabUnderline.anchorMin = new Vector2(0.005f, 0f);
+        _tabUnderline.anchorMax = new Vector2(0.328f, 0.08f);
+        _tabUnderline.offsetMin = Vector2.zero;
+        _tabUnderline.offsetMax = Vector2.zero;
+
+        Image underlineImg = underlineObj.AddComponent<Image>();
+        underlineImg.color = NeonUIEffects.NeonCyan;
+        NeonUIEffects.ApplyNeonGlow(underlineObj, NeonUIEffects.NeonCyan, 0.8f);
     }
 
     void CreateTabPages(Font font)
@@ -303,19 +313,19 @@ public class RaceFinish : MonoBehaviour
 
         // Place number
         row.placeText = CreateText(row.root, "Place",
-            new Vector2(0.04f, 0f), new Vector2(0.15f, 1f),
-            font, 18, FontStyle.Bold, TextAnchor.MiddleCenter, Color.white, false);
+            new Vector2(0.04f, 0f), new Vector2(0.18f, 1f),
+            font, 30, FontStyle.Bold, TextAnchor.MiddleCenter, Color.white, true);
 
         // Racer name
         row.nameText = CreateText(row.root, "Name",
-            new Vector2(0.17f, 0f), new Vector2(0.70f, 1f),
-            font, 15, FontStyle.Bold, TextAnchor.MiddleLeft, Color.white, false);
+            new Vector2(0.20f, 0f), new Vector2(0.70f, 1f),
+            font, 24, FontStyle.Bold, TextAnchor.MiddleLeft, Color.white, true);
         row.nameText.horizontalOverflow = HorizontalWrapMode.Overflow;
 
         // Time
         row.timeText = CreateText(row.root, "Time",
             new Vector2(0.72f, 0f), new Vector2(0.98f, 1f),
-            font, 14, FontStyle.Normal, TextAnchor.MiddleRight, new Color(0.75f, 0.75f, 0.7f), false);
+            font, 22, FontStyle.Normal, TextAnchor.MiddleRight, new Color(0.75f, 0.75f, 0.7f), true);
 
         return row;
     }
@@ -359,14 +369,14 @@ public class RaceFinish : MonoBehaviour
             // Label (left)
             Text labelText = CreateText(page, $"StatLabel_{i}",
                 new Vector2(0.05f, yTop - rowH), new Vector2(0.55f, yTop),
-                font, 14, FontStyle.Normal, TextAnchor.MiddleLeft,
-                new Color(0.7f, 0.65f, 0.55f), false);
+                font, 22, FontStyle.Normal, TextAnchor.MiddleLeft,
+                new Color(0.7f, 0.65f, 0.55f), true);
             labelText.text = statLabels[i];
 
             // Value (right)
             _statValueTexts[i] = CreateText(page, $"StatValue_{i}",
                 new Vector2(0.55f, yTop - rowH), new Vector2(0.95f, yTop),
-                font, 16, FontStyle.Bold, TextAnchor.MiddleRight, Color.white, false);
+                font, 28, FontStyle.Bold, TextAnchor.MiddleRight, Color.white, true);
             _statValueTexts[i].text = "-";
         }
     }
@@ -377,18 +387,19 @@ public class RaceFinish : MonoBehaviour
     {
         RectTransform page = _tabPages[2];
 
-        // Joke title
+        // Joke title — big neon glow
         _podiumJokeTitle = CreateText(page, "PodiumJokeTitle",
             new Vector2(0.05f, 0.82f), new Vector2(0.95f, 0.97f),
-            font, 24, FontStyle.Bold, TextAnchor.MiddleCenter, GoldColor, true);
+            font, 40, FontStyle.Bold, TextAnchor.MiddleCenter, GoldColor, true);
         _podiumJokeTitle.text = "YOU'RE NUMBER TWO!";
         _podiumJokeTitle.horizontalOverflow = HorizontalWrapMode.Overflow;
+        NeonUIEffects.ApplyNeonTextGlow(_podiumJokeTitle, NeonUIEffects.NeonGold, 0.8f);
 
         // Announcement sub-text
         _podiumAnnouncementText = CreateText(page, "Announcement",
             new Vector2(0.05f, 0.72f), new Vector2(0.95f, 0.82f),
-            font, 14, FontStyle.Italic, TextAnchor.MiddleCenter,
-            new Color(0.75f, 0.7f, 0.6f), false);
+            font, 22, FontStyle.Italic, TextAnchor.MiddleCenter,
+            new Color(0.75f, 0.7f, 0.6f), true);
         _podiumAnnouncementText.horizontalOverflow = HorizontalWrapMode.Overflow;
 
         // 2D Podium blocks: visual layout [2ND] [1ST] [3RD]
@@ -421,10 +432,13 @@ public class RaceFinish : MonoBehaviour
             Image blockImg = blockObj.AddComponent<Image>();
             blockImg.color = blockColors[vis];
 
+            // Neon glow on podium pedestal
+            NeonUIEffects.ApplyNeonGlow(blockObj, labelColors[vis], 0.5f);
+
             // Place label on block
             Text plLabel = CreateText(blockRect, "PlaceLabel",
                 new Vector2(0f, 0f), new Vector2(1f, 0.35f),
-                font, 20, FontStyle.Bold, TextAnchor.MiddleCenter, labelColors[vis], true);
+                font, 34, FontStyle.Bold, TextAnchor.MiddleCenter, labelColors[vis], true);
             plLabel.text = placeLabels[vis];
 
             // Color swatch
@@ -441,7 +455,7 @@ public class RaceFinish : MonoBehaviour
             // Racer name above block
             _podiumNameTexts[slot] = CreateText(blockRect, "RacerName",
                 new Vector2(-0.1f, 1f), new Vector2(1.1f, 1.3f),
-                font, 13, FontStyle.Bold, TextAnchor.MiddleCenter, Color.white, true);
+                font, 22, FontStyle.Bold, TextAnchor.MiddleCenter, Color.white, true);
             _podiumNameTexts[slot].text = "";
             _podiumNameTexts[slot].horizontalOverflow = HorizontalWrapMode.Overflow;
         }
@@ -461,7 +475,7 @@ public class RaceFinish : MonoBehaviour
 
         // "RACE AGAIN" (left)
         CreateFinishButton(containerRect, font, "RaceAgain", "RACE AGAIN",
-            new Vector2(0.02f, 0.05f), new Vector2(0.48f, 0.95f),
+            new Vector2(0.02f, 0.05f), new Vector2(0.32f, 0.95f),
             new Color(0.15f, 0.45f, 0.15f), () =>
             {
                 Time.timeScale = 1f;
@@ -469,9 +483,18 @@ public class RaceFinish : MonoBehaviour
                     GameManager.Instance.RestartGame();
             });
 
+        // "CHALLENGE" (center)
+        CreateFinishButton(containerRect, font, "Challenge", "CHALLENGE",
+            new Vector2(0.34f, 0.05f), new Vector2(0.65f, 0.95f),
+            new Color(0.6f, 0.45f, 0.1f), () =>
+            {
+                if (SeedChallenge.PlayerResult.HasValue && SeedChallengeUI.Instance != null)
+                    SeedChallengeUI.Instance.ShowChallengeCode(SeedChallenge.PlayerResult.Value);
+            });
+
         // "MAIN MENU" (right)
         CreateFinishButton(containerRect, font, "MainMenu", "MAIN MENU",
-            new Vector2(0.52f, 0.05f), new Vector2(0.98f, 0.95f),
+            new Vector2(0.67f, 0.05f), new Vector2(0.98f, 0.95f),
             new Color(0.45f, 0.15f, 0.15f), () =>
             {
                 Time.timeScale = 1f;
@@ -494,6 +517,9 @@ public class RaceFinish : MonoBehaviour
         Image btnBg = btnObj.AddComponent<Image>();
         btnBg.color = bgColor;
 
+        // Neon glow on button edges
+        NeonUIEffects.ApplyNeonGlow(btnObj, bgColor * 2f, 0.4f);
+
         Button btn = btnObj.AddComponent<Button>();
         var colors = btn.colors;
         colors.highlightedColor = new Color(bgColor.r * 1.3f, bgColor.g * 1.3f, bgColor.b * 1.3f);
@@ -503,7 +529,7 @@ public class RaceFinish : MonoBehaviour
 
         Text labelText = CreateText(btnRect, "Label",
             Vector2.zero, Vector2.one,
-            font, 18, FontStyle.Bold, TextAnchor.MiddleCenter, Color.white, true);
+            font, 28, FontStyle.Bold, TextAnchor.MiddleCenter, Color.white, true);
         labelText.text = label;
         labelText.raycastTarget = false;
     }
@@ -786,6 +812,14 @@ public class RaceFinish : MonoBehaviour
             _tabButtonImages[i].color = active ? TabActive : TabInactive;
             _tabButtonTexts[i].color = active ? TabTextActive : TabTextInactive;
         }
+
+        // Slide neon underline to active tab position
+        if (_tabUnderline != null && _activeTab >= 0)
+        {
+            float xMin = _activeTab / 3f + 0.005f;
+            float xMax = (_activeTab + 1) / 3f - 0.005f;
+            _tabUnderlineTargetX = xMin;
+        }
     }
 
     // ================================================================
@@ -855,6 +889,28 @@ public class RaceFinish : MonoBehaviour
         _statTargetValues[5] = gm.RunBestCombo;
         _statTargetValues[6] = gm.RunStomps;
         _statTargetValues[7] = gm.score;
+
+        // Capture challenge result for race finishes
+        if (SeedManager.Instance != null)
+        {
+            var rm = RaceManager.Instance;
+            SeedChallenge.PlayerResult = new SeedChallenge.ChallengeData
+            {
+                seed = SeedManager.Instance.CurrentSeed,
+                isRace = true,
+                place = rm != null ? rm.GetPlayerFinishPlace() : 0,
+                score = gm.score,
+                time = rm != null ? rm.RaceTime : 0f,
+                maxSpeed = gm.RunMaxSpeed,
+                hits = gm.RunHitsTaken,
+                boosts = gm.RunBoostsUsed,
+                nearMisses = gm.RunNearMisses,
+                bestCombo = gm.RunBestCombo,
+                stomps = gm.RunStomps,
+                coins = gm.RunCoins,
+                distance = gm.distanceTraveled
+            };
+        }
 
         // Color-coding
         _statValueTexts[0].color = GoldColor;
@@ -949,6 +1005,23 @@ public class RaceFinish : MonoBehaviour
                 1f);
         }
 
+        // Smoothly slide neon underline to active tab
+        if (_tabUnderline != null && _activeTab >= 0)
+        {
+            _tabUnderlineCurrentX = Mathf.Lerp(_tabUnderlineCurrentX, _tabUnderlineTargetX, Time.unscaledDeltaTime * 8f);
+            float tabWidth = 1f / 3f - 0.01f;
+            _tabUnderline.anchorMin = new Vector2(_tabUnderlineCurrentX, 0f);
+            _tabUnderline.anchorMax = new Vector2(_tabUnderlineCurrentX + tabWidth, 0.08f);
+
+            // Breathing pulse on underline brightness
+            Image ulImg = _tabUnderline.GetComponent<Image>();
+            if (ulImg != null)
+            {
+                float breathe = 0.8f + Mathf.Sin(Time.unscaledTime * 2f) * 0.2f;
+                ulImg.color = new Color(NeonUIEffects.NeonCyan.r * breathe, NeonUIEffects.NeonCyan.g * breathe, NeonUIEffects.NeonCyan.b * breathe);
+            }
+        }
+
         // Podium joke title pulse (only when on podium tab)
         if (_podiumJokeTitle != null && _activeTab == 2)
         {
@@ -1031,7 +1104,7 @@ public class RaceFinish : MonoBehaviour
         {
             Outline ol = obj.AddComponent<Outline>();
             ol.effectColor = new Color(0, 0, 0, 0.9f);
-            ol.effectDistance = new Vector2(1.5f, -1.5f);
+            ol.effectDistance = new Vector2(2f, -2f);
         }
 
         return text;
@@ -1041,8 +1114,8 @@ public class RaceFinish : MonoBehaviour
     {
         Text t = CreateText(page, "PageTitle",
             new Vector2(0.05f, 0.90f), new Vector2(0.95f, 0.99f),
-            font, 16, FontStyle.Bold, TextAnchor.MiddleCenter,
-            new Color(0.6f, 0.55f, 0.45f), false);
+            font, 26, FontStyle.Bold, TextAnchor.MiddleCenter,
+            new Color(0.6f, 0.55f, 0.45f), true);
         t.text = title;
     }
 

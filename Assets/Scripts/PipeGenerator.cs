@@ -237,22 +237,23 @@ public class PipeGenerator : MonoBehaviour
         }
 
         // Horizontal curves (yaw) - big sweeping side-to-side
-        _currentYaw += Random.Range(-maxTurn, maxTurn);
+        var pRng = SeedManager.Instance.PipeRNG;
+        _currentYaw += SeedManager.Range(pRng, -maxTurn, maxTurn);
         _currentYaw *= 0.96f; // dampen to prevent tight spiraling
 
         // Vertical undulations (pitch) - hills and valleys
-        _currentPitch += Random.Range(-maxPitch, maxPitch);
+        _currentPitch += SeedManager.Range(pRng, -maxPitch, maxPitch);
         _currentPitch *= 0.93f; // dampen to prevent going vertical
         _currentPitch = Mathf.Clamp(_currentPitch, -maxPitchAngle, maxPitchAngle);
 
         // Occasional dramatic sweep: ~5% chance per node after 80m
-        if (dist > 80f && Random.value < 0.05f)
+        if (dist > 80f && SeedManager.Value(pRng) < 0.05f)
         {
-            float sweepStrength = Random.Range(0.5f, 1f);
-            if (Random.value < 0.5f)
-                _currentYaw += maxTurn * 2.5f * sweepStrength * (Random.value < 0.5f ? 1f : -1f);
+            float sweepStrength = SeedManager.Range(pRng, 0.5f, 1f);
+            if (SeedManager.Value(pRng) < 0.5f)
+                _currentYaw += maxTurn * 2.5f * sweepStrength * (SeedManager.Value(pRng) < 0.5f ? 1f : -1f);
             else
-                _currentPitch += maxPitch * 2f * sweepStrength * (Random.value < 0.5f ? 1f : -1f);
+                _currentPitch += maxPitch * 2f * sweepStrength * (SeedManager.Value(pRng) < 0.5f ? 1f : -1f);
             _currentPitch = Mathf.Clamp(_currentPitch, -maxPitchAngle, maxPitchAngle);
         }
 
@@ -333,11 +334,10 @@ public class PipeGenerator : MonoBehaviour
         Shader urpLit = toonLit != null ? toonLit : Shader.Find("Universal Render Pipeline/Lit");
         if (urpLit == null) urpLit = Shader.Find("Standard");
 
-        // Deterministic seed per segment
-        Random.State prev = Random.state;
-        Random.InitState(Mathf.FloorToInt(segDist * 7.3f));
+        // Deterministic per-segment RNG (derived from PipeDetailRNG seed + segment distance)
+        var dRng = new System.Random(SeedManager.Instance.CurrentSeed ^ 0x12345678 ^ Mathf.FloorToInt(segDist * 7.3f));
 
-        int detailCount = Random.Range(2, 6); // 2-5 details per segment
+        int detailCount = SeedManager.Range(dRng, 2, 6); // 2-5 details per segment
 
         // More details further into the run
         if (segDist > 200f) detailCount += 1;
@@ -345,7 +345,7 @@ public class PipeGenerator : MonoBehaviour
 
         for (int d = 0; d < detailCount; d++)
         {
-            int nodeIdx = startNode + Random.Range(1, endNode - startNode - 1);
+            int nodeIdx = startNode + SeedManager.Range(dRng, 1, endNode - startNode - 1);
             if (nodeIdx >= _positions.Count) continue;
 
             Vector3 center = _positions[nodeIdx];
@@ -354,13 +354,13 @@ public class PipeGenerator : MonoBehaviour
             Vector3 right = Vector3.Cross(fwd, refUp).normalized;
             Vector3 up = Vector3.Cross(right, fwd).normalized;
 
-            float angle = Random.Range(0f, 360f) * Mathf.Deg2Rad;
+            float angle = SeedManager.Range(dRng, 0f, 360f) * Mathf.Deg2Rad;
             float radius = pipeRadius * 0.90f; // safely inside pipe wall
             float detailWidth = GetLaneWidthAt(nodeIdx * nodeSpacing);
             Vector3 pos = center + (right * Mathf.Cos(angle) * detailWidth + up * Mathf.Sin(angle)) * radius;
             Vector3 inward = (center - pos).normalized;
 
-            int detailType = Random.Range(0, 5);
+            int detailType = SeedManager.Range(dRng, 0, 5);
             Color detailColor;
             Color detailEmission = Color.black;
             float detailSmooth = 0.2f;
@@ -370,40 +370,40 @@ public class PipeGenerator : MonoBehaviour
             {
                 case 0: // Rust streak
                     detailColor = new Color(
-                        Random.Range(0.4f, 0.6f),
-                        Random.Range(0.18f, 0.3f),
-                        Random.Range(0.05f, 0.12f));
+                        SeedManager.Range(dRng, 0.4f, 0.6f),
+                        SeedManager.Range(dRng, 0.18f, 0.3f),
+                        SeedManager.Range(dRng, 0.05f, 0.12f));
                     detailSmooth = 0.15f;
                     detailMetal = 0.3f;
                     break;
                 case 1: // Slime patch
                     detailColor = new Color(
-                        Random.Range(0.1f, 0.2f),
-                        Random.Range(0.4f, 0.6f),
-                        Random.Range(0.05f, 0.15f));
+                        SeedManager.Range(dRng, 0.1f, 0.2f),
+                        SeedManager.Range(dRng, 0.4f, 0.6f),
+                        SeedManager.Range(dRng, 0.05f, 0.15f));
                     detailEmission = detailColor * 0.3f;
                     detailSmooth = 0.85f;
                     break;
                 case 2: // Dark grime
                     detailColor = new Color(
-                        Random.Range(0.08f, 0.15f),
-                        Random.Range(0.06f, 0.12f),
-                        Random.Range(0.04f, 0.08f));
+                        SeedManager.Range(dRng, 0.08f, 0.15f),
+                        SeedManager.Range(dRng, 0.06f, 0.12f),
+                        SeedManager.Range(dRng, 0.04f, 0.08f));
                     detailSmooth = 0.1f;
                     break;
                 case 3: // Moss/mold
                     detailColor = new Color(
-                        Random.Range(0.15f, 0.25f),
-                        Random.Range(0.3f, 0.4f),
-                        Random.Range(0.08f, 0.15f));
+                        SeedManager.Range(dRng, 0.15f, 0.25f),
+                        SeedManager.Range(dRng, 0.3f, 0.4f),
+                        SeedManager.Range(dRng, 0.08f, 0.15f));
                     detailEmission = detailColor * 0.15f;
                     detailSmooth = 0.4f;
                     break;
                 default: // Mineral deposit / calcium buildup
                     detailColor = new Color(
-                        Random.Range(0.6f, 0.75f),
-                        Random.Range(0.55f, 0.7f),
-                        Random.Range(0.45f, 0.55f));
+                        SeedManager.Range(dRng, 0.6f, 0.75f),
+                        SeedManager.Range(dRng, 0.55f, 0.7f),
+                        SeedManager.Range(dRng, 0.45f, 0.55f));
                     detailSmooth = 0.6f;
                     detailMetal = 0.15f;
                     break;
@@ -437,16 +437,14 @@ public class PipeGenerator : MonoBehaviour
             detail.transform.rotation = surfaceRot;
 
             // Small flat patches that hug the wall surface
-            float sizeX = Random.Range(0.3f, 0.9f);
-            float sizeY = Random.Range(0.2f, 0.7f);
+            float sizeX = SeedManager.Range(dRng, 0.3f, 0.9f);
+            float sizeY = SeedManager.Range(dRng, 0.2f, 0.7f);
             detail.transform.localScale = new Vector3(sizeX, sizeY, 1f);
 
             detail.GetComponent<Renderer>().material = mat;
             Collider c = detail.GetComponent<Collider>();
             if (c != null) Object.Destroy(c);
         }
-
-        Random.state = prev;
     }
 
     GameObject BuildMesh(int startNode, int endNode)
@@ -600,6 +598,13 @@ public class PipeGenerator : MonoBehaviour
     /// </summary>
     public void GetPathInfo(float distance, out Vector3 position, out Vector3 forward)
     {
+        if (_positions.Count < 2)
+        {
+            position = Vector3.zero;
+            forward = Vector3.forward;
+            return;
+        }
+
         float t = distance / nodeSpacing;
         int idx = Mathf.FloorToInt(t);
         idx = Mathf.Clamp(idx, 0, _positions.Count - 2);
@@ -650,8 +655,8 @@ public class PipeGenerator : MonoBehaviour
     /// </summary>
     void AddStructuralGeometry(GameObject parent, int startNode, int endNode, float segDist)
     {
-        Random.State prev = Random.state;
-        Random.InitState(Mathf.FloorToInt(segDist * 13.7f)); // different seed than detail
+        // Deterministic per-segment RNG for structural geometry
+        var sRng = new System.Random(SeedManager.Instance.CurrentSeed ^ 0x12345678 ^ Mathf.FloorToInt(segDist * 13.7f));
 
         // Density ramps up: Porcelain = sparse, Hellsewer = packed
         float densityMult = 1f;
@@ -676,9 +681,9 @@ public class PipeGenerator : MonoBehaviour
         int bracketCount = Mathf.FloorToInt(2 * densityMult);
         for (int i = 0; i < bracketCount; i++)
         {
-            int nodeIdx = startNode + Random.Range(2, nodeCount - 2);
+            int nodeIdx = startNode + SeedManager.Range(sRng, 2, nodeCount - 2);
             if (nodeIdx >= _positions.Count) continue;
-            float angle = Random.Range(0f, 360f);
+            float angle = SeedManager.Range(sRng, 0f, 360f);
             AddSupportBracket(parent, nodeIdx, angle);
         }
 
@@ -688,16 +693,16 @@ public class PipeGenerator : MonoBehaviour
             int braceCount = Mathf.FloorToInt(1 * densityMult);
             for (int i = 0; i < braceCount; i++)
             {
-                int nodeIdx = startNode + Random.Range(3, nodeCount - 3);
+                int nodeIdx = startNode + SeedManager.Range(sRng, 3, nodeCount - 3);
                 if (nodeIdx >= _positions.Count) continue;
-                AddCrossBrace(parent, nodeIdx);
+                AddCrossBrace(parent, nodeIdx, sRng);
             }
         }
 
         // 4. PIPE CONDUITS - secondary pipes running along walls/ceiling
-        if (Random.value < 0.4f * densityMult)
+        if (SeedManager.Value(sRng) < 0.4f * densityMult)
         {
-            float angle = Random.Range(100f, 260f); // upper half
+            float angle = SeedManager.Range(sRng, 100f, 260f); // upper half
             AddPipeConduit(parent, startNode, endNode, angle);
         }
 
@@ -705,18 +710,18 @@ public class PipeGenerator : MonoBehaviour
         int grateCount = Mathf.FloorToInt(1 * densityMult);
         for (int i = 0; i < grateCount; i++)
         {
-            int nodeIdx = startNode + Random.Range(2, nodeCount - 2);
+            int nodeIdx = startNode + SeedManager.Range(sRng, 2, nodeCount - 2);
             if (nodeIdx >= _positions.Count) continue;
-            float angle = Random.Range(0f, 360f);
+            float angle = SeedManager.Range(sRng, 0f, 360f);
             AddGratePanel(parent, nodeIdx, angle);
         }
 
         // 6. CHAIN HANGERS - from ceiling
-        if (densityMult > 1.2f && Random.value < 0.5f)
+        if (densityMult > 1.2f && SeedManager.Value(sRng) < 0.5f)
         {
-            int nodeIdx = startNode + Random.Range(3, nodeCount - 3);
+            int nodeIdx = startNode + SeedManager.Range(sRng, 3, nodeCount - 3);
             if (nodeIdx < _positions.Count)
-                AddChainHanger(parent, nodeIdx);
+                AddChainHanger(parent, nodeIdx, sRng);
         }
 
         // 7. RIVET ROWS - along structural seams
@@ -725,13 +730,11 @@ public class PipeGenerator : MonoBehaviour
             int rivetSets = Mathf.FloorToInt(2 * densityMult);
             for (int i = 0; i < rivetSets; i++)
             {
-                int nodeIdx = startNode + Random.Range(1, nodeCount - 1);
+                int nodeIdx = startNode + SeedManager.Range(sRng, 1, nodeCount - 1);
                 if (nodeIdx >= _positions.Count) continue;
-                AddRivetRow(parent, nodeIdx);
+                AddRivetRow(parent, nodeIdx, sRng);
             }
         }
-
-        Random.state = prev;
     }
 
     void GetNodeFrame(int nodeIdx, out Vector3 center, out Vector3 fwd, out Vector3 right, out Vector3 up)
@@ -827,11 +830,11 @@ public class PipeGenerator : MonoBehaviour
     }
 
     // Diagonal cross-brace spanning across pipe
-    void AddCrossBrace(GameObject parent, int nodeIdx)
+    void AddCrossBrace(GameObject parent, int nodeIdx, System.Random rng = null)
     {
         GetNodeFrame(nodeIdx, out Vector3 center, out Vector3 fwd, out Vector3 right, out Vector3 up);
 
-        float angle1 = Random.Range(20f, 70f);
+        float angle1 = rng != null ? SeedManager.Range(rng, 20f, 70f) : Random.Range(20f, 70f);
         float angle2 = angle1 + 180f;
         Vector3 p1 = GetWallPos(center, right, up, angle1, 0.85f);
         Vector3 p2 = GetWallPos(center, right, up, angle2, 0.85f);
@@ -963,12 +966,12 @@ public class PipeGenerator : MonoBehaviour
     }
 
     // Chain hanging from ceiling
-    void AddChainHanger(GameObject parent, int nodeIdx)
+    void AddChainHanger(GameObject parent, int nodeIdx, System.Random rng = null)
     {
         GetNodeFrame(nodeIdx, out Vector3 center, out Vector3 fwd, out Vector3 right, out Vector3 up);
         Vector3 ceilingPos = center + up * pipeRadius * 0.85f;
 
-        int links = Random.Range(3, 7);
+        int links = rng != null ? SeedManager.Range(rng, 3, 7) : Random.Range(3, 7);
         for (int i = 0; i < links; i++)
         {
             GameObject link = GameObject.CreatePrimitive(PrimitiveType.Cube);
@@ -987,13 +990,13 @@ public class PipeGenerator : MonoBehaviour
     }
 
     // Row of rivets along a circumferential line
-    void AddRivetRow(GameObject parent, int nodeIdx)
+    void AddRivetRow(GameObject parent, int nodeIdx, System.Random rng = null)
     {
         GetNodeFrame(nodeIdx, out Vector3 center, out Vector3 fwd, out Vector3 right, out Vector3 up);
 
         int rivetCount = 12;
-        float startAngle = Random.Range(0f, 360f);
-        float arcSpan = Random.Range(60f, 180f);
+        float startAngle = rng != null ? SeedManager.Range(rng, 0f, 360f) : Random.Range(0f, 360f);
+        float arcSpan = rng != null ? SeedManager.Range(rng, 60f, 180f) : Random.Range(60f, 180f);
 
         for (int i = 0; i < rivetCount; i++)
         {

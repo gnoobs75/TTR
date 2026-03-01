@@ -33,7 +33,11 @@ public class GameManager : MonoBehaviour
 
     private bool _isGameOver = false;
     private float _gameOverTime;
+    private float _gameStartTime;
     private bool _restarting = false;
+
+    // Last obstacle that hit the player (for AI death quips)
+    [HideInInspector] public string lastHitCreature;
 
     // Run stats (reset each run)
     private int _runCoins = 0;
@@ -160,6 +164,17 @@ public class GameManager : MonoBehaviour
 #if UNITY_EDITOR
         Debug.Log("[GAME] === GAME STARTED ===");
 #endif
+        // Initialize seed: word seed > challenge code > random
+        if (SeedManager.Instance != null)
+        {
+            if (!string.IsNullOrEmpty(SeedChallenge.SeedWord))
+                SeedManager.Instance.InitializeSeed(SeedChallenge.WordToSeed(SeedChallenge.SeedWord));
+            else if (SeedChallenge.ActiveChallenge.HasValue)
+                SeedManager.Instance.InitializeSeed(SeedChallenge.ActiveChallenge.Value.seed);
+            else
+                SeedManager.Instance.InitializeRandomSeed();
+        }
+
         // Kill any lingering music (splash screen) to prevent overlap
         foreach (var src in Object.FindObjectsByType<AudioSource>(FindObjectsSortMode.None))
         {
@@ -169,6 +184,7 @@ public class GameManager : MonoBehaviour
 
         isPlaying = true;
         _isGameOver = false;
+        _gameStartTime = Time.time;
         score = 0;
         distanceTraveled = 0f;
         _runCoins = 0;
@@ -477,9 +493,10 @@ public class GameManager : MonoBehaviour
             if (CheerOverlay.Instance != null)
             {
                 string[] deathWords = { "R.I.P.", "WIPEOUT!", "GAME OVER!", "NOOO!" };
-                CheerOverlay.Instance.ShowCheer(
-                    deathWords[Random.Range(0, deathWords.Length)],
-                    new Color(0.6f, 0.2f, 0.1f), true);
+                string word = AITextManager.Instance != null
+                    ? AITextManager.Instance.GetBark("hit")
+                    : deathWords[Random.Range(0, deathWords.Length)];
+                CheerOverlay.Instance.ShowCheer(word, new Color(0.6f, 0.2f, 0.1f), true);
             }
 
             HapticManager.HeavyTap();
@@ -498,6 +515,28 @@ public class GameManager : MonoBehaviour
         else
         {
             PlayerData.RecordEndlessRun(_runCoins, distanceTraveled, finalScore, _runNearMisses, _runBestCombo);
+        }
+
+        // Capture challenge result for seed-based challenges
+        if (SeedManager.Instance != null)
+        {
+            bool isRace = RaceManager.Instance != null && RaceManager.Instance.RaceState != RaceManager.State.PreRace;
+            SeedChallenge.PlayerResult = new SeedChallenge.ChallengeData
+            {
+                seed = SeedManager.Instance.CurrentSeed,
+                isRace = isRace,
+                place = isRace ? RaceManager.Instance.GetPlayerFinishPlace() : 0,
+                score = finalScore,
+                time = isRace ? RaceManager.Instance.RaceTime : Time.time - _gameStartTime,
+                maxSpeed = _runMaxSpeed,
+                hits = _runHitsTaken,
+                boosts = _runBoostsUsed,
+                nearMisses = _runNearMisses,
+                bestCombo = _runBestCombo,
+                stomps = _runStomps,
+                coins = _runCoins,
+                distance = distanceTraveled
+            };
         }
 
         // Ghost racer: stop recording, save if this was a high score
@@ -587,8 +626,19 @@ public class GameManager : MonoBehaviour
         Time.timeScale = 1f;
         Time.fixedDeltaTime = 0.02f;
 
-        if (gameUI != null)
+        // If this was a challenge run, show comparison instead of normal game over
+        if (SeedChallenge.ActiveChallenge.HasValue && SeedChallenge.PlayerResult.HasValue
+            && SeedChallengeUI.Instance != null)
+        {
+            SeedChallengeUI.Instance.ShowResults(
+                SeedChallenge.PlayerResult.Value,
+                SeedChallenge.ActiveChallenge.Value);
+            SeedChallenge.ActiveChallenge = null;
+        }
+        else if (gameUI != null)
+        {
             gameUI.ShowGameOver(finalScore, PlayerData.HighScore, coins, distance, nearMisses, bestCombo);
+        }
     }
 
     IEnumerator DeathTumble(Transform playerTransform)
@@ -623,6 +673,10 @@ public class GameManager : MonoBehaviour
     {
         if (_restarting) return;
         _restarting = true;
+        if (!gameObject.activeInHierarchy)
+        {
+            gameObject.SetActive(true);
+        }
         StartCoroutine(RestartWithFade());
     }
 

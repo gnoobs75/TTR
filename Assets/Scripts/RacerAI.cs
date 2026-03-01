@@ -41,6 +41,9 @@ public class RacerAI : MonoBehaviour
     public float dodgeLookAhead = 6f;
     public float dodgeSteerStrength = 3f;
 
+    // Seeded RNG stream (per-racer for determinism)
+    private System.Random _aiRng;
+
     // State
     private float _distanceAlongPath = 0f;
     private float _currentAngle = 270f;
@@ -105,7 +108,13 @@ public class RacerAI : MonoBehaviour
         if (pipeGen == null)
             pipeGen = Object.FindFirstObjectByType<PipeGenerator>();
         _slither = GetComponent<TurdSlither>();
-        _nextSteerChange = Time.time + Random.Range(0.5f, steerChangeInterval);
+        // Initialize per-racer seeded RNG
+        if (SeedManager.Instance != null && racerIndex >= 0 && racerIndex < SeedManager.Instance.AIRNG.Length)
+            _aiRng = SeedManager.Instance.AIRNG[racerIndex];
+        else
+            _aiRng = new System.Random(racerIndex);
+
+        _nextSteerChange = Time.time + SeedManager.Range(_aiRng, 0.5f, steerChangeInterval);
 
         // Find eye parts for tracking
         CreatureAnimUtils.FindChildrenRecursive(transform, "pupil", _pupils);
@@ -131,9 +140,9 @@ public class RacerAI : MonoBehaviour
         {
             // Personality: consistent racers make smaller steer changes
             float range = Mathf.Lerp(1f, 0.4f, consistency);
-            _targetSteer = Random.Range(-range, range) * steerAggressiveness;
+            _targetSteer = SeedManager.Range(_aiRng, -range, range) * steerAggressiveness;
             float interval = Mathf.Lerp(0.6f, steerChangeInterval * 2f, consistency);
-            _nextSteerChange = Time.time + Random.Range(interval * 0.5f, interval);
+            _nextSteerChange = Time.time + SeedManager.Range(_aiRng, interval * 0.5f, interval);
         }
 
         // Stumble invincibility cooldown
@@ -157,7 +166,7 @@ public class RacerAI : MonoBehaviour
                 // Deterministic stumble: close obstacle + not invincible = stumble
                 if (!_stumbling && _stumbleInvincibleTimer <= 0f)
                 {
-                    if (obsDist < 1.5f || Random.value < stumbleChance)
+                    if (obsDist < 1.5f || SeedManager.Value(_aiRng) < stumbleChance)
                         TriggerStumble();
                 }
                 break;
@@ -301,7 +310,7 @@ public class RacerAI : MonoBehaviour
                 if (ScorePopup.Instance != null)
                 {
                     string[] closeCallWords = { "CLOSE CALL!", "WHOA!", "YIKES!", "WATCH IT!", "TOO CLOSE!" };
-                    string word = closeCallWords[Random.Range(0, closeCallWords.Length)];
+                    string word = closeCallWords[SeedManager.Range(_aiRng, 0, closeCallWords.Length)];
                     ScorePopup.Instance.ShowNearMiss(transform.position, 0);
                 }
                 if (ProceduralAudio.Instance != null)
@@ -375,7 +384,7 @@ public class RacerAI : MonoBehaviour
             // Consistent racers maintain a steady push; erratic ones are wilder
             float pushBase = 1.05f + aggression * 0.1f;
             float variance = (1f - consistency) * 0.08f;
-            _finalStretchMult = pushBase + Random.Range(-variance, variance);
+            _finalStretchMult = pushBase + SeedManager.Range(_aiRng, -variance, variance);
 
             // First AI to sprint: telegraph to the player that rivals are pushing
             if (!_finalStretchAnnounced)
@@ -410,11 +419,11 @@ public class RacerAI : MonoBehaviour
         _burstTimer -= dt;
         if (_burstTimer <= 0f)
         {
-            if (Random.value < erratic * 0.3f)
-                _burstSpeedMult = 1f + Random.Range(0.1f, 0.3f) * erratic;
+            if (SeedManager.Value(_aiRng) < erratic * 0.3f)
+                _burstSpeedMult = 1f + SeedManager.Range(_aiRng, 0.1f, 0.3f) * erratic;
             else
                 _burstSpeedMult = 1f;
-            _burstTimer = Random.Range(1f, 4f);
+            _burstTimer = SeedManager.Range(_aiRng, 1f, 4f);
         }
     }
 
@@ -457,14 +466,14 @@ public class RacerAI : MonoBehaviour
     public string GetPassTaunt()
     {
         if (passQuips == null || passQuips.Length == 0) return "";
-        return passQuips[Random.Range(0, passQuips.Length)];
+        return passQuips[SeedManager.Range(_aiRng, 0, passQuips.Length)];
     }
 
     /// <summary>Get a reaction when the player passes this racer.</summary>
     public string GetPassedReaction()
     {
         if (passedQuips == null || passedQuips.Length == 0) return "";
-        return passedQuips[Random.Range(0, passedQuips.Length)];
+        return passedQuips[SeedManager.Range(_aiRng, 0, passedQuips.Length)];
     }
 
     // === RACER PERSONALITY PRESETS ===
