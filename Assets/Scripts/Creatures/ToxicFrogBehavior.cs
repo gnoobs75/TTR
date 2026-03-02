@@ -213,7 +213,7 @@ public class ToxicFrogBehavior : ObstacleBehavior
                 yield return null;
             }
 
-            yield return new WaitForSeconds(0.15f);
+            yield return Wait015;
 
             // Retract tongue
             elapsed = 0f;
@@ -239,7 +239,7 @@ public class ToxicFrogBehavior : ObstacleBehavior
         }
 
         // Deflate back
-        yield return new WaitForSeconds(0.2f);
+        yield return Wait02;
         float deflateTime = 0.5f;
         e2 = 0f;
         while (e2 < deflateTime)

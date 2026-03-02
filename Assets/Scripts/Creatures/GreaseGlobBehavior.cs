@@ -161,7 +161,7 @@ public class GreaseGlobBehavior : ObstacleBehavior
         }
 
         // Slowly reform
-        yield return new WaitForSeconds(0.3f);
+        yield return Wait03;
         elapsed = 0f;
         while (elapsed < 0.5f)
         {

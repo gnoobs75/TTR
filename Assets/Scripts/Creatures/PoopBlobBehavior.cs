@@ -120,7 +120,7 @@ public class PoopBlobBehavior : ObstacleBehavior
         }
 
         // Hold splat
-        yield return new WaitForSeconds(0.4f);
+        yield return Wait04;
 
         // Reform slowly
         t = 0f;

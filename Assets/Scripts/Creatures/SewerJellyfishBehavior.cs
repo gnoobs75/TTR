@@ -144,12 +144,12 @@ public class SewerJellyfishBehavior : ObstacleBehavior
             _tentacles[i].localRotation = Quaternion.Euler(0, i * (360f / _tentacles.Length), 60f);
         }
 
-        yield return new WaitForSeconds(0.3f);
+        yield return Wait03;
 
         // Contract after sting
         transform.localScale = _baseScale * 0.7f;
 
-        yield return new WaitForSeconds(0.5f);
+        yield return Wait05;
 
         // Return to normal
         transform.localScale = _baseScale;

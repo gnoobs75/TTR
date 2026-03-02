@@ -151,7 +151,7 @@ public class SewerSpiderBehavior : ObstacleBehavior
         }
 
         // Hold pose
-        yield return new WaitForSeconds(0.3f);
+        yield return Wait03;
 
         // Retract
         elapsed = 0f;

@@ -1,8 +1,10 @@
 using UnityEngine;
+using System.Collections.Generic;
 
 /// <summary>
 /// Obstacle that slows/stuns the player on contact (Mario Kart style).
 /// Auto-creates a near-miss detection zone around itself.
+/// Maintains a static registry for O(1) obstacle lookup (no FindObjectsByType).
 /// </summary>
 [RequireComponent(typeof(Collider))]
 public class Obstacle : MonoBehaviour
@@ -13,12 +15,31 @@ public class Obstacle : MonoBehaviour
     [Header("Near Miss")]
     public float nearMissMultiplier = 1.8f;
 
+    // Static registry — obstacles register/unregister themselves
+    private static readonly HashSet<Obstacle> _allObstacles = new HashSet<Obstacle>();
+    public static IReadOnlyCollection<Obstacle> AllObstacles => _allObstacles;
+
+    private ObstacleBehavior _cachedBehavior;
+    private bool _hasBehavior;
+
     void Start()
     {
         Collider col = GetComponent<Collider>();
         col.isTrigger = true;
         gameObject.tag = "Obstacle";
+        _cachedBehavior = GetComponent<ObstacleBehavior>();
+        _hasBehavior = _cachedBehavior != null;
         CreateNearMissZone();
+    }
+
+    void OnEnable()
+    {
+        _allObstacles.Add(this);
+    }
+
+    void OnDisable()
+    {
+        _allObstacles.Remove(this);
     }
 
     void CreateNearMissZone()
@@ -44,7 +65,7 @@ public class Obstacle : MonoBehaviour
 
     void Update()
     {
-        if (doesRotate && GetComponent<ObstacleBehavior>() == null)
+        if (doesRotate && !_hasBehavior)
             transform.Rotate(Vector3.up * rotateSpeed * Time.deltaTime);
     }
 
@@ -54,24 +75,20 @@ public class Obstacle : MonoBehaviour
 
         TurdController tc = other.GetComponent<TurdController>();
         if (tc == null) return;
-#if UNITY_EDITOR
-        Debug.Log($"[OBSTACLE] Trigger: {gameObject.name} jumping={tc.IsJumping} invincible={tc.IsInvincible} pos={transform.position}");
-#endif
 
         // === STOMP CHECK: If player is jumping, stomp the obstacle! ===
         if (tc.IsJumping)
         {
             // STOMP! Squash this obstacle and bounce
-            ObstacleBehavior behavior = GetComponent<ObstacleBehavior>();
-            if (behavior != null)
-                behavior.OnStomped(other.transform);
+            if (_cachedBehavior != null)
+                _cachedBehavior.OnStomped(other.transform);
 
             tc.StompBounce();
 
             // Squash VFX (obstacle-colored burst for variety)
             if (ParticleManager.Instance != null)
             {
-                Color stompColor = behavior != null ? behavior.HitFlashColor : Color.white;
+                Color stompColor = _cachedBehavior != null ? _cachedBehavior.HitFlashColor : Color.white;
                 ParticleManager.Instance.PlayHitExplosion(transform.position, stompColor);
                 ParticleManager.Instance.PlayStompSquash(transform.position, stompColor);
             }
@@ -79,6 +96,12 @@ public class Obstacle : MonoBehaviour
             // Disable collider so it can't hit player again
             Collider col = GetComponent<Collider>();
             if (col != null) col.enabled = false;
+
+#if UNITY_EDITOR
+            Debug.Log($"[STOMP] {gameObject.name} stomped at pos={transform.position:F1} dist={tc.DistanceTraveled:F0}m");
+            ObstacleSpawner spawner = Object.FindFirstObjectByType<ObstacleSpawner>();
+            if (spawner != null) spawner.RecordCollision(gameObject.name, true);
+#endif
 
             // Destroy after squash animation plays
             Destroy(gameObject, 1.5f);
@@ -89,12 +112,17 @@ public class Obstacle : MonoBehaviour
         if (tc.IsInvincible) return;
 
         // Apply stun to player
-        ObstacleBehavior behavior2 = GetComponent<ObstacleBehavior>();
-        tc.TakeHit(behavior2);
+        tc.TakeHit(_cachedBehavior);
 
         // Tell the obstacle to play its unique hit animation
-        if (behavior2 != null)
-            behavior2.OnPlayerHit(other.transform);
+        if (_cachedBehavior != null)
+            _cachedBehavior.OnPlayerHit(other.transform);
+
+#if UNITY_EDITOR
+        Debug.Log($"[HIT] {gameObject.name} hit player at pos={transform.position:F1} dist={tc.DistanceTraveled:F0}m speed={tc.CurrentSpeed:F1} behavior={_hasBehavior}");
+        ObstacleSpawner spawner2 = Object.FindFirstObjectByType<ObstacleSpawner>();
+        if (spawner2 != null) spawner2.RecordCollision(gameObject.name, false);
+#endif
 
         // Generic feedback (particles, camera already handled in TakeHit)
         if (ParticleManager.Instance != null)

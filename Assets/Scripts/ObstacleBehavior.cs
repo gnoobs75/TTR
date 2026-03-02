@@ -43,6 +43,15 @@ public abstract class ObstacleBehavior : MonoBehaviour
     private bool _isBlinking;
     private static readonly float BLINK_DURATION = 0.1f;
 
+    // Cached WaitForSeconds (shared across all creature behaviors to avoid GC)
+    protected static readonly WaitForSeconds Wait01 = new WaitForSeconds(0.1f);
+    protected static readonly WaitForSeconds Wait015 = new WaitForSeconds(0.15f);
+    protected static readonly WaitForSeconds Wait02 = new WaitForSeconds(0.2f);
+    protected static readonly WaitForSeconds Wait03 = new WaitForSeconds(0.3f);
+    protected static readonly WaitForSeconds Wait04 = new WaitForSeconds(0.4f);
+    protected static readonly WaitForSeconds Wait05 = new WaitForSeconds(0.5f);
+    protected static readonly WaitForSeconds Wait08 = new WaitForSeconds(0.8f);
+
     protected virtual void Start()
     {
         // Find player
@@ -95,6 +104,9 @@ public abstract class ObstacleBehavior : MonoBehaviour
             {
                 _hasReacted = true;
                 _reactTime = Time.time;
+#if UNITY_EDITOR
+                Debug.Log($"[REACT] {gameObject.name} entering REACT state at dist={Mathf.Sqrt(_distSqr):F1}m");
+#endif
             }
             DoReact();
         }
@@ -261,6 +273,6 @@ public abstract class ObstacleBehavior : MonoBehaviour
         transform.localScale = flatScale;
 
         // Stay squashed until destroyed
-        yield return new WaitForSeconds(0.8f);
+        yield return Wait08;
     }
 }

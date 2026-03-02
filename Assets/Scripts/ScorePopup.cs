@@ -84,15 +84,15 @@ public class ScorePopup : MonoBehaviour
         txt.verticalOverflow = VerticalWrapMode.Overflow;
         txt.fontStyle = FontStyle.Bold;
 
-        // Thick black outline for comic book readability
+        // Black outline for readability (single — double outlines blow past 65k vertex limit)
         Outline outline = obj.AddComponent<Outline>();
         outline.effectColor = new Color(0, 0, 0, 1f);
         outline.effectDistance = new Vector2(3, -3);
 
-        // Second outline for extra thickness
-        Outline outline2 = obj.AddComponent<Outline>();
-        outline2.effectColor = new Color(0, 0, 0, 0.7f);
-        outline2.effectDistance = new Vector2(-2, 2);
+        // Neon glow halo for arcade feel (color set per-popup in Show())
+        Shadow neonGlow = obj.AddComponent<Shadow>();
+        neonGlow.effectColor = new Color(1f, 1f, 1f, 0.3f);
+        neonGlow.effectDistance = new Vector2(0, -3);
 
         obj.SetActive(false);
         return obj;
@@ -167,7 +167,9 @@ public class ScorePopup : MonoBehaviour
     public void ShowStomp(Vector3 pos, int combo, int points)
     {
         string[] stompWords = { "SQUASH!", "SPLAT!", "CRUSHED!", "FLATTENED!", "STOMPED!" };
-        string word = stompWords[Mathf.Min(combo - 1, stompWords.Length - 1)];
+        string word = AITextManager.Instance != null
+            ? AITextManager.Instance.GetBark("stomp")
+            : stompWords[Mathf.Min(combo - 1, stompWords.Length - 1)];
         if (combo > 1) word = $"x{combo} {word}";
         Show($"+{points}\n{word}", pos, PopupType.Stomp, 1.1f + combo * 0.2f);
         CheerOverlay.Instance?.ShowCheer($"{word} +{points}", StompColor, combo >= 3);
@@ -176,7 +178,9 @@ public class ScorePopup : MonoBehaviour
     public void ShowNearMiss(Vector3 pos, int bonus)
     {
         string[] nearWords = { "CLOSE!", "WHEW!", "YIKES!", "SCARY!", "ALMOST!" };
-        string word = nearWords[Random.Range(0, nearWords.Length)];
+        string word = AITextManager.Instance != null
+            ? AITextManager.Instance.GetBark("near-miss")
+            : nearWords[Random.Range(0, nearWords.Length)];
         string msg = bonus > 0 ? $"+{bonus} {word}" : word;
         Show(msg, pos, PopupType.NearMiss, 1.0f);
     }

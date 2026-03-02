@@ -42,6 +42,7 @@ public class AssetGallery : MonoBehaviour
         public string prefabPath;
         public float displayScale;
         public Color overrideColor;
+        public float displayRotationY; // Y-rotation offset so model faces camera before spin
     }
 
     [SerializeField]
@@ -136,7 +137,7 @@ public class AssetGallery : MonoBehaviour
     }
 
     public void RegisterAsset(string name, string description, string category,
-        string prefabPath, float displayScale, Color overrideColor = default)
+        string prefabPath, float displayScale, Color overrideColor = default, float displayRotationY = 0f)
     {
         _allAssets.Add(new AssetEntry
         {
@@ -145,7 +146,8 @@ public class AssetGallery : MonoBehaviour
             category = category,
             prefabPath = prefabPath,
             displayScale = displayScale,
-            overrideColor = overrideColor
+            overrideColor = overrideColor,
+            displayRotationY = displayRotationY
         });
     }
 
@@ -366,7 +368,7 @@ public class AssetGallery : MonoBehaviour
                 }
             }
 
-            _orbitAngle = 0f; // GLB face is at -Z, camera at -Z → face toward camera
+            _orbitAngle = entry.displayRotationY; // Per-asset facing offset so model faces camera
         }
         else
         {

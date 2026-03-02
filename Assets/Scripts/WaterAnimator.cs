@@ -58,8 +58,13 @@ public class WaterAnimator : MonoBehaviour
         public MeshFilter filter;
         public Vector3[] originalVerts;
         public Vector2[] originalUVs;
+        // Cached arrays to avoid per-frame allocation
+        public Vector3[] displacedVerts;
+        public Vector2[] scrolledUVs;
+        public MeshRenderer cachedRenderer;
     }
     private List<WaterMeshData> _waterMeshes = new List<WaterMeshData>();
+    private int _normalRecalcFrame; // throttle RecalculateNormals
 
     // Particle systems
     private ParticleSystem _splashPS;
@@ -264,29 +269,43 @@ public class WaterAnimator : MonoBehaviour
             if (origVerts == null || origVerts.Length == 0) continue;
             if (origUVs == null || origUVs.Length != origVerts.Length) continue;
 
+            int vertCount = origVerts.Length;
             _waterMeshes.Add(new WaterMeshData
             {
                 filter = mf,
                 originalVerts = (Vector3[])origVerts.Clone(),
-                originalUVs = (Vector2[])origUVs.Clone()
+                originalUVs = (Vector2[])origUVs.Clone(),
+                displacedVerts = new Vector3[vertCount],
+                scrolledUVs = new Vector2[vertCount],
+                cachedRenderer = mf.GetComponent<MeshRenderer>()
             });
         }
     }
 
     void AnimateWaterMeshes()
     {
+        _normalRecalcFrame++;
+        bool recalcNormals = (_normalRecalcFrame % 3) == 0; // every 3rd frame
+
+        float playerZ = player != null ? player.position.z : 0f;
+
         for (int w = 0; w < _waterMeshes.Count; w++)
         {
             var data = _waterMeshes[w];
             if (data.filter == null) continue;
+
+            // Skip distant water meshes (>50m from player)
+            float meshZ = data.filter.transform.position.z;
+            if (Mathf.Abs(meshZ - playerZ) > 50f) continue;
 
             Mesh mesh = data.filter.mesh;
             Vector3[] verts = data.originalVerts;
             Vector2[] origUVs = data.originalUVs;
             int count = verts.Length;
 
-            Vector3[] displaced = new Vector3[count];
-            Vector2[] scrolledUVs = new Vector2[count];
+            // Use cached arrays instead of allocating new ones every frame
+            Vector3[] displaced = data.displacedVerts;
+            Vector2[] scrolledUVs = data.scrolledUVs;
             Transform tf = data.filter.transform;
 
             for (int i = 0; i < count; i++)
@@ -313,9 +332,8 @@ public class WaterAnimator : MonoBehaviour
                 // During flush: raise water level toward pipe center
                 if (_flushFillLevel > 0.01f)
                 {
-                    // Raise the water plane from bottom (-0.82*R) up toward +0.5*R (overflowing)
                     float pipeR = _pipeGen != null ? _pipeGen.pipeRadius : 3.5f;
-                    float maxRise = pipeR * 1.3f; // from -0.82R to ~+0.48R
+                    float maxRise = pipeR * 1.3f;
                     displaced[i].y += maxRise * _flushFillLevel;
                 }
 
@@ -327,15 +345,14 @@ public class WaterAnimator : MonoBehaviour
 
             mesh.vertices = displaced;
             mesh.uv = scrolledUVs;
-            mesh.RecalculateNormals();
+            if (recalcNormals) mesh.RecalculateNormals();
 
             // Enhanced shimmer - zone-scaled glow with bubble flickers
-            var mr = data.filter.GetComponent<MeshRenderer>();
-            if (mr != null && mr.material != null)
+            MeshRenderer mr = data.cachedRenderer;
+            if (mr != null && mr.sharedMaterial != null)
             {
-                float shimmerBase = 0.06f * _zoneBubbleMult; // brighter in toxic/hell zones
+                float shimmerBase = 0.06f * _zoneBubbleMult;
                 float shimmer = shimmerBase + Mathf.Sin(_time * 2.5f) * 0.03f * _zoneBubbleMult;
-                // Bubble pop flicker (more frequent in later zones)
                 float flickerFreq = 17f + _zoneBubbleMult * 5f;
                 float flickerThresh = Mathf.Lerp(0.92f, 0.85f, (_zoneBubbleMult - 1f) / 2.5f);
                 float flicker = Mathf.Max(0, Mathf.Sin(_time * flickerFreq) - flickerThresh) * 5f * 0.05f;

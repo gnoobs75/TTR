@@ -223,14 +223,13 @@ public class ObstacleRadar : MonoBehaviour
         Vector3 playerRight = _tc.transform.right;
         Vector3 playerUp = _tc.transform.up;
 
-        // Find all obstacles in range
-        var obstacles = Object.FindObjectsByType<Obstacle>(FindObjectsSortMode.None);
-
+        // Use static registry instead of FindObjectsByType (O(n obstacles) not O(n scene))
         int blipIdx = 0;
         float closestAhead = float.MaxValue;
         float speed = _tc.CurrentSpeed;
+        float pipeRadiusScale = _pipeGen != null ? _pipeGen.pipeRadius * 1.5f : 5.25f;
 
-        foreach (var obs in obstacles)
+        foreach (var obs in Obstacle.AllObstacles)
         {
             if (blipIdx >= MAX_BLIPS) break;
             if (obs == null) continue;
@@ -247,11 +246,10 @@ public class ObstacleRadar : MonoBehaviour
 
             // Project obstacle position into radar space
             float rightDist = Vector3.Dot(toObs, playerRight);
-            float upDist = Vector3.Dot(toObs, playerUp);
 
             // Normalize to radar radius
-            float radarX = (rightDist / (_pipeGen.pipeRadius * 1.5f)) * RADAR_RADIUS;
-            float radarY = (fwdDist / SCAN_RANGE) * RADAR_RADIUS; // forward = up on radar
+            float radarX = (rightDist / pipeRadiusScale) * RADAR_RADIUS;
+            float radarY = (fwdDist / SCAN_RANGE) * RADAR_RADIUS;
 
             // Clamp to radar bounds
             float blipDist = Mathf.Sqrt(radarX * radarX + radarY * radarY);
@@ -259,18 +257,18 @@ public class ObstacleRadar : MonoBehaviour
 
             _blipRTs[blipIdx].anchoredPosition = new Vector2(radarX, radarY);
 
-            // Type-based color from ObstacleBehavior, with proximity brightness
+            // Type-based color — use cached behavior from Obstacle
             float urgency = 1f - (fwdDist / SCAN_RANGE);
-            ObstacleBehavior behavior = obs.GetComponent<ObstacleBehavior>();
-            Color typeColor = behavior != null ? behavior.HitFlashColor : new Color(1f, 0.8f, 0.2f);
-            // Blend toward bright red as urgency rises
+            Color typeColor = new Color(1f, 0.8f, 0.2f);
+            var behavior = obs.GetComponent<ObstacleBehavior>();
+            if (behavior != null) typeColor = behavior.HitFlashColor;
+
             Color blipColor = Color.Lerp(
                 new Color(typeColor.r, typeColor.g, typeColor.b, 0.5f),
                 new Color(Mathf.Min(typeColor.r + 0.3f, 1f), typeColor.g * 0.3f, typeColor.b * 0.2f, 0.95f),
                 urgency);
             blipColor.a *= _radarAlpha;
 
-            // Pulse close obstacles with faster pulse rate
             if (urgency > 0.5f)
             {
                 float pulseRate = Mathf.Lerp(4f, 12f, urgency);
@@ -279,7 +277,6 @@ public class ObstacleRadar : MonoBehaviour
 
             _blips[blipIdx].color = blipColor;
 
-            // Size: closer = bigger (larger range for visibility)
             float size = Mathf.Lerp(8f, 14f, urgency);
             _blipRTs[blipIdx].sizeDelta = new Vector2(size, size);
 

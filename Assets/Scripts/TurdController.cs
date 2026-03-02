@@ -57,6 +57,7 @@ public class TurdController : MonoBehaviour
     private float _steerInput;
     private float _angularVelocity = 0f;
     private float _distanceAlongPath = 0f;
+    private Camera _cachedCam; // cached to avoid _cachedCam per-frame
 
     // Hit state
     private HitState _hitState = HitState.Normal;
@@ -140,6 +141,7 @@ public class TurdController : MonoBehaviour
     void Start()
     {
         _currentSpeed = forwardSpeed;
+        _cachedCam = _cachedCam;
         if (slither == null)
             slither = GetComponent<TurdSlither>();
         if (pipeGen == null)
@@ -742,14 +744,18 @@ public class TurdController : MonoBehaviour
         if (CheerOverlay.Instance != null)
         {
             string[] hitWords = { "OUCH!", "EEK!", "OOF!", "YIKES!", "SPLAT!" };
-            CheerOverlay.Instance.ShowCheer(
-                hitWords[Random.Range(0, hitWords.Length)],
-                new Color(1f, 0.3f, 0.2f), false);
+            string word = AITextManager.Instance != null
+                ? AITextManager.Instance.GetBark("hit")
+                : hitWords[Random.Range(0, hitWords.Length)];
+            CheerOverlay.Instance.ShowCheer(word, new Color(1f, 0.3f, 0.2f), false);
         }
 
-        // Reset multiplier
+        // Track what hit the player (for AI death quips)
         if (GameManager.Instance != null)
+        {
+            GameManager.Instance.lastHitCreature = obstacle != null ? obstacle.gameObject.name : "something gross";
             GameManager.Instance.OnPlayerHit();
+        }
 
         // Scatter skiing poop buddies on hit!
         if (PoopBuddyChain.Instance != null && PoopBuddyChain.Instance.BuddyCount > 0)
@@ -1274,8 +1280,8 @@ public class TurdController : MonoBehaviour
         if (ParticleManager.Instance != null)
         {
             ParticleManager.Instance.StartBoostTrail(transform);
-            if (Camera.main != null)
-                ParticleManager.Instance.StartSpeedLines(Camera.main.transform);
+            if (_cachedCam != null)
+                ParticleManager.Instance.StartSpeedLines(_cachedCam.transform);
         }
         if (ProceduralAudio.Instance != null)
             ProceduralAudio.Instance.PlaySpeedBoost();
@@ -1585,8 +1591,8 @@ public class TurdController : MonoBehaviour
         if (ParticleManager.Instance != null)
         {
             ParticleManager.Instance.PlayWaterSplash(transform.position);
-            if (Camera.main != null)
-                ParticleManager.Instance.StartSpeedLines(Camera.main.transform);
+            if (_cachedCam != null)
+                ParticleManager.Instance.StartSpeedLines(_cachedCam.transform);
         }
 
         // Poop crew goes WILD for the flush exit

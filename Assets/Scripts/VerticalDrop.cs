@@ -665,19 +665,21 @@ public class UnderwaterPoopBuddy : MonoBehaviour
     public float spinSpeed = 15f;
     private Vector3 _startPos;
     private float _phase;
+    private Camera _cam;
 
     void Start()
     {
         _startPos = transform.position;
         _phase = Random.value * Mathf.PI * 2f;
+        _cam = Camera.main;
     }
 
     void Update()
     {
         // Billboard: face camera
-        if (Camera.main != null)
+        if (_cam != null)
         {
-            Vector3 toCamera = Camera.main.transform.position - transform.position;
+            Vector3 toCamera = _cam.transform.position - transform.position;
             toCamera.y = 0; // keep upright
             if (toCamera.sqrMagnitude > 0.01f)
             {

@@ -188,8 +188,12 @@ public class ComboSystem : MonoBehaviour
         {
             comboText.gameObject.SetActive(true);
 
-            // Compact counter — hype labels go to CheerOverlay
-            comboText.text = $"{ComboCount}x";
+            // Compact counter — hype labels go to CheerOverlay (skip if unchanged)
+            if (ComboCount != _displayedCombo)
+            {
+                _displayedCombo = ComboCount;
+                comboText.text = $"{ComboCount}x";
+            }
 
             // Color ramp: yellow -> red (intensifies with combo)
             float t = Mathf.Clamp01(ComboCount / 20f);

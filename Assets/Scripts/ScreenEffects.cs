@@ -29,7 +29,11 @@ public class ScreenEffects : MonoBehaviour
     private Image _speedStreaks;
     private float _speedStreakIntensity;
 
-    // Film grain (noisy overlay at high speed for intensity feel)
+    // Film grain (noisy overlay at high speed for intensity feel — pre-generated pool)
+    private Texture2D[] _grainPool;
+    private Sprite[] _grainSprites;
+    private int _grainPoolIndex;
+    private const int GRAIN_POOL_SIZE = 4;
     private Image _filmGrain;
     private Texture2D _grainTex;
     private float _grainIntensity;
@@ -131,12 +135,19 @@ public class ScreenEffects : MonoBehaviour
         _speedStreaks = CreateOverlay("SpeedStreaks", new Color(1, 1, 1, 0));
         ApplySpeedStreakTexture(_speedStreaks);
 
-        // Film grain - noisy overlay for intensity at speed
+        // Film grain - pre-generate pool of grain textures (avoids per-frame SetPixel)
         _filmGrain = CreateOverlay("FilmGrain", new Color(1, 1, 1, 0));
-        _grainTex = CreateGrainTexture(128);
+        _grainPool = new Texture2D[GRAIN_POOL_SIZE];
+        _grainSprites = new Sprite[GRAIN_POOL_SIZE];
+        for (int g = 0; g < GRAIN_POOL_SIZE; g++)
+        {
+            _grainPool[g] = CreateGrainTexture(128);
+            _grainSprites[g] = Sprite.Create(_grainPool[g], new Rect(0, 0, 128, 128), new Vector2(0.5f, 0.5f));
+        }
+        _grainTex = _grainPool[0];
         if (_filmGrain != null)
         {
-            Sprite spr = Sprite.Create(_grainTex, new Rect(0, 0, 128, 128), new Vector2(0.5f, 0.5f));
+            Sprite spr = _grainSprites[0];
             _filmGrain.sprite = spr;
             _filmGrain.type = Image.Type.Tiled;
         }
@@ -251,18 +262,11 @@ public class ScreenEffects : MonoBehaviour
 
     void RefreshGrainTexture()
     {
-        if (_grainTex == null) return;
-        int size = _grainTex.width;
-        for (int y = 0; y < size; y++)
-        {
-            for (int x = 0; x < size; x++)
-            {
-                float noise = Random.value;
-                float v = Mathf.Lerp(0.35f, 0.65f, noise);
-                _grainTex.SetPixel(x, y, new Color(v, v, v, 1f));
-            }
-        }
-        _grainTex.Apply();
+        // Rotate through pre-generated grain textures instead of per-frame SetPixel
+        if (_grainPool == null || _filmGrain == null) return;
+        _grainPoolIndex = (_grainPoolIndex + 1) % GRAIN_POOL_SIZE;
+        _grainTex = _grainPool[_grainPoolIndex];
+        _filmGrain.sprite = _grainSprites[_grainPoolIndex];
     }
 
     void ApplySplatterTexture(Image img)

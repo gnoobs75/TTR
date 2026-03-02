@@ -32,6 +32,7 @@ public class FlushSequence : MonoBehaviour
     private float _whirlAngle;
     private float _countdownPunchTime; // for punch-scale on each number
     private float _flushPunchTime;     // for FLUSH! text burst
+    private bool _flushNeonApplied;
 
     void Awake()
     {
@@ -150,6 +151,11 @@ public class FlushSequence : MonoBehaviour
                             countdownText.fontSize = 80;
                             countdownText.color = new Color(0.3f, 0.95f, 1f);
                             countdownText.transform.localScale = Vector3.one * 1.6f; // big burst
+                            if (!_flushNeonApplied)
+                            {
+                                _flushNeonApplied = true;
+                                NeonUIEffects.ApplyNeonTextGlow(countdownText, NeonUIEffects.NeonCyan, 1f);
+                            }
                         }
                         if (ProceduralAudio.Instance != null)
                             ProceduralAudio.Instance.PlayFlush();

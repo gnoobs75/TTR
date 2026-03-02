@@ -157,11 +157,21 @@ public class CheerOverlay : MonoBehaviour
             _p[i].excitement = Mathf.Min(1f, _p[i].excitement + boost);
         }
 
-        // Flip to hype/big word
+        // Flip to hype/big word (AI-generated when available)
         if (bigEvent)
-            FlipTo(BIG_WORDS[Random.Range(0, BIG_WORDS.Length)]);
+        {
+            string bigWord = AITextManager.Instance != null
+                ? AITextManager.Instance.GetBark("combo")
+                : BIG_WORDS[Random.Range(0, BIG_WORDS.Length)];
+            FlipTo(bigWord);
+        }
         else if (Random.value < 0.6f)
-            FlipTo(HYPE_WORDS[Random.Range(0, HYPE_WORDS.Length)]);
+        {
+            string hypeWord = AITextManager.Instance != null
+                ? AITextManager.Instance.GetBark("boost")
+                : HYPE_WORDS[Random.Range(0, HYPE_WORDS.Length)];
+            FlipTo(hypeWord);
+        }
 
         _wordTimer = Random.Range(4f, 8f);
     }

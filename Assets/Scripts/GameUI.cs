@@ -242,6 +242,8 @@ public class GameUI : MonoBehaviour
         Outline o = txtGo.AddComponent<Outline>();
         o.effectColor = new Color(0, 0, 0, 0.9f);
         o.effectDistance = new Vector2(2, -2);
+        NeonUIEffects.ApplyNeonTextGlow(txt, NeonUIEffects.NeonGold, 0.5f);
+        NeonUIEffects.CreateNeonBorder(rt, NeonUIEffects.NeonGold, 1f);
 
         // Animate in, hold, fade out
         float showDuration = 2.5f;
@@ -437,6 +439,7 @@ public class GameUI : MonoBehaviour
     private bool _isNewHighScore;
     private float _newHighScorePhase;
     private CanvasGroup _gameOverGroup;
+    private bool _gameOverNeonApplied;
 
     // Shop panel animation
     private CanvasGroup _shopCanvasGroup;
@@ -458,6 +461,7 @@ public class GameUI : MonoBehaviour
     private CanvasGroup _startCanvasGroup;
     private int _quipIndex;
     private float _nextQuipTime;
+    private bool _startNeonApplied;
 
     // Boost timer bar
     private RectTransform _boostBarBg;
@@ -488,6 +492,11 @@ public class GameUI : MonoBehaviour
     private Text _racePositionText;
     private bool _racePositionCreated;
     private int _lastRacePosition;
+
+    // Change detection — skip UI updates when values haven't changed
+    private int _lastDisplayedSpeed = -1;
+    private int _lastDisplayedDistance = -1;
+    private int _lastDisplayedScoreVal = -1;
     private float _racePosChangeTime;
 
     // Fork preview arrows
@@ -525,6 +534,9 @@ public class GameUI : MonoBehaviour
     public void UpdateScore(int score)
     {
         if (scoreText == null) return;
+        // Skip UI update if score hasn't changed (avoids Canvas rebuild)
+        if (score == _lastDisplayedScoreVal) return;
+        _lastDisplayedScoreVal = score;
         scoreText.text = score.ToString("N0");
 
         // Punch-scale when score increases
@@ -539,11 +551,13 @@ public class GameUI : MonoBehaviour
     {
         if (distanceText == null) return;
         int m = Mathf.FloorToInt(meters);
-        string prev = distanceText.text;
+        // Skip if distance meter hasn't changed
+        if (m == _lastDisplayedDistance) return;
+        _lastDisplayedDistance = m;
         distanceText.text = m + "m";
 
         // Pulse every 50m
-        if (m > 0 && m % 50 == 0 && prev != distanceText.text)
+        if (m > 0 && m % 50 == 0)
             _distPunchTime = Time.time;
     }
 
@@ -551,7 +565,12 @@ public class GameUI : MonoBehaviour
     {
         if (speedText == null) return;
         int mph = Mathf.RoundToInt(speed * 3.6f); // arbitrary "sewer mph"
-        speedText.text = mph + " SMPH";
+        // Only update text if mph value changed (avoids Canvas rebuild)
+        if (mph != _lastDisplayedSpeed)
+        {
+            _lastDisplayedSpeed = mph;
+            speedText.text = mph + " SMPH";
+        }
         // Color: green at low, yellow mid, red high
         float t = Mathf.Clamp01((speed - 5f) / 15f);
         speedText.color = Color.Lerp(
@@ -601,13 +620,16 @@ public class GameUI : MonoBehaviour
         GameObject bgObj = new GameObject("BoostBarBg");
         _boostBarBg = bgObj.AddComponent<RectTransform>();
         _boostBarBg.SetParent(canvas.transform, false);
-        _boostBarBg.anchorMin = new Vector2(0.25f, 0.06f);
-        _boostBarBg.anchorMax = new Vector2(0.75f, 0.085f);
+        _boostBarBg.anchorMin = new Vector2(0.25f, 0.055f);
+        _boostBarBg.anchorMax = new Vector2(0.75f, 0.095f);
         _boostBarBg.offsetMin = Vector2.zero;
         _boostBarBg.offsetMax = Vector2.zero;
 
         Image bgImg = bgObj.AddComponent<Image>();
         bgImg.color = new Color(0.1f, 0.1f, 0.1f, 0.6f);
+
+        // Neon glow on boost bar
+        NeonUIEffects.ApplyNeonGlow(bgObj, NeonUIEffects.NeonCyan, 0.5f);
 
         // Fill bar
         GameObject fillObj = new GameObject("BoostFill");
@@ -632,7 +654,7 @@ public class GameUI : MonoBehaviour
 
         _boostLabel = labelObj.AddComponent<Text>();
         _boostLabel.font = font;
-        _boostLabel.fontSize = Mathf.RoundToInt(12 * _uiScale);
+        _boostLabel.fontSize = Mathf.RoundToInt(22 * _uiScale);
         _boostLabel.alignment = TextAnchor.MiddleCenter;
         _boostLabel.color = Color.white;
         _boostLabel.text = "BOOST";
@@ -691,13 +713,16 @@ public class GameUI : MonoBehaviour
         GameObject bgObj = new GameObject("StunIndicatorBg");
         _stunIndicatorBg = bgObj.AddComponent<RectTransform>();
         _stunIndicatorBg.SetParent(canvas.transform, false);
-        _stunIndicatorBg.anchorMin = new Vector2(0.30f, 0.09f);
-        _stunIndicatorBg.anchorMax = new Vector2(0.70f, 0.105f);
+        _stunIndicatorBg.anchorMin = new Vector2(0.30f, 0.10f);
+        _stunIndicatorBg.anchorMax = new Vector2(0.70f, 0.13f);
         _stunIndicatorBg.offsetMin = Vector2.zero;
         _stunIndicatorBg.offsetMax = Vector2.zero;
 
-        Image bgImg = bgObj.AddComponent<Image>();
-        bgImg.color = new Color(0.15f, 0.05f, 0.05f, 0.7f);
+        Image stunBgImg = bgObj.AddComponent<Image>();
+        stunBgImg.color = new Color(0.15f, 0.05f, 0.05f, 0.7f);
+
+        // Neon red glow on stun bar
+        NeonUIEffects.ApplyNeonGlow(bgObj, NeonUIEffects.NeonRed, 0.5f);
 
         // Fill
         GameObject fillObj = new GameObject("StunFill");
@@ -722,7 +747,7 @@ public class GameUI : MonoBehaviour
         lrt.offsetMax = Vector2.zero;
         _stunLabel = labelObj.AddComponent<Text>();
         _stunLabel.font = font;
-        _stunLabel.fontSize = Mathf.RoundToInt(10 * _uiScale);
+        _stunLabel.fontSize = Mathf.RoundToInt(18 * _uiScale);
         _stunLabel.alignment = TextAnchor.MiddleCenter;
         _stunLabel.color = Color.white;
         _stunLabel.fontStyle = FontStyle.Bold;
@@ -805,7 +830,7 @@ public class GameUI : MonoBehaviour
 
         _magnetIndicator = obj.AddComponent<Text>();
         _magnetIndicator.font = font;
-        _magnetIndicator.fontSize = Mathf.RoundToInt(14 * _uiScale);
+        _magnetIndicator.fontSize = Mathf.RoundToInt(22 * _uiScale);
         _magnetIndicator.alignment = TextAnchor.MiddleCenter;
         _magnetIndicator.fontStyle = FontStyle.Bold;
         _magnetIndicator.color = new Color(1f, 0.85f, 0.2f);
@@ -864,7 +889,7 @@ public class GameUI : MonoBehaviour
 
         _shieldIndicator = obj.AddComponent<Text>();
         _shieldIndicator.font = font;
-        _shieldIndicator.fontSize = Mathf.RoundToInt(14 * _uiScale);
+        _shieldIndicator.fontSize = Mathf.RoundToInt(22 * _uiScale);
         _shieldIndicator.alignment = TextAnchor.MiddleCenter;
         _shieldIndicator.fontStyle = FontStyle.Bold;
         _shieldIndicator.color = new Color(0.2f, 0.85f, 1f);
@@ -919,7 +944,7 @@ public class GameUI : MonoBehaviour
 
         _slowMoIndicator = obj.AddComponent<Text>();
         _slowMoIndicator.font = font;
-        _slowMoIndicator.fontSize = Mathf.RoundToInt(14 * _uiScale);
+        _slowMoIndicator.fontSize = Mathf.RoundToInt(22 * _uiScale);
         _slowMoIndicator.alignment = TextAnchor.MiddleCenter;
         _slowMoIndicator.fontStyle = FontStyle.Bold;
         _slowMoIndicator.color = new Color(0.7f, 0.3f, 1f);
@@ -1019,7 +1044,7 @@ public class GameUI : MonoBehaviour
 
         Text centerText = centerObj.AddComponent<Text>();
         centerText.font = font;
-        centerText.fontSize = Mathf.RoundToInt(18 * _uiScale);
+        centerText.fontSize = Mathf.RoundToInt(30 * _uiScale);
         centerText.alignment = TextAnchor.MiddleCenter;
         centerText.fontStyle = FontStyle.Bold;
         centerText.color = new Color(1f, 0.9f, 0.3f);
@@ -1044,7 +1069,7 @@ public class GameUI : MonoBehaviour
 
         Text t = obj.AddComponent<Text>();
         t.font = font;
-        t.fontSize = Mathf.RoundToInt(16 * _uiScale);
+        t.fontSize = Mathf.RoundToInt(26 * _uiScale);
         t.alignment = TextAnchor.MiddleCenter;
         t.fontStyle = FontStyle.Bold;
         t.color = color;
@@ -1148,7 +1173,7 @@ public class GameUI : MonoBehaviour
 
         _racePositionText = obj.AddComponent<Text>();
         _racePositionText.font = font;
-        _racePositionText.fontSize = Mathf.RoundToInt(28 * _uiScale);
+        _racePositionText.fontSize = Mathf.RoundToInt(48 * _uiScale);
         _racePositionText.alignment = TextAnchor.MiddleLeft;
         _racePositionText.fontStyle = FontStyle.Bold;
         _racePositionText.color = Color.white;
@@ -1180,15 +1205,21 @@ public class GameUI : MonoBehaviour
         _racePositionText.gameObject.SetActive(true);
 
         int pos = RaceManager.Instance.GetPlayerPosition();
-        string ordinal = pos == 1 ? "ST" : pos == 2 ? "ND" : pos == 3 ? "RD" : "TH";
-        _racePositionText.text = $"{pos}{ordinal} / 5";
 
-        // Color by position
-        Color posColor;
-        if (pos == 1) posColor = new Color(1f, 0.85f, 0.2f);      // gold
-        else if (pos == 2) posColor = new Color(0.8f, 0.8f, 0.9f); // silver
-        else if (pos == 3) posColor = new Color(0.8f, 0.55f, 0.3f);// bronze
-        else posColor = new Color(0.7f, 0.3f, 0.3f);               // red-ish
+        // Only rebuild text + color when position actually changes
+        if (pos != _lastRacePosition)
+        {
+            string ordinal = pos == 1 ? "ST" : pos == 2 ? "ND" : pos == 3 ? "RD" : "TH";
+            _racePositionText.text = $"{pos}{ordinal} / 5";
+
+            // Color by position
+            Color posColor2;
+            if (pos == 1) posColor2 = new Color(1f, 0.85f, 0.2f);      // gold
+            else if (pos == 2) posColor2 = new Color(0.8f, 0.8f, 0.9f); // silver
+            else if (pos == 3) posColor2 = new Color(0.8f, 0.55f, 0.3f);// bronze
+            else posColor2 = new Color(0.7f, 0.3f, 0.3f);               // red-ish
+            _racePositionText.color = posColor2;
+        }
 
         // Punch animation on position change
         if (pos != _lastRacePosition && _lastRacePosition > 0)
@@ -1205,7 +1236,6 @@ public class GameUI : MonoBehaviour
         if (changeSince < 0.3f)
             scale = 1f + (1f - changeSince / 0.3f) * 0.4f;
 
-        _racePositionText.color = posColor;
         _racePositionText.transform.localScale = Vector3.one * scale;
     }
 
@@ -1374,6 +1404,28 @@ public class GameUI : MonoBehaviour
         {
             _startPulsePhase += Time.deltaTime;
             _startScreenTimer += Time.deltaTime;
+
+            // One-time neon effect application
+            if (!_startNeonApplied)
+            {
+                _startNeonApplied = true;
+                // Neon glow on tagline text
+                Transform tagNeon = startPanel.transform.Find("RaceTagline");
+                if (tagNeon != null)
+                    NeonUIEffects.ApplyNeonTextGlow(tagNeon.GetComponent<Text>(), NeonUIEffects.NeonGold, 0.6f);
+                // Neon glow on start button area
+                Transform startBtnNeon = startPanel.transform.Find("StartButton");
+                if (startBtnNeon != null)
+                    NeonUIEffects.ApplyNeonGlow(startBtnNeon.gameObject, NeonUIEffects.NeonCyan, 0.35f);
+                // Neon glow on tour button area
+                Transform tourBtnNeon = startPanel.transform.Find("TourButton");
+                if (tourBtnNeon != null)
+                    NeonUIEffects.ApplyNeonGlow(tourBtnNeon.gameObject, NeonUIEffects.NeonCyan, 0.35f);
+                // Neon glow on wallet text
+                Transform walletNeon = startPanel.transform.Find("StartWallet");
+                if (walletNeon != null)
+                    NeonUIEffects.ApplyNeonTextGlow(walletNeon.GetComponent<Text>(), NeonUIEffects.NeonGold, 0.4f);
+            }
 
             // Start button breathing pulse
             if (startButton != null)
@@ -1578,7 +1630,7 @@ public class GameUI : MonoBehaviour
             {
                 highScoreText.text = "NEW HIGH SCORE!";
                 highScoreText.color = new Color(1f, 0.85f, 0.1f); // gold
-                highScoreText.fontSize = Mathf.RoundToInt(28 * _uiScale);
+                highScoreText.fontSize = Mathf.RoundToInt(38 * _uiScale);
             }
             else
             {
@@ -1707,6 +1759,14 @@ public class GameUI : MonoBehaviour
             runStatsText.text = stats;
         }
 
+        // Neon polish on game over panel (one-time)
+        if (!_gameOverNeonApplied)
+        {
+            _gameOverNeonApplied = true;
+            NeonUIEffects.CreateNeonBorder(gameOverPanel.GetComponent<RectTransform>(), NeonUIEffects.NeonRed, 1.5f);
+            NeonUIEffects.AddScanlineOverlay(gameOverPanel.GetComponent<RectTransform>(), 0.025f);
+        }
+
         // Set title: race-themed quip if in race, else random death quip
         Transform goTitle = gameOverPanel.transform.Find("GOTitle");
         if (goTitle != null)
@@ -1726,7 +1786,22 @@ public class GameUI : MonoBehaviour
                 }
                 else
                 {
+                    // Show static quip immediately, then upgrade to AI quip when it arrives
                     titleText.text = DeathQuips[Random.Range(0, DeathQuips.Length)];
+
+                    if (AITextManager.Instance != null && AITextManager.Instance.AIEnabled)
+                    {
+                        string creature = GameManager.Instance?.lastHitCreature ?? "unknown obstacle";
+                        string zone = PipeZoneSystem.Instance?.CurrentZoneName ?? "sewer";
+                        int combo = ComboSystem.Instance != null ? ComboSystem.Instance.ComboCount : 0;
+                        string context = $"Hit {creature} at {distance:F0}m in {zone} zone, combo was {combo}";
+
+                        AITextManager.Instance.RequestDeathQuip(context, (aiQuip) =>
+                        {
+                            if (!string.IsNullOrEmpty(aiQuip) && titleText != null)
+                                titleText.text = aiQuip;
+                        });
+                    }
                 }
             }
         }

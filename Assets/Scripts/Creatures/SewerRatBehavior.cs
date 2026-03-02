@@ -176,7 +176,7 @@ public class SewerRatBehavior : ObstacleBehavior
             yield return null;
         }
 
-        yield return new WaitForSeconds(0.3f);
+        yield return Wait03;
 
         // Snap back and resume orbit from new position
         t = 0f;

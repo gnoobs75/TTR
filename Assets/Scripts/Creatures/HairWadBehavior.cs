@@ -133,7 +133,7 @@ public class HairWadBehavior : ObstacleBehavior
         }
 
         // Hold wrapped
-        yield return new WaitForSeconds(0.5f);
+        yield return Wait05;
 
         // Release - spring back
         t = 0f;

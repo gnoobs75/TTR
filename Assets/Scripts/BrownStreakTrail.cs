@@ -4,6 +4,7 @@ using System.Collections.Generic;
 /// <summary>
 /// Leaves nasty brown streak marks on the pipe walls when Mr. Corny rides
 /// on the walls or ceiling. Streaks fade over time and get cleaned up behind the player.
+/// Uses MaterialPropertyBlock to avoid per-streak material instantiation.
 /// </summary>
 public class BrownStreakTrail : MonoBehaviour
 {
@@ -21,7 +22,10 @@ public class BrownStreakTrail : MonoBehaviour
     private PipeGenerator _pipeGen;
     private float _lastStreakTime;
     private List<StreakData> _streaks = new List<StreakData>();
-    private Material _streakMat;
+    private Material _streakMat; // single shared material
+    private MaterialPropertyBlock _mpb; // reusable property block
+    private static readonly int _baseColorId = Shader.PropertyToID("_BaseColor");
+    private static readonly int _colorId = Shader.PropertyToID("_Color");
 
     struct StreakData
     {
@@ -35,13 +39,12 @@ public class BrownStreakTrail : MonoBehaviour
     {
         if (player != null) _tc = player.GetComponent<TurdController>();
         _pipeGen = Object.FindFirstObjectByType<PipeGenerator>();
+        _mpb = new MaterialPropertyBlock();
         CreateStreakMaterial();
     }
 
     void CreateStreakMaterial()
     {
-        // Use URP Particles/Unlit for transparent quads - Lit shader's transparency
-        // requires complex pipeline setup and often renders as black squares on quads.
         Shader shader = Shader.Find("Universal Render Pipeline/Particles/Unlit");
         if (shader == null || shader.name.Contains("Error"))
             shader = Shader.Find("Particles/Standard Unlit");
@@ -59,6 +62,8 @@ public class BrownStreakTrail : MonoBehaviour
         _streakMat.EnableKeyword("_ALPHABLEND_ON");
         _streakMat.SetOverrideTag("RenderType", "Transparent");
         _streakMat.renderQueue = 3000;
+        // Set a default white color so MaterialPropertyBlock can override
+        _streakMat.SetColor(_baseColorId, Color.white);
     }
 
     void Update()
@@ -89,14 +94,17 @@ public class BrownStreakTrail : MonoBehaviour
 
             float age = Time.time - _streaks[i].spawnTime;
 
-            // Fade out
+            // Fade out using MaterialPropertyBlock (no material instantiation)
             if (age > streakLifetime * 0.6f)
             {
                 float fadeT = (age - streakLifetime * 0.6f) / (streakLifetime * 0.4f);
                 Color c = _streaks[i].baseColor;
                 c.a = Mathf.Lerp(c.a, 0f, fadeT);
                 if (_streaks[i].renderer != null)
-                    _streaks[i].renderer.material.SetColor("_BaseColor", c);
+                {
+                    _mpb.SetColor(_baseColorId, c);
+                    _streaks[i].renderer.SetPropertyBlock(_mpb);
+                }
             }
 
             // Destroy when expired or far behind
@@ -126,7 +134,6 @@ public class BrownStreakTrail : MonoBehaviour
         // Position on the pipe wall where the player currently is
         float rad = _tc.CurrentAngle * Mathf.Deg2Rad;
         Vector3 surfaceOffset = (right * Mathf.Cos(rad) + up * Mathf.Sin(rad));
-        // Place just slightly inside the pipe wall
         Vector3 pos = center + surfaceOffset * (_pipeGen.pipeRadius - 0.02f);
 
         // Streak orientation: lies flat on the pipe wall, stretched along travel direction
@@ -136,26 +143,28 @@ public class BrownStreakTrail : MonoBehaviour
         // Create a flattened quad
         GameObject streak = GameObject.CreatePrimitive(PrimitiveType.Quad);
         streak.name = "BrownStreak";
-        Destroy(streak.GetComponent<Collider>()); // no collision needed
+        Destroy(streak.GetComponent<Collider>());
 
         streak.transform.position = pos;
         streak.transform.rotation = rot;
 
-        // Speed-dependent size: faster = wider, longer, more visible
+        // Speed-dependent size
         float speedFactor = Mathf.Clamp01((_tc.CurrentSpeed - 4f) / 12f);
         float w = streakWidth * Random.Range(0.6f, 1.4f) * (1f + speedFactor * 0.8f);
         float l = streakLength * Random.Range(0.7f, 1.3f) * (1f + speedFactor * 0.5f);
         streak.transform.localScale = new Vector3(w, l, 1f);
 
-        // Random brown shade - darker and more opaque at higher speeds
+        // Random brown shade
         float shade = Random.Range(0.15f, 0.35f);
         float alpha = Random.Range(0.12f, 0.25f) + speedFactor * 0.1f;
         Color streakColor = new Color(shade, shade * 0.6f, shade * 0.2f, alpha);
 
+        // Use shared material + MaterialPropertyBlock for per-streak color (zero allocation)
         var rend = streak.GetComponent<Renderer>();
-        rend.material = new Material(_streakMat);
-        rend.material.SetColor("_BaseColor", streakColor);
-        rend.material.SetColor("_Color", streakColor); // fallback property name
+        rend.sharedMaterial = _streakMat;
+        _mpb.SetColor(_baseColorId, streakColor);
+        _mpb.SetColor(_colorId, streakColor);
+        rend.SetPropertyBlock(_mpb);
         rend.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
 
         _streaks.Add(new StreakData

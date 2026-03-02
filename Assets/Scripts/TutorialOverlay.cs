@@ -11,6 +11,7 @@ using System.Collections;
 public class TutorialOverlay : MonoBehaviour
 {
     public static TutorialOverlay Instance { get; private set; }
+    private static readonly WaitForSeconds _wait35 = new WaitForSeconds(3.5f);
 
     [Header("UI")]
     public Text hintText;
@@ -336,7 +337,7 @@ public class TutorialOverlay : MonoBehaviour
         HapticManager.LightTap();
 
         // Hold (longer for mobile readability)
-        yield return new WaitForSeconds(3.5f);
+        yield return _wait35;
 
         // Fade out
         t = 0f;

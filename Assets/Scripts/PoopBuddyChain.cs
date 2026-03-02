@@ -146,12 +146,16 @@ public class PoopBuddyChain : MonoBehaviour
                 // Pupils shrink with speed (focused) or widen when stunned (shock)
                 float pupilMul = stunned ? 1.4f : Mathf.Lerp(1f, 0.7f, speedT);
 
-                foreach (var eye in new[] { buddy.leftEye, buddy.rightEye })
+                // Update eyes without allocating temp array
+                if (buddy.leftEye != null)
                 {
-                    if (eye.childCount >= 1)
-                        eye.GetChild(0).localScale = Vector3.one * eyeScale;
-                    if (eye.childCount >= 2)
-                        eye.GetChild(1).localScale = Vector3.one * buddy.eyeScaleBase * 0.5f * pupilMul;
+                    if (buddy.leftEye.childCount >= 1) buddy.leftEye.GetChild(0).localScale = Vector3.one * eyeScale;
+                    if (buddy.leftEye.childCount >= 2) buddy.leftEye.GetChild(1).localScale = Vector3.one * buddy.eyeScaleBase * 0.5f * pupilMul;
+                }
+                if (buddy.rightEye != null)
+                {
+                    if (buddy.rightEye.childCount >= 1) buddy.rightEye.GetChild(0).localScale = Vector3.one * eyeScale;
+                    if (buddy.rightEye.childCount >= 2) buddy.rightEye.GetChild(1).localScale = Vector3.one * buddy.eyeScaleBase * 0.5f * pupilMul;
                 }
             }
 

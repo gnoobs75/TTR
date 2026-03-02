@@ -190,7 +190,7 @@ public class SewerMineBehavior : ObstacleBehavior
             yield return null;
         }
 
-        yield return new WaitForSeconds(0.1f);
+        yield return Wait01;
 
         // Apply charred effect to Mr. Corny
         TurdController tc = player.GetComponent<TurdController>();
